@@ -15,12 +15,12 @@ metadata:
 Consolidate `.mpx/CONTEXT.md` into a concise, future-proof reference. Preserve all important detail
 while removing noise.
 
-Read [Documentation Strategy]({{MPX_SHARED_INSTRUCTIONS}}/DOCUMENTATION_STRATEGY.md) for format details. Resolve it
-relative to this loaded skill first. If runtime projection relocation makes that impossible, read
-`MPX_ACTIVE_CONTENT_ROOT`, require it to be an absolute path, resolve
-`dist/{{MPX_HARNESS}}/instructions/shared/DOCUMENTATION_STRATEGY.md` beneath it, and verify that the literal result exists and
-remains contained by that root. Stop if validation fails. Do not search ordered roots or guess an
-installation checkout.
+Preserve confirmed meaning, technical constraints, and important negative rules. Resolve conflicts
+only from authoritative evidence; ask when uncertain. Move settled decisions to the sibling
+`DECISIONS.md`, preserving existing content. Split only when stable subject boundaries improve use.
+
+Older `.mpx/REQUIREMENTS.md`, `.mpx/VOCABULARY.md`, and `.mpx/ARCHITECTURE.md` remain read-only
+history; do not create, update, or use them as fallback context.
 
 ## Input Resolution
 
@@ -46,7 +46,7 @@ Read every line of the full file against each issue type and build a classified 
 
 #### Issue Type: **Negative framing**
 
-- **What to Look For:** "must not", "cannot", "never" — convert to positive imperative
+- **What to Look For:** Negative phrasing that can be made positive without weakening constraints
 
 #### Issue Type: **Non-content noise**
 
@@ -73,22 +73,25 @@ Read every line of the full file against each issue type and build a classified 
 
 ### Step 2: Rewrite
 
-Apply all changes directly and automatically. Produce the consolidated file:
+Apply changes supported by authoritative evidence. Ask about unresolved conflicts before changing
+the affected content. Produce the consolidated file:
 
 - § Domain Language: one sentence max per definition, definition-list format
   (`**Term** — Definition.`)
-- § Core Features: index only (name + status + epic#), no implementation details
+- § Core Features: index only (name + status + configured-provider Issue ID + design pointer), no
+  implementation details
 - § Key Constraints: concise bullets
 - § Flagged Ambiguities: resolved term conflicts with rationale
-- Target 250–300 lines total
 
 **Content rules:**
 
 - Remove implementation/deviation notes (belong in PRs or commit messages)
-- Fix inconsistent values (use the most recent/authoritative source)
+- Fix inconsistent values only when authoritative evidence settles the conflict
 - Merge sections that were split by version history into unified topics
 - Keep full technical detail where it matters: formulas, ranges, defaults
-- Move any settled architectural decisions to DECISIONS.md instead
+- Move settled architectural decisions to the sibling `DECISIONS.md` as concise bullets grouped
+  by domain. Include useful rationale and only explicitly rejected alternatives; replace superseded
+  entries while preserving unrelated decisions.
 
 ### Step 3: Write Result
 

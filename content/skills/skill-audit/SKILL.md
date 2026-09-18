@@ -17,8 +17,7 @@ metadata:
 
 # Skill Audit
 
-Read [Authoring Conventions]({{MPX_SHARED_INSTRUCTIONS}}/AUTHORING.md) and
-[Writing for Agents]({{MPX_SHARED_INSTRUCTIONS}}/WRITING_FOR_AGENTS.md) completely before auditing.
+Read [Writing for Agents]({{MPX_SHARED_INSTRUCTIONS}}/WRITING_FOR_AGENTS.md) completely before auditing.
 With `the invocation input`, audit only the named skill or path; without it, audit every active root.
 
 ## Workflow
@@ -48,8 +47,8 @@ With `the invocation input`, audit only the named skill or path; without it, aud
 4. **Fix mechanical drift.** Auto-fix only deterministic changes: safe positive reframing, missing
    canonical bookkeeping fields with known values, category or pack casing where the schema defines
    it, and verified legacy-link replacements. Preserve intent and update
-   `metadata.mpx.contentVersion` only according to the canonical schema's versioning policy; never
-   invent an unsupported version value. Do not edit generated runtime projections directly. Reread
+   existing version metadata only according to the target schema's policy; never invent version
+   fields or reset supported bookkeeping. Do not edit generated runtime projections directly. Reread
    every applied edit and re-run affected checks. Keep unsafe automation as a manual finding with
    the reason it requires judgment.
 
@@ -60,21 +59,17 @@ With `the invocation input`, audit only the named skill or path; without it, aud
 
 ## Checks
 
-1. **Positive targets:** Inspect negative phrasing. Reframe when behavior remains equivalent; retain
-   surprising, irreversible, security, identity, or false-success guardrails paired with the desired
-   behavior.
-2. **Size and split rationale:** Flag `SKILL.md` over 200 lines, splits justified only by line
-   count, and unsplit material with genuine branch or sequence boundaries. Treat line count as a
-   guardrail, not a rule that overrides hierarchy.
+1. **Positive targets:** Apply the shared language rule without weakening safety boundaries.
+2. **Split rationale:** Require a workflow or context reason for each split; flag branch-specific
+   material unnecessarily loaded by every run.
 3. **Canonical frontmatter:** Require `name`, portable `description`, and only the `metadata.mpx` fields accepted by the
    current compiler schema: `schemaVersion`, `skillPacks`, and optional `defaultExposure`. Validate
    top-level `argument-hint` and `triggers` when present.
    Reject runtime-native fields in canonical source and verify compiler-owned translation rather
    than requiring legacy `author`, `version`, `category`, or `allowed-tools` fields.
-4. **Portable context pointer:** Ensure the description states purpose and every distinct trigger
-   branch in at most two concise sentences. `triggers` may improve search but must not be the only
-   copy of a routing branch. Flag excessive combined listing metadata and ask whether broader
-   exposure earns its context cost.
+4. **Portable context pointer:** Apply the shared description rule. Ensure `triggers` or adapter
+   metadata is not the sole copy of a routing branch. Require a reason for autonomous discovery
+   rather than explicit invocation.
 5. **Legacy docs and paths:** Find obsolete `REQUIREMENTS.md`, `VOCABULARY.md`, `ARCHITECTURE.md`,
    `legacy`, fallback references, old absolute roots, and runtime-only source paths. Replace only
    when the current canonical target is verified. Require references that survive projection.
@@ -102,25 +97,21 @@ With `the invocation input`, audit only the named skill or path; without it, aud
     content, redundant or missing structured model classes/effort, unsupported classes, and runtime
     profiles that fail to record translation. Call-site effort is valid only where the runtime
     metadata and adapter support it.
-14. **Shared integrity (repository-wide):** Resolve shared links from every active root. Flag copied
-    shared rules that should be precise pointers and direct links that do not survive
-    compiled-relative projection.
+14. **Shared integrity (repository-wide):** Resolve shared links from every active root. Require
+    more than two distinct consumers and meaningful value for shared instructions; allow private
+    conditional references and small duplication that avoids unnecessary loading. Verify links
+    survive projection.
 15. **Personal paths:** Scan selected skill files and assets for personal roots or usernames.
     Require runtime resolution through named `MPX_*` environment variables and loud failure when
     unset. Exempt documented runtime variables and genuine system paths; reject guessed fallbacks.
-16. **Semantic completion:** Assess whether every procedural step has an unambiguous behavioral
-    endpoint. Flag plausible premature or false completion, no-op completion restatements, detached
-    validation or stop conditions, and standalone gates outside approved ambiguous or risky
-    transitions. Do not search for or require literal completion phrases.
-17. **Hierarchy and disclosure:** Classify procedural, reference, or mixed structure. Verify actions
-    precede supporting detail, concepts are co-located, and branch-only material is disclosed
-    through precise one-level pointers.
-18. **Single source and caches:** Flag duplicated meanings and environment facts cheaply
-    discoverable from manifests, config, layout, scripts, runtime profiles, or `--help`. Retain
-    reasons, policy, and hidden conventions that cannot be safely rediscovered.
-19. **Relevance and no-ops:** Flag stale or unrelated sentences. Compare suspected no-ops
-    behaviorally against the target model/runtime default and preserve them as manual findings when
-    behavior cannot be measured; never auto-delete solely from textual heuristics.
+16. **Semantic completion:** Apply the shared action and gate criteria to every procedural step;
+    evaluate behavior rather than requiring literal completion phrases.
+17. **Hierarchy and disclosure:** Apply the shared ordering and co-location criteria to the skill
+    and its references.
+18. **Discoverable facts:** Flag configuration inventories and other cheaply rediscoverable facts;
+    retain rationale and hidden conventions that cannot be safely rediscovered.
+19. **Relevance and no-ops:** Apply the shared pruning criteria; report uncertain cases as manual
+    behavioral findings.
 
 ## Output contract
 

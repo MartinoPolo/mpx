@@ -1,100 +1,86 @@
 # MPX decisions
 
-This file records durable choices and rationale. It does not track rollout state or implementation
-history; see `migration/` for those records.
+Durable choices and their rationale, not implementation status or session history. Repository
+conventions belong in `AGENTS.md`; rollout evidence and recovery belong in `migration/`.
 
 ## Product boundary
 
-- **Use native harnesses rather than replacing them.** Pi and Claude Code own authentication, model
-  settings, packages, transcripts, and their native interaction model. This keeps account data usable
-  without an MPX service or proprietary session store.
-- **Keep MPX stateless.** MPX has no daemon, credential router, session registry, worktree service, or
-  port registry. Configuration and native transcripts are sufficient, reducing recovery and lifecycle
-  risk.
-- **Keep Orca as the sole operational shell.** Orca owns worktrees, terminals, server visibility,
-  orchestration status, and desktop attention. MPX may provide thin status events but must not create a
-  competing notification writer.
-- **Preserve separately chosen user utilities.** `agent-resurrect`, `mpx-worktrees`, and the
-  `mpx-ports` inspect/kill utility remain independent tools by explicit user choice. Retiring the
-  old MPX managers does not uninstall them or absorb their state into MPX.
-- **Support Git Bash as the Windows shell contract.** Launchers preserve shell identity so native hooks
-  execute with the syntax under which they were configured.
+- **Use native harnesses, not replacements.** Pi and Claude Code own authentication, model settings,
+  packages, transcripts, and interaction semantics so accounts remain usable without MPX.
+- **Keep MPX stateless and Orca operational.** Orca owns worktrees, terminals, server visibility,
+  orchestration status, and desktop attention. MPX may emit thin status events, but has no daemon,
+  credential router, session or port registry, worktree service, or competing notification writer.
+- **Keep independently chosen utilities independent.** MPX installation and retirement must not
+  uninstall user utilities or absorb their state; ownership does not follow functional overlap.
+- **Support Git Bash as the Windows shell contract.** Preserve shell identity so native hooks run
+  with their configured syntax.
 
 ## Content and discovery
 
+- **Author once and compile deterministic projections.** `content/` is canonical; ignored `dist/`
+  is reproducible output, avoiding independently maintained harness copies and generated review churn.
+- **Build self-contained skill bundles.** Copy dependencies and rewrite links into each bundle;
+  use native skill-relative references rather than symlinks or MPX environment expansion internally.
+- **Inline essential instructions at compile time.** Explicit includes, including transitive
+  dependencies, supply concise behavior to skills and especially agents. Defer optional workflows
+  and large references to skill-local files; accept small repeated fragments over runtime deduplication.
+- **Share instructions only when reuse justifies indirection.** Require more than two distinct
+  consumers and a clear benefit; otherwise inline behavior or retain a private conditional reference.
+- **Share one writing standard across creation and auditing.** Keep instruction-design guidance in
+  `WRITING_FOR_AGENTS.md`; artifact-specific requirements belong in their creation and audit workflows.
+  This keeps the criteria aligned without loading overlapping authoring policies.
 - **Keep discovery mechanics with the explorer.** Global agent guidance states only delegation
   essentials; native harnesses supply resource resolution and delegation mechanics. Model and effort
   defaults belong in structured agent metadata and runtime mappings, not repeated policy tables.
-
-- **Author once and compile deterministic projections.** Canonical content lives under `content/`;
-  committed Claude/Pi projections live under `dist/`. This makes harness differences explicit and
-  reviewable without maintaining independent workflow copies.
-- **Keep support files and relative references with their skill.** The compiler validates frontmatter,
-  declared substitutions, and references so structurally broken resources do not reach an account.
-- **Use packs for relevance, not security.** A repository selects packs through `mpxconfig.json`.
-  Wrappers add selected pack paths without suppressing native account, package, or project resources.
-  An explicit empty selection disables only MPX global packs.
-- **Treat projects as owners of project-local resources.** Native precedence may let a project skill
-  override a global skill. Resolve collisions through provenance and explicit comparison, never prefix
-  deletion or blanket native-skill disabling.
-- **Reserve `mp-` names for MPX global skills.** New project-specific skills use project-owned names so
-  accidental shadowing is exceptional and visible.
-- **Propagate selected packs to subagents.** Parent and child sessions need the same effective workflow
-  vocabulary. The checkout-local subagent patch is limited to discovery and named-skill preloading.
+- **Use packs for relevance, not security.** Repository selection adds MPX resources through native
+  discovery without suppressing native account, package, or project resources or mutating account-wide
+  links. An empty selection disables only MPX global packs.
+- **Respect project ownership and native precedence.** Project resources may override globals;
+  resolve collisions through provenance and explicit comparison, never blanket deletion or disabling.
+  Reserve `mp-` for MPX global skills and use project-owned names for new project skills.
+- **Propagate selected packs to subagents.** Parent and child sessions need the same effective
+  workflow vocabulary; discovery and named-skill preloading must preserve that selection.
 
 ## Configuration and accounts
 
-- **Keep account and repository configuration separate.** User configuration maps personal/work native
-  roots, domain roots, defaults, and executables. Repository `mpxconfig.json` selects project identity,
-  packs, package manager, repository provider, and Issue provider.
-- **Separate account ownership from project metadata.** Recursive account domains identify personal
-  and work locations; a missing manifest is not an unknown owner. Account mismatches remain overridable
-  warnings. Every launch warning requires acknowledgement before a fullscreen native UI can hide it.
-- **Keep exceptional project metadata machine-local.** Explicit per-project user overrides supply
-  missing metadata or deliberately accept its absence. Existing repository manifests remain authoritative;
-  parent-directory inheritance would risk routing unrelated repositories through the wrong providers.
-- **Keep repository and Issue providers independent.** A GitLab repository may use KanbanFlow Issues;
-  skills must route each operation through its selected provider guide rather than infer one from the
-  other.
-- **Use machine-root variables for personal paths.** Shared content receives only the documented root
-  allowlist and skips absent values. This avoids embedding machine-specific paths in portable content.
-- **Preserve native profiles in place.** Account sharing is intentional, but it is not isolation.
-  Installation and recovery must change exact owned resources without replacing credentials, settings,
-  histories, or unrelated packages.
-- **Let Claude own its native permission mode.** Orca's Manual launch option means no bypass flag;
-  it does not force Claude's native Manual mode. Synchronization preserves an explicitly configured
-  native mode, including Auto, and initializes only an absent default.
-- **Fail visibly on invalid routing.** Missing roots, unavailable packs, model substitution, and unknown
-  resume metadata are reported rather than guessed.
+- **Separate account configuration from project metadata.** User configuration owns native roots,
+  domain roots, defaults, and executables; repository manifests own project identity and integrations.
+- **Determine account ownership independently of manifests.** Recursive account domains identify
+  personal and work locations. Mismatches are overridable warnings, and launch warnings require
+  acknowledgement before a fullscreen UI can hide them.
+- **Keep exceptional project metadata machine-local.** Explicit user overrides may supply missing
+  metadata or accept its absence; repository manifests remain authoritative. Avoid parent-manifest
+  inheritance because it can route unrelated repositories through the wrong providers.
+- **Keep repository and Issue providers independent.** Route each operation through its configured
+  provider rather than infer the Issue tracker from the Git host.
+- **Use documented machine-root variables for personal paths.** Inject only allowlisted, available
+  roots so shared content stays portable.
+- **Preserve native profiles in place.** Account sharing is not isolation; installation and recovery
+  may change only owned resources, not replace credentials, settings, histories, or unrelated packages.
+- **Let Claude own its permission mode.** Orca's Manual option omits bypass flags without overriding
+  native mode. Preserve explicit native settings and initialize only an absent default.
+- **Fail visibly on invalid routing.** Report missing roots, unavailable packs, model substitution,
+  and unknown resume metadata instead of guessing.
 
-## Runtime behavior
+## Runtime and safeguards
 
-- **Resume native sessions instead of importing them.** Native transcripts remain authoritative. Resume
-  restores the exact harness, account, cwd/worktree, session, model, and recoverable effort; unknown
-  values require an explicit override.
-- **Use thin shared safeguards with native transports.** Claude hooks and Pi operations share policy,
-  while each harness keeps native denial and result presentation.
-- **Keep formatting project-owned and bounded.** Only configured installed formatters run, only for the
-  edited file, without downloads, lint autofixes, staging, or rollback of a successful agent edit.
-- **Prefer native UI and tools.** MPX adds only the accepted Pi footer/lifecycle data and preserves native
-  tool rendering, questions, MCP, web tools, shortcuts, and transcript semantics.
-- **Aggregate activity before reporting completion.** A parent waiting for children or follow-up work is
-  still working. Child completion alone must not trigger whole-session attention.
-
-## Safeguards
-
-- **Block clear destructive accidents and unsafe Git mutations.** Positive dangerous-command findings
-  and inability to inspect the affected shell command fail closed. The policy is intentionally bounded;
-  it is not a shell sandbox.
-- **Enforce the repository's actual package manager.** Detection is independent of `mpxconfig.json` and
-  follows statically resolved command directories. Ambiguous transitions warn instead of applying a
-  potentially wrong manager.
+- **Resume native sessions, not imported copies.** Native transcripts are authoritative; restore the
+  exact harness, account, working directory, session, model, and recoverable effort. Unknown values
+  require an explicit override.
+- **Share safeguard policy, not native presentation.** Claude hooks and Pi operations use common
+  policy while retaining their native denial and result semantics.
+- **Keep formatting project-owned and bounded.** Run only configured, installed formatters on the
+  edited file; no downloads, lint autofixes, staging, or rollback of a successful agent edit.
+- **Block clear destructive accidents and unsafe Git mutations.** Dangerous-command findings and
+  inability to inspect the affected shell command fail closed; this bounded policy is not a sandbox.
+- **Enforce the actual package manager independently of MPX configuration.** Resolve command
+  directories statically; warn on ambiguous transitions rather than apply a potentially wrong manager.
 - **Scan staged additions for high-confidence secrets.** Confirmed findings block even with
-  `--no-verify`. Incomplete scans warn and permit but never claim a clean result.
-- **Run Fallow only for opted-in repositories before push.** A valid failing verdict blocks. Missing or
-  broken project-owned tooling warns and permits; MPX never downloads or invokes an ambient global copy.
-- **Leave project verification to projects.** Global hooks do not guess or run repository typechecks,
-  lint, tests, PR lookups, or commit-message policy.
+  `--no-verify`; incomplete scans warn and permit without claiming a clean result.
+- **Keep Fallow opt-in and project-owned.** Before push, a valid failing verdict blocks; missing or
+  broken tooling warns and permits. Never download tooling or use an ambient global copy.
+- **Leave verification policy to projects.** Global hooks do not guess or run repository checks,
+  PR lookups, or commit-message policy.
 
 ## User interface
 
@@ -102,30 +88,29 @@ history; see `migration/` for those records.
   appended system instructions and Claude's output style, not general agent guidance or a deferred
   shared document.
 
-- **Keep the Pi footer compact and operational.** It shows account, model/effort, project/worktree/branch,
-  current context usage, compaction history, cost, quota/reset, and bounded child status. It omits
-  cumulative token totals, ports, branch-state counts, and shortcut hints.
-- **Preserve the accepted Claude status lines in this repository.** Claude retains its native
-  status-line and subagent payloads; the renderers own only presentation and bounded derived caches,
-  not a service or session registry. Native location links replace generated editor launchers.
-- **Use native account quota data without credential-file reads.** Bounded selected-account provider
-  requests and response headers may update usage; unavailable data stays explicit and does not block a
-  session.
-- **Do not special-case manual cancellation notifications.** Orca's normal stopped notification is
-  acceptable. Correctly distinguishing stopped from finished is useful, but notification suppression is
-  not a product requirement.
+- **Prefer native UI and tools.** MPX adds thin presentation and lifecycle data without replacing
+  native tool rendering, questions, MCP, web tools, shortcuts, or transcript semantics.
+- **Keep status displays compact and operational.** Show session identity, current context and usage,
+  and bounded child activity; omit cumulative token totals, ports, branch-state counts, and shortcut
+  hints from the Pi footer. Claude retains native status-line and subagent payloads; renderers own
+  presentation and bounded caches, not services.
+  Use native location links rather than generated editor launchers.
+- **Use native account quota data without reading credential files.** Bounded selected-account
+  requests and response headers may update usage; missing data stays explicit and never blocks work.
+- **Aggregate activity before reporting completion.** A parent waiting for children or follow-up work
+  is still working; child completion must not trigger whole-session attention. Orca owns stopped
+  notifications, with no separate suppression requirement for manual cancellation.
 
 ## Documentation and lifecycle
 
-- **Separate durable rationale from changing state.** `README.md` explains use, `AGENTS.md` explains
-  repository conventions, `DECISIONS.md` explains why, and `migration/` holds evidence, rollout state,
-  and recovery.
-- **Preserve before retiring.** Legacy repositories, dirty state, histories, and recovery artifacts stay
-  intact until active consumers are removed and restart/recovery checks pass. Publication, archival,
-  folder renaming, and deletion are explicit operations rather than side effects of installation.
-- **Deprecation means disconnecting active dependencies first.** Source can remain read-only for
-  provenance after launchers, hooks, links, patches, and project resources no longer depend on it.
-- **Keep one active MPX implementation.** This repository replaces the previous MPX installation and
-  the separate Pi/Claude repositories. Carry over accepted active features before archival; do not
-  retain legacy launch commands, fallback runtimes, or discoverable legacy resources. Native account
-  data stays in place. Protected offline recovery artifacts are not active installations.
+- **Separate rationale, conventions, and state.** `README.md` explains use, `AGENTS.md` governs
+  repository work, this file records lasting choices, and `migration/` holds rollout and recovery.
+- **Keep project-document guidance with its workflows.** Scaffolds define initial structure;
+  editing skills carry their own confirmation and preservation boundaries. Avoid a separate strategy
+  layer, mandatory decision dates, and arbitrary document-length targets.
+- **Retire dependencies before artifacts.** Preserve dirty state, histories, and recovery material
+  until active consumers are disconnected and restart/recovery checks pass. Publication, archival,
+  renaming, and deletion require explicit action rather than installation side effects.
+- **Keep one active MPX implementation.** Preserve accepted capabilities when replacing an
+  implementation, but do not retain active legacy launchers, fallback runtimes, or discoverable legacy
+  resources. Native account data and protected offline recovery artifacts remain separate.

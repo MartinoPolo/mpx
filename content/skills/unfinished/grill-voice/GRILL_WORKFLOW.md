@@ -21,8 +21,7 @@ one by one. Ask directly in the conversation instead of using AskUserQuestion.
 
 ## Step 1: Detect Project Docs
 
-Check for `.mpx/` documentation (see
-[Documentation Strategy]({{MPX_SHARED_INSTRUCTIONS}}/DOCUMENTATION_STRATEGY.md) for format details):
+Check for existing `.mpx/` documentation:
 
 - `.mpx/CONTEXT.md` — project summary, domain language, feature index, constraints
 - `.mpx/DECISIONS.md` — settled architectural and design decisions with rationale
@@ -77,9 +76,9 @@ important context and decisions for the project. If not sure if important enough
 
 **DECISIONS.md** — If architectural or design decisions were settled:
 
-- Record confirmed decisions under the relevant domain using the concise inline format in
-  [Documentation Strategy]({{MPX_SHARED_INSTRUCTIONS}}/DOCUMENTATION_STRATEGY.md).
-- Keep unresolved questions in the conversation.
+- Record only confirmed decisions as concise bullets under the relevant domain. Include useful
+  rationale; mention rejected alternatives only when explicitly rejected.
+- Replace superseded entries and keep unresolved questions in the conversation.
 
 ## Report
 

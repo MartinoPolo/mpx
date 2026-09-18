@@ -45,11 +45,9 @@ test('shared instruction, provider, rule, output-style, and helper closure is ca
     'claude/CLAUDE.md',
     'pi/APPEND_SYSTEM.md',
     'shared/AGENTS.md',
-    'shared/AUTHORING.md',
     'shared/BOARD_CONVENTION.md',
     'shared/COMPACT.md',
     'shared/DESIGN_PIPELINE.md',
-    'shared/DOCUMENTATION_STRATEGY.md',
     'shared/EXECUTOR_CONTRACT.md',
     'shared/EXECUTOR_MOCKING.md',
     'shared/EXECUTOR_TESTS.md',
@@ -137,6 +135,60 @@ test('discovery guidance does not depend on retired shared policies', async () =
   }
 });
 
+test('authoring workflows use one writing standard without retired policy dependencies', async () => {
+  const retiredPolicy = /AUTHORING\.md/;
+  for (const file of await filesBelow(content)) {
+    assert.doesNotMatch(file, retiredPolicy);
+    if (file.endsWith('.md')) {
+      assert.doesNotMatch(await readFile(path.join(content, file), 'utf8'), retiredPolicy, file);
+    }
+  }
+  const projections = await projectContent(root);
+  for (const projection of projections) {
+    assert.doesNotMatch(projection.path, retiredPolicy);
+    if (projection.path.endsWith('.md')) {
+      assert.doesNotMatch(projection.content.toString('utf8'), retiredPolicy, projection.path);
+    }
+  }
+  for (const harness of ['pi', 'claude']) {
+    for (const skill of ['agent-create', 'skill-create', 'skill-audit']) {
+      const skillRoot = harness === 'pi' ? 'pi/skills' : 'claude/.claude/skills';
+      const destination = `dist/packs/development/${skillRoot}/mp-${skill}/SKILL.md`;
+      const projection = projections.find(file => file.path === destination);
+      assert.ok(projection, destination);
+      const text = projection.content.toString('utf8');
+      assert.match(text, /WRITING_FOR_AGENTS\.md\)\s+completely/);
+      assert.doesNotMatch(text, /(?:100|200) lines|250 characters|contentVersion/);
+    }
+  }
+});
+
+test('documentation workflows retain local safeguards without a shared strategy', async () => {
+  const retiredPolicy = /DOCUMENTATION_STRATEGY\.md/;
+  for (const file of await filesBelow(content)) {
+    assert.doesNotMatch(file, retiredPolicy);
+    if (file.endsWith('.md')) {
+      assert.doesNotMatch(await readFile(path.join(content, file), 'utf8'), retiredPolicy, file);
+    }
+  }
+  for (const projection of await projectContent(root)) {
+    assert.doesNotMatch(projection.path, retiredPolicy);
+    if (projection.path.endsWith('.md')) {
+      assert.doesNotMatch(projection.content.toString('utf8'), retiredPolicy, projection.path);
+    }
+  }
+  for (const file of ['skills/grill/SKILL.md', 'skills/unfinished/grill-voice/GRILL_WORKFLOW.md']) {
+    const workflow = await readFile(path.join(content, file), 'utf8');
+    assert.match(workflow, /Write only confirmed\s+terms/);
+    assert.match(workflow, /only when explicitly rejected/);
+    assert.match(workflow, /Replace superseded entries/);
+  }
+  const templates = await readFile(path.join(content, 'instructions/shared/PROJECT_DOC_TEMPLATES.md'), 'utf8');
+  assert.match(templates, /Preserve substantive files/);
+  assert.match(templates, /Do not create, update, or fall back/);
+  assert.doesNotMatch(templates, /YYYY-MM-DD|\d+ lines/);
+});
+
 test('Pi agents assigned to Luna use xhigh thinking', async () => {
   const profiles = JSON.parse(await readFile(path.join(content, 'runtime-profiles.json'), 'utf8')) as {
     models: { pi: Record<string, string> };
@@ -215,8 +267,8 @@ test('provider roles remain independent and local is explicitly unsupported', as
 test('compiler resolves native commands and every added local Markdown dependency', async () => {
   const projections = await projectContent(root);
   const byPath = new Map(projections.map(item => [item.path, item.content.toString('utf8')]));
-  assert.match(byPath.get('dist/pi/instructions/shared/AUTHORING.md')!, /\/skill:mp-<name>/);
-  assert.match(byPath.get('dist/claude/instructions/shared/AUTHORING.md')!, /\/mp-<name>/);
+  assert.match(byPath.get('dist/pi/instructions/shared/AGENTS.md')!, /\/skill:mp-<name>/);
+  assert.match(byPath.get('dist/claude/instructions/shared/AGENTS.md')!, /\/mp-<name>/);
   assert.match(byPath.get('dist/pi/agents/mpx-tdd-executor.md')!, /instructions\/shared\/EXECUTOR_TESTS\.md/);
   assert.match(byPath.get('dist/claude/agents/mpx-chrome-devtools-tester.md')!, /instructions\/shared\/PLAYWRIGHT_TESTING\.md/);
   assert.ok(byPath.has('dist/pi/rules/projects/storybook.md'));

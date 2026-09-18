@@ -1,7 +1,8 @@
 # Project Documentation Scaffolds
 
 Create both files with these headings when a setup workflow initializes `.mpx/` documentation.
-Replace `[Project Name]` when known.
+Replace `[Project Name]` when known. Preserve substantive files. Do not create, update, or fall back
+to the retired `.mpx/REQUIREMENTS.md`, `.mpx/VOCABULARY.md`, or `.mpx/ARCHITECTURE.md` files.
 
 ## `.mpx/CONTEXT.md`
 
@@ -42,8 +43,5 @@ Settled architectural and design decisions, updated only after user confirmation
 
 ## [Domain]
 
-- YYYY-MM-DD: [Decision, with important rationale and any explicitly rejected alternatives inline.]
+- [Confirmed decision, with useful rationale and only explicitly rejected alternatives inline.]
 ```
-
-Roles, boundaries, formatting, and splitting policy are canonical in
-[DOCUMENTATION_STRATEGY.md](DOCUMENTATION_STRATEGY.md).

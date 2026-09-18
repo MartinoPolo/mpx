@@ -16,7 +16,6 @@ const skills = {
   'clean-pc': ['personal', 'explicit-only', 'measured free-space delta'],
   'code-clean': ['development', 'name-only', 'Spawn Fix Subagents'],
   'components-audit': ['development', 'name-only', 'Hardcoded theme-color bypass'],
-  'consolidate-context': ['development', 'name-only', 'Read every line of the full file'],
   'fallow-fix': ['development', 'name-only', 'Prefer removing dead code'],
   hitl: ['development', 'explicit-only', 'Recompute the graph after every update'],
   'init-github-repo': ['development', 'name-only', 'Protect main and dev'],
