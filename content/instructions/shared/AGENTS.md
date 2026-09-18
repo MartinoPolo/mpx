@@ -12,12 +12,21 @@ the intent or the constraint. Update documentation when behavior changes.
 Avoid numeric values describing repository state in comments, docs, skills, and references. These
 drift over time. Describe the general shape or point to the authoritative source instead.
 
-Save to memory only what a fresh session cannot easily explore from the repository, its config, or a
-cloned upstream source; for a narrowly scoped fact, prefer a code comment. Pointers to authoritative
-files are encouraged to speed that exploration. Reserve memory for decisions, rationale, time-costly
-gotchas, and machine- or person-specific setup.
+## Documentation
 
-Keep `AGENTS.md` edits concise and limited to durable repository-authoring intent.
+When changing documentation, check for duplicates, and update or replace an existing decision
+rather than append repetition or contradictory history. Doc should be stateless
+(for example a note about a bug should not be left in the doc after the bug is fixed).
+All documentation should be very concise and should pass a test if this will be valueable in a year
+
+- `AGENTS.md` - limit to durable agentic instructions.
+- `README.md` - focused on user-facing commands, usability and setup.
+- `DECISIONS.md` - limited to durable choices and their rationale.
+  Record only confirmed, lasting choices as concise bullets
+  Save only what a fresh session cannot easily explore from the repository, its config, or a
+  cloned upstream source; for a narrowly scoped fact, prefer a code comment. Pointers to authoritative
+  files are encouraged to speed that exploration. Reserve memory for decisions, rationale, time-costly
+  gotchas, and machine- or person-specific setup.
 
 ## Execution
 
