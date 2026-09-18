@@ -109,6 +109,9 @@ conventions belong in `AGENTS.md`; rollout evidence and recovery belong in `migr
   contract for context and decisions; add sections only for substantive content, not placeholders.
   Editing skills carry their own confirmation and preservation boundaries. Avoid a separate strategy
   layer, mandatory decision dates, and arbitrary document-length targets.
+- **Keep design-stage contracts with their skills.** Each stage owns its artifact and gate rules;
+  HTML-producing stages carry concise rendering requirements and pass them explicitly to delegates.
+  This avoids loading unrelated pipeline policy while preserving project style and approval gates.
 - **Retire dependencies before artifacts.** Preserve dirty state, histories, and recovery material
   until active consumers are disconnected and restart/recovery checks pass. Publication, archival,
   renaming, and deletion require explicit action rather than installation side effects.

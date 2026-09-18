@@ -18,9 +18,8 @@ metadata:
 Produce a design brief complete enough that a designer — human or AI — can build a pixel-accurate
 mockup without asking a single question.
 
-Shared conventions: [DESIGN_PIPELINE.md]({{MPX_SHARED_INSTRUCTIONS}}/DESIGN_PIPELINE.md). Use only
-approved machine-root context supplied by the native session; do not guess external paths. Brief
-structure and writing rules:
+Use supplied machine roots for external resources; do not guess external paths. Brief structure
+and writing rules:
 [BRIEF_TEMPLATE.md](BRIEF_TEMPLATE.md).
 
 ## Philosophy
@@ -42,11 +41,10 @@ Before writing anything:
 2. **Project docs** — context, decisions, and epic specs, wherever the project keeps them.
 3. **Existing implementation** — read any code for this feature. Current state vs. desired state.
 4. **Related briefs** — other folders under `designs/`.
-5. **Design language** — `designs/DESIGN_SYSTEM.md`, else infer per DESIGN_PIPELINE.md § Project
-   discovery.
+5. **Design language** — read available `designs/DESIGN_SYSTEM.md`, `designs/tokens.css`, and the
+   global stylesheet; infer missing guidance from this project's existing UI, not another project.
 
-For broad searches, spawn `mpx-explorer` with breadth stated (`quick`, `medium`, `very thorough`).
-It skips repository instructions — restate what the search depends on inside the prompt.
+For broad searches, spawn `mpx-explorer` with the scope, relevant constraints, and stopping condition.
 
 ## Step 2: Determine surrounding context
 
@@ -66,9 +64,10 @@ Write the findings into the brief's _Surrounding Context_ section.
 
 ## Step 3: Inventory components to reuse
 
-Discover the project's component directories (DESIGN_PIPELINE.md § Project discovery), then for
-every component relevant to the feature record its name, import path, real variants and props (read
-from the source, variants file, or story), and where it is used in this design.
+Locate component directories through framework/library configuration and aliases, then source
+searches. Distinguish vendored primitives from project compositions. For every relevant component,
+record its name, import path, real variants and props (read from source, variants files, or stories),
+and where it is used in this design.
 
 Be specific: "use `Button variant='ghost'` size='icon'", not "add a button".
 
@@ -99,8 +98,9 @@ reference.
    unrelated issues/tasks stay clean.
 4. Report which issues/tasks were labelled and why.
 
-If resolution fails or the user declines to supply or confirm an explicit target, skip this step and
-note it in the report.
+If resolution fails, the target is unconfirmed, or the provider cannot perform an operation, leave
+the affected gate unchanged. Report the target if known, attempted operation, blocker, and required
+manual action; do not claim the gate was applied.
 
 ## Step 7: Hand off
 

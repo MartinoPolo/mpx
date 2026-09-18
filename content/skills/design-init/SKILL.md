@@ -18,8 +18,7 @@ metadata:
 Derive an opinionated visual identity from what the app is, grill the user until it's settled, then
 write `designs/tokens.css` and `designs/DESIGN_SYSTEM.md`.
 
-Shared conventions: [DESIGN_PIPELINE.md]({{MPX_SHARED_INSTRUCTIONS}}/DESIGN_PIPELINE.md). Use only
-approved machine-root context supplied by the native session; do not guess external paths.
+Use supplied machine roots for external resources; do not guess external paths.
 
 **Once per project.** A re-run overwrites the design system — confirm first.
 
@@ -29,7 +28,8 @@ Read whatever exists:
 
 - Project context/decision docs (`.mpx/CONTEXT.md`, `.mpx/DECISIONS.md`, `docs/`, `README.md`)
 - `package.json` — name, description, framework
-- The global stylesheet and `components.json` — see DESIGN_PIPELINE.md § Project discovery
+- Existing `designs/DESIGN_SYSTEM.md`, `designs/tokens.css`, the global stylesheet, and component
+  library configuration such as `components.json`; derive style from this project, not another
 - Any existing UI, for what the project already looks like
 
 No usable description of the app? Ask the user for 2–3 sentences before continuing.
@@ -103,14 +103,9 @@ The reference the other three skills read. Cover:
 
 ## Step 7: Record decisions
 
-Append each settled decision to the project's decisions doc if one exists:
-
-```markdown
-### [Decision title]
-
-Decided: [date] What: [choice] Why: [rationale tied to the app domain] Rejected: [alternatives
-considered]
-```
+If the project's decisions document exists, record confirmed choices as concise bullets under the
+relevant domain. Include useful rationale and only explicitly rejected alternatives. Replace
+superseded entries rather than appending contradictory history.
 
 ## Step 8: Report
 

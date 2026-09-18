@@ -20,9 +20,7 @@ the design brief, and clears the design gate on dependent issues/tasks in the pr
 Resolve which tracker CLI and how to run each verb via
 [ISSUE_TRACKER.md]({{MPX_SHARED_INSTRUCTIONS}}/ISSUE_TRACKER.md).
 
-Shared conventions — folder layout, project discovery, mockup HTML rules, container context, the
-`Design needed` label: [DESIGN_PIPELINE.md]({{MPX_SHARED_INSTRUCTIONS}}/DESIGN_PIPELINE.md). Use only
-approved machine-root context supplied by the native session; do not guess external paths.
+Use supplied machine roots for external resources; do not guess external paths.
 
 ## Step 1: Parse arguments
 
@@ -41,27 +39,38 @@ Ask for the variant if it is missing, and for the changes if the refinements are
    that has variants.
 2. Read `designs/<component-name>/variants/variant-<letter>.html`.
 3. Read `designs/<component-name>/DESIGN_BRIEF_<COMPONENT_NAME>.md` in full.
-4. Read `designs/DESIGN_SYSTEM.md` when it exists.
+4. Read available `designs/DESIGN_SYSTEM.md`, `designs/tokens.css`, and the global stylesheet.
+   Infer missing guidance from this project's existing UI, not another project.
 
 ## Step 3: Inventory components
 
-For every component named in the brief or the refinements, check the project's component
-directories, read real props and variants from source, and note the gaps.
+Locate component directories through framework/library configuration and aliases, then source
+searches. Distinguish vendored primitives from project compositions. For components named in the
+brief or refinements, read real props and variants from source, variants files, or stories and note
+the gaps.
 
 ## Step 4: Adopt missing components
 
 For each gap:
 
 1. Spawn `mpx-context7-docs-fetcher` against the project's component library.
-2. Install with the detected package manager. shadcn projects:
-   `<pm-exec> shadcn@latest add <name> --yes --overwrite` — `pnpm dlx`, `npx`, `yarn dlx`, or `bunx`
-   per DESIGN_PIPELINE.md § Project discovery, and `shadcn-svelte@latest` on Svelte. Other
-   libraries: their own documented install command.
+2. Install with the project's configured package manager and its supported one-off executor.
+   shadcn projects: `<pm-exec> shadcn@latest add <name> --yes --overwrite`, using
+   `shadcn-svelte@latest` on Svelte. Other libraries: their documented install command.
 3. Record the adoption in `SUMMARY.md`.
 
 ## Step 5: Write `refined.html`
 
-`designs/<component-name>/refined.html`, following DESIGN_PIPELINE.md § Mockup HTML rules, plus:
+Write `designs/<component-name>/refined.html`.
+
+Use the project's fonts, available classes, and tokens; link `../tokens.css`. If tokens are absent,
+inline only discovered custom properties. Limit custom CSS to the component and layout. Use
+realistic domain content without invented production claims. Preserve required states, responsive
+behavior, semantics, contrast, and keyboard focus. Reproduce settled surrounding UI faithfully,
+mute unfinished neighbors as non-editable context, and preserve component/chrome ownership; a
+standalone component owns its complete chrome.
+
+Apply:
 
 - The chosen variant as visual and structural base
 - **Every** refinement requirement applied
@@ -119,7 +128,9 @@ Insert below the `# Title` heading:
 ```
 
 Refinement that reveals a missing or wrong requirement fixes it in the brief's own section rather
-than recording it in the summary.
+than recording it in the summary. The brief remains authoritative for requirements; `refined.html`
+is authoritative for the refined visual design. Preserve rejected variants and `variants/DECISION.md`
+when present.
 
 ## Step 8: Comment on the tracker issue/task
 
@@ -146,7 +157,9 @@ Run this only once the user has reviewed `refined.html` and approved it. Before 
 
 Resolve the `Design needed` gate from existing tracker labels/columns using the selected provider
 reference. If it is absent, ask the user to authorize creating it where supported or to provide the
-intended mapping; do not invent one.
+intended mapping; do not invent one. Verify the explicit provider target before mutation. If an
+operation is unsupported or blocked, leave affected gates unchanged and report the target, operation,
+blocker, and required manual action rather than claiming they were cleared.
 
 1. **Find candidates** — these signals are complementary, use whichever return results:
 

@@ -17,9 +17,7 @@ metadata:
 
 Generate self-contained HTML mockup(s) from a design brief, in the project's own design language.
 
-Shared conventions — folder layout, project discovery, mockup HTML rules, container context:
-[DESIGN_PIPELINE.md]({{MPX_SHARED_INSTRUCTIONS}}/DESIGN_PIPELINE.md). Use only approved machine-root
-context supplied by the native session; do not guess external paths.
+Use supplied machine roots for external resources; do not guess external paths.
 
 ## Arguments
 
@@ -37,8 +35,9 @@ context supplied by the native session; do not guess external paths.
 
 ## Step 1: Read the design language
 
-`designs/DESIGN_SYSTEM.md` for classes, patterns, and spacing. No design system file → infer per
-DESIGN_PIPELINE.md § Project discovery. Leave `designs/tokens.css` unread — mockups link it.
+Read available `designs/DESIGN_SYSTEM.md`, `designs/tokens.css`, and the global stylesheet for
+classes, patterns, and spacing. Infer missing guidance from this project's existing UI, not another
+project. Read tokens when needed to understand them; link rather than copy their values.
 
 ## Step 2: Identify the target brief
 
@@ -47,13 +46,24 @@ folder under `designs/` that has a brief and no `variants/variant-*.html`.
 
 ## Step 3: Discover reusable components
 
-Scan the project's component directories and read real props and variants from source, variants
-files, or stories. For a pattern nothing covers, spawn `mpx-context7-docs-fetcher` against the
+Locate component directories through framework/library configuration and aliases, then source
+searches. Distinguish vendored primitives from project compositions and read real props and variants
+from source, variants files, or stories. For a pattern nothing covers, spawn `mpx-context7-docs-fetcher` against the
 project's component library — note it and defer installation to `{{MPX_SKILL_PREFIX}}design-refine`.
 
 ## Step 4: Generate
 
 Output into `designs/<component-name>/variants/`.
+
+### HTML contract
+
+Use the project's fonts, available classes, and tokens; link `../../tokens.css` from each variant.
+If tokens are absent, inline only discovered custom properties. Limit custom CSS to the component
+and layout. Use realistic domain content without invented production claims. Preserve required
+states, responsive behavior, semantics, contrast, and keyboard focus. Label the variant and its
+angle. Reproduce settled surrounding UI faithfully, mute unfinished neighbors as non-editable
+context, and preserve component/chrome ownership; a standalone component owns its complete chrome.
+Use approximately 1440×900 proportions for the desktop preview without losing responsive behavior.
 
 **N = 1** — write `variant-a.html` directly.
 
@@ -70,8 +80,8 @@ Output into `designs/<component-name>/variants/`.
 - **Framework** — `html`.
 - **Output file** — the absolute path to `variants/variant-<letter>.html`, single self-contained
   file, no `VARIANT.md`.
-- **HTML rules** — DESIGN_PIPELINE.md § Mockup HTML rules, including the container context rule and
-  the eyebrow label naming the variant's angle.
+- **HTML rules** — pass the complete HTML contract above, including surrounding-context ownership
+  and the variant-angle label; do not rely on the child reading this skill.
 
 ## Step 5: Open
 

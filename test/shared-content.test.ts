@@ -47,7 +47,6 @@ test('shared instruction, provider, rule, output-style, and helper closure is ca
     'shared/AGENTS.md',
     'shared/BOARD_CONVENTION.md',
     'shared/COMPACT.md',
-    'shared/DESIGN_PIPELINE.md',
     'shared/EXECUTOR_CONTRACT.md',
     'shared/EXECUTOR_MOCKING.md',
     'shared/EXECUTOR_TESTS.md',
@@ -211,6 +210,43 @@ test('project documentation starts minimal and writers populate sections on dema
   const initialization = await readFile(path.join(content, 'skills/init-github-repo/SKILL.md'), 'utf8');
   assert.match(initialization, /Verify both files\s+exist/);
   assert.match(initialization, /never stage unrelated files or secrets/);
+});
+
+test('design workflows carry their contracts without a shared pipeline dependency', async () => {
+  const retiredPolicy = /DESIGN_PIPELINE\.md/;
+  for (const file of await filesBelow(content)) {
+    assert.doesNotMatch(file, retiredPolicy);
+    if (file.endsWith('.md')) {
+      assert.doesNotMatch(await readFile(path.join(content, file), 'utf8'), retiredPolicy, file);
+    }
+  }
+  for (const projection of await projectContent(root)) {
+    assert.doesNotMatch(projection.path, retiredPolicy);
+    if (projection.path.endsWith('.md')) {
+      assert.doesNotMatch(projection.content.toString('utf8'), retiredPolicy, projection.path);
+    }
+  }
+  const mockup = await readFile(path.join(content, 'skills/mockup/SKILL.md'), 'utf8');
+  const refinement = await readFile(path.join(content, 'skills/design-refine/SKILL.md'), 'utf8');
+  assert.match(mockup, /link `\.\.\/\.\.\/tokens\.css`/);
+  assert.match(refinement, /link `\.\.\/tokens\.css`/);
+  for (const workflow of [mockup, refinement]) {
+    assert.match(workflow, /inline only discovered custom properties/);
+    assert.match(workflow, /without invented production claims/);
+    assert.match(workflow, /keyboard focus/);
+    assert.match(workflow, /component\/chrome ownership/);
+  }
+  assert.match(mockup, /pass the complete HTML contract/);
+  assert.doesNotMatch(mockup, /Leave `designs\/tokens\.css` unread/);
+  assert.match(refinement, /only once the user has reviewed `refined\.html` and approved it/);
+  assert.match(refinement, /leave affected gates unchanged/);
+  assert.match(refinement, /Preserve rejected variants/);
+  const brief = await readFile(path.join(content, 'skills/design-brief/SKILL.md'), 'utf8');
+  assert.doesNotMatch(brief, /breadth stated|skips repository instructions/);
+  assert.match(brief, /required\s+manual action/);
+  const initialization = await readFile(path.join(content, 'skills/design-init/SKILL.md'), 'utf8');
+  assert.match(initialization, /only explicitly rejected alternatives/);
+  assert.doesNotMatch(initialization, /Decided: \[date\]|alternatives\s+considered/);
 });
 
 test('Pi agents assigned to Luna use xhigh thinking', async () => {
