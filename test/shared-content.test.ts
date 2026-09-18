@@ -12,9 +12,9 @@ const specialistMetadata = {
   'check-reporter': ['advanced', 'high', ['read']],
   'chrome-devtools-tester': ['advanced', 'high', ['read', 'search', 'shell', 'browser']],
   'ci-analyzer': ['advanced', 'high', ['read', 'search', 'shell']],
-  'context7-docs-fetcher': ['mechanical', 'low', ['read', 'context']],
+  'context7-docs-fetcher': ['mechanical', 'xhigh', ['read', 'context']],
   executor: ['advanced', 'low', ['read', 'search', 'shell', 'write']],
-  'git-committer': ['mechanical', 'low', ['shell']],
+  'git-committer': ['mechanical', 'xhigh', ['shell']],
   'issue-analyzer': ['advanced', 'high', ['read', 'search', 'shell', 'web']],
   'issue-finder': ['standard', 'low', ['read', 'search', 'shell']],
   'review-manager': ['standard', 'low', ['shell']],
@@ -133,6 +133,21 @@ test('discovery guidance does not depend on retired shared policies', async () =
       assert.match(guidance, /Delegate broad discovery to the exploration agent/);
       assert.match(guidance, /Prefer declared agent model and effort\s+defaults/);
       assert.doesNotMatch(guidance, /MPX_ACTIVE_CONTENT_ROOT/);
+    }
+  }
+});
+
+test('Pi agents assigned to Luna use xhigh thinking', async () => {
+  const profiles = JSON.parse(await readFile(path.join(content, 'runtime-profiles.json'), 'utf8')) as {
+    models: { pi: Record<string, string> };
+  };
+  for (const file of await filesBelow(path.join(content, 'agents'))) {
+    if (!file.endsWith('.md') || /(^|[\\/])references[\\/]/.test(file)) continue;
+    const source = await readFile(path.join(content, 'agents', file), 'utf8');
+    const data = frontmatter(source);
+    const modelClass = data.metadata?.mpx?.modelClass as string;
+    if (/\bluna\b/i.test(profiles.models.pi[modelClass] ?? '')) {
+      assert.equal(data.metadata?.mpx?.thinking, 'xhigh', file);
     }
   }
 });

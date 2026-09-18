@@ -5,7 +5,7 @@ metadata:
   mpx:
     schemaVersion: 1
     modelClass: mechanical
-    thinking: low
+    thinking: xhigh
     capabilities: [read, search, shell]
 ---
 
