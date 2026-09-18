@@ -23,10 +23,7 @@ The run costs nothing. Gemini reads YouTube URLs on the free tier, and ChatGPT P
 generation at no extra charge — which is why the last step is a paste the user makes by hand rather
 than an API call.
 
-Resolve every bundled reference and script relative to this loaded skill. For absolute filesystem
-reads, follow [Content Paths]({{MPX_SHARED_INSTRUCTIONS}}/CONTENT_PATHS.md). Store the loaded skill directory as
-`<skill-dir>` and use it in every script command; never guess an installation checkout or run
-bundled tooling relative to the caller's directory.
+`<skill-dir>` is the loaded skill directory.
 
 ## Step 1: Parse the request
 
@@ -54,10 +51,8 @@ For an exercise run, read [`reference/EXERCISE.md`](reference/EXERCISE.md) befor
 Focus is free text — "only the stretching section", "skip the warm-up" — and it reaches Gemini
 verbatim, so pass the user's own wording rather than a paraphrase.
 
-Resolve only `MPX_AI_GENERATED` from the process environment before Step 3 — a written `$MPX_AI_GENERATED` is
-literal text until it is looked up (see [Exploration Policy]({{MPX_SHARED_INSTRUCTIONS}}/EXPLORATION.md) § "Paths
-outside the working directory"), and checking now catches an unset variable before Step 3 spends the
-Gemini call on a run that would fail to write anyway. Every run gets its own folder,
+Resolve only `MPX_AI_GENERATED` from the process environment before Step 3. Checking now catches an
+unset variable before Step 3 spends the Gemini call on a run that would fail to write anyway. Every run gets its own folder,
 `$MPX_AI_GENERATED\_VIDEO_SHEETS\[<channel>] <video title>\`, holding a single `prompt.md`; the user
 saves the generated image there by hand. When `MPX_AI_GENERATED` is unset the script stops and names
 the variable to set. `--out` may select a child directory inside that root, but containment is

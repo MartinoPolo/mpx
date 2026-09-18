@@ -20,9 +20,8 @@ Argument: explicit Epic Issue number or URL. Use [the Issue template](ISSUE_TEMP
 
 ## Content and provider discovery
 
-Read [Issue tracker policy]({{MPX_SHARED_INSTRUCTIONS}}/ISSUE_TRACKER.md),
-[provider routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md), [exploration policy]({{MPX_SHARED_INSTRUCTIONS}}/EXPLORATION.md),
-and [sub-agent policy]({{MPX_SHARED_INSTRUCTIONS}}/SUBAGENT_PROTOCOL.md). Read nearest valid `mpxconfig.json`; resolve
+Read [Issue tracker policy]({{MPX_SHARED_INSTRUCTIONS}}/ISSUE_TRACKER.md) and
+[provider routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md). Read nearest valid `mpxconfig.json`; resolve
 `issues.provider` independently from `repository.provider`. This skill uses the Issue provider only.
 Read its selected shared provider guide and use its target-bound native commands; do not invent MPX
 facade actions or switch providers.
@@ -62,7 +61,7 @@ unanswered-questions blockquote.
 
 ### 3. Explore
 
-Delegate medium-breadth domain exploration to `mpx-explorer` (declared `exploration` model policy):
+Delegate domain exploration to `mpx-explorer`:
 patterns, services, UI, data models, tests, and architectural boundaries. Stop after obvious
 locations and one alternate naming convention.
 

@@ -81,5 +81,4 @@ Needs From Parent:
 
 ## Related
 
-- [SUBAGENT_PROTOCOL.md](SUBAGENT_PROTOCOL.md)
 - [REVIEWER_PROTOCOL.md](REVIEWER_PROTOCOL.md)

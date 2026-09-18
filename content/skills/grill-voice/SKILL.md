@@ -51,7 +51,7 @@ skip the publish/wait cycle entirely.
 ## Step 3: Rounds
 
 Compose each round exactly as {{MPX_SKILL_PREFIX}}grill Step 3 prescribes: delegate codebase facts to the named
-`mpx-explorer` agent at medium breadth (with no model override), batch related questions
+`mpx-explorer` agent (with no model override), batch related questions
 thematically, split into a follow-up round only when earlier answers materially change later
 questions, and attach a recommendation to every question.
 

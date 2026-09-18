@@ -2,9 +2,10 @@
 
 ## Framework rule link
 
-The source is the projected `rules/projects/react.md` beneath the active MPX2 content root. Resolve
-it through [CONTENT_PATHS]({{MPX_SHARED_INSTRUCTIONS}}/CONTENT_PATHS.md). Do not probe guessed checkout locations. Destination:
-`<project-path>/.claude/rules/react.md`.
+Resolve `MPX_ACTIVE_CONTENT_ROOT` from the environment to one absolute root, then use
+`<root>/dist/{{MPX_HARNESS}}/rules/projects/react.md`. Require the contained file to exist; if the
+root is unset or the file is unavailable, report the failure and do not guess an installation
+location. Destination: `<project-path>/.claude/rules/react.md`.
 
 Create the parent directory first:
 

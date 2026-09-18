@@ -1,7 +1,6 @@
 # Authoring Conventions
 
-Rules shared by canonical MPX skills, agents, and instructions. For delegation and model selection,
-see [SUBAGENT_PROTOCOL.md](SUBAGENT_PROTOCOL.md). For agent-facing prose, see
+Rules shared by canonical MPX skills, agents, and instructions. For agent-facing prose, see
 [WRITING_FOR_AGENTS.md](WRITING_FOR_AGENTS.md).
 
 ## Canonical locations and identities
@@ -45,7 +44,7 @@ actions, or false-success hazards. At every call site name:
 - the required model class when the callee does not declare one;
 - the provider intent and explicit repository or board target;
 - the repository-relative script and invocation;
-- exploration breadth and stopping condition.
+- task scope and stopping condition.
 
 Resolve provider operations through [ISSUE_TRACKER.md](ISSUE_TRACKER.md). Canonical content may
 invoke only the native commands documented by the selected guide under
@@ -54,15 +53,9 @@ provider from remotes.
 
 ## Paths and private data
 
-Canonical content contains no personal absolute paths. Machine roots are supplied through `MPX_*`
-environment variables described in [EXPLORATION.md](EXPLORATION.md). Resolve a needed root at
-runtime and fail with a message naming an unset variable; do not guess or fall back to the working
-directory.
-
-Do not assume markdown interpolates environment variables. Follow
-[CONTENT_PATHS.md](CONTENT_PATHS.md): keep canonical links relative, and when a runtime tool needs
-an absolute path, resolve `MPX_ACTIVE_CONTENT_ROOT` once and pass the resulting literal. A runtime
-adapter may define a small documented placeholder set only in its generated projection.
+Canonical content contains no personal absolute paths. Resolve external machine resources through
+supplied `MPX_*` environment variables; if a required variable is unset, name it and stop that
+branch rather than guessing.
 
 User-facing generated assets go beneath `MPX_AI_GENERATED`, in an all-caps underscore-prefixed
 category folder, with one subfolder per run containing the inputs, prompt, and deliverables.

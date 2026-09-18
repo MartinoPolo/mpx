@@ -23,10 +23,7 @@ Two artifacts drive everything: a `<slug>-resource.md` brief (the only facts the
 know) and a `<slug>-prompt.txt` customize instruction (how they discuss it). Format rules for both:
 [`reference/BRIEF_FORMAT.md`](reference/BRIEF_FORMAT.md).
 
-Resolve every bundled reference, script, and cross-skill link relative to this loaded skill. For
-absolute filesystem reads, follow [Content Paths]({{MPX_SHARED_INSTRUCTIONS}}/CONTENT_PATHS.md). Store the loaded
-skill directory as `<skill-dir>`; never guess an installation checkout or run a bundled script
-relative to the caller's directory.
+`<skill-dir>` is the loaded skill directory.
 
 ## Step 1: Parse the request
 
@@ -70,7 +67,7 @@ install: use `$LOCALAPPDATA\Python\pythoncore-3.14-64\Scripts\notebooklm.exe` fo
 ## Step 3: Research and personalization — one message, parallel
 
 Send every spawn below in a **single message** so they run concurrently, and orchestrate them from
-this thread ([Sub-agent Protocol]({{MPX_SHARED_INSTRUCTIONS}}/SUBAGENT_PROTOCOL.md) § 2).
+this thread.
 
 **Topic research.** The brief is built from gathered sources, so gather them first:
 
@@ -81,8 +78,8 @@ this thread ([Sub-agent Protocol]({{MPX_SHARED_INSTRUCTIONS}}/SUBAGENT_PROTOCOL.
   Have it web-search and fetch authoritative primary sources (spec, MDN, official docs, the
   canonical blog post), returning each URL and its current technical substance.
 
-**Personalization sweep.** Fan out one `Explore` per root, breadth `medium` — raise to
-`very thorough` on a narrow topic that returns nothing on the first pass.
+**Personalization sweep.** Fan out one `Explore` per root. If a narrow topic returns nothing,
+retry once with its concrete API and keyword spellings.
 
 | Root                              | Looking for                                     |
 | --------------------------------- | ----------------------------------------------- |

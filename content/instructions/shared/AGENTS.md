@@ -46,20 +46,19 @@ Missing optional MPX port metadata is not a startup blocker.
 Follow applicable project instructions, including nested instructions for files changed. Private
 local instructions supplement shared guidance.
 
-Use skill locations exposed by the native runtime. Invoke MPX skills with their native command:
-`/skill:mp-<name>` in Pi and `/mp-<name>` in Claude. Resolve compiled support content only from
-the absolute `MPX_ACTIVE_CONTENT_ROOT`; do not guess an installation path.
+Invoke MPX skills with their native command: `/skill:mp-<name>` in Pi and `/mp-<name>` in Claude.
 
 ## Sub-agents
 
-Delegate broad discovery to the exploration agent when available. Prefer delegation for discovery
-spanning more than three files or 1000 lines. Use direct tools for known paths and small lookups.
-Name the agent type. Resolve and read `dist/{{MPX_HARNESS}}/instructions/shared/SUBAGENT_PROTOCOL.md` beneath
-`MPX_ACTIVE_CONTENT_ROOT` for details. When agents are unavailable, use available tools.
+Delegate broad discovery to the exploration agent using direct tools for known paths and small
+lookups. Give delegates the task scope, relevant constraints, stopping condition, and required
+evidence. The parent evaluates findings and owns decisions. Prefer declared agent model and effort
+defaults; use supported overrides only when needed. For external-tool implementation questions,
+check a relevant clone under `MPX_CLONED`; use Context7 for current API documentation, with public
+web fallback.
 
 ## Preferences
 
-Prefer local documentation or Context7, with web fallback. Commands suggested for manual execution
-use Bash; use PowerShell for Windows-native tooling. Use conventional commits when authorized. When
+Commands suggested for manual execution use Bash; use PowerShell for Windows-native tooling. Use conventional commits when authorized. When
 workflow friction recurs, fix the immediate issue, then propose a durable rule for instructions or
 memory.

@@ -32,8 +32,7 @@ Parameters: optional Epic reference and ordering `lowest` (default) or `most-blo
    or `1. issue:3 — Dashboard CRUD (unblocks 6 downstream)`.
 5. For each Issue, extract ambiguities from notes, acceptance criteria, and description; remove
    decisions already settled by Epic context. Before asking questions, invoke named agent
-   `mpx-explorer` with breadth `medium` to inspect relevant code and report evidence, following the
-   runtime absolute-root procedure in [Content Paths]({{MPX_SHARED_INSTRUCTIONS}}/CONTENT_PATHS.md). If external
+   `mpx-explorer` to inspect relevant code and report evidence. If external
    library facts are uncertain, route to Context7.
 6. Present thematic batches of numbered questions with evidence-backed recommendations. Ask a
    follow-up round only when prior answers materially affect it.

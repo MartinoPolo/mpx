@@ -21,11 +21,7 @@ group. Use the invocation input to narrow the sweep when requested.
 Detection rules and safety heuristics: [DOMAINS.md](DOMAINS.md). Concrete commands:
 [WINDOWS.md](WINDOWS.md) (verified), [MACOS.md](MACOS.md) / [LINUX.md](LINUX.md) (unverified).
 
-The bundled scanners and removal helper live in `./scripts/`. Resolve bundled links relative to this
-compiled skill first. If projection relocates them, follow
-[Content Paths]({{MPX_SHARED_INSTRUCTIONS}}/CONTENT_PATHS.md), accept and report one unambiguous root, and stop rather
-than guessing. Every `scripts/...` path below and in the platform files resolves against that
-directory.
+The bundled scanners and removal helper live in `./scripts/`.
 
 ## Process
 
@@ -67,9 +63,8 @@ fall back to `scripts/Scan-FolderMap.ps1` and stop offering for this run.
 
 ### Step 3: Scan All Domains in Parallel
 
-Spawn one suitable scanning sub-agent per domain, all concurrently, following
-[Sub-agent Protocol]({{MPX_SHARED_INSTRUCTIONS}}/SUBAGENT_PROTOCOL.md). Tell each to keep its analysis brief: this is
-a scan, not a review. Give each sub-agent:
+Spawn one suitable scanning sub-agent per domain, all concurrently. Tell each to keep its analysis
+brief: this is a scan, not a review. Give each sub-agent:
 
 - The domain's section from `DOMAINS.md` and the platform file
 - The resolved roots, the exclusion list, and the quarantine roots

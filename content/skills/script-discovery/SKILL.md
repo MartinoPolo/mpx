@@ -18,12 +18,10 @@ metadata:
 Wrap [`scripts/detect-project-scripts.mjs`](scripts/detect-project-scripts.mjs). Use this skill when
 agents need a reliable fallback reference for script discovery behavior.
 
-Resolve the bundled script relative to this loaded skill first. If that path is unavailable and an
-absolute executable path is required, follow [Content Paths]({{MPX_SHARED_INSTRUCTIONS}}/CONTENT_PATHS.md) to resolve this skill
-projection and its `scripts/detect-project-scripts.mjs`. Verify the literal result exists and
-remains contained by that projection; otherwise stop and report the failed condition. Store the
-validated literal absolute path as `SCRIPT_DETECTOR`; never assign an unexpanded placeholder such as
-`$MPX_ACTIVE_CONTENT_ROOT/...`.
+Resolve `scripts/detect-project-scripts.mjs` from the supplied loaded skill location. Verify the
+literal result exists and remains contained by that skill directory; otherwise stop and report the
+failed condition. Store the validated literal absolute path as `SCRIPT_DETECTOR`; never search
+another root or assign an unexpanded placeholder such as `$MPX_ACTIVE_CONTENT_ROOT/...`.
 
 ## Goal
 

@@ -39,8 +39,7 @@ Step 5 returns immediately with `status: pending`. Audio takes 10-20 minutes.
 
 Resolve the canonical `mechanical` class through the active runtime profile and hand the wait to a
 background `general-purpose` sub-agent using that concrete value in the runtime's real `model`
-field; the generic agent declares no model of its own
-([Sub-agent Protocol]({{MPX_SHARED_INSTRUCTIONS}}/SUBAGENT_PROTOCOL.md) § 1). Give it the notebook id, the task id,
+field; the generic agent declares no model of its own. Give it the notebook id, the task id,
 the output path, and this instruction:
 
 > Run `notebooklm artifact wait <task_id> -n <nb> --timeout 1200`. Exit code 2, or stderr saying

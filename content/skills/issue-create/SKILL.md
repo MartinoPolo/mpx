@@ -46,7 +46,7 @@ Epic identifier.
 If an Epic was supplied, view it through the selected provider and confirm that it is the intended
 open Epic.
 
-If none was supplied, perform a medium-breadth search of open Issues for Epic-labelled candidates.
+If none was supplied, search open Issues for Epic-labelled candidates.
 Compare their titles and bodies with the requested outcome. Propose the single best candidate and
 obtain approval before linking; if there is no strong match, create a standalone Issue. Never
 silently attach an Epic.
@@ -58,7 +58,7 @@ never create one implicitly.
 
 ### 3. Explore the codebase
 
-Spawn `mpx-explorer` with medium breadth to identify affected domains, existing patterns and tests,
+Spawn `mpx-explorer` to identify affected domains, existing patterns and tests,
 architectural boundaries, and useful area labels. Describe durable module behavior in the Issue, not
 machine paths or line numbers.
 

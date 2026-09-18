@@ -47,7 +47,7 @@ none remain, report that no authorized content was available and make no documen
 
 ## 3. Find and extract decision discussions
 
-Use a named `mpx-explorer` child at medium breadth to locate candidate interaction events within the authorized current conversation, explicitly supplied transcripts, or excerpts. Do not
+Use a named `mpx-explorer` child to locate candidate interaction events within the authorized current conversation, explicitly supplied transcripts, or excerpts. Do not
 ask it to discover or search native transcript storage.
 
 Use actual decision interaction events as the primary signal: explicit `grill`, `hitl`, or

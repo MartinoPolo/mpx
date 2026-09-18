@@ -16,8 +16,7 @@ metadata:
 
 One-time setup that creates this project's Obsidian **board** and links it into the repo, so
 `board-to-issues` and `batch-execute` can read requirements and pasted images. Read
-[Board Convention]({{MPX_SHARED_INSTRUCTIONS}}/BOARD_CONVENTION.md) now. Resolve linked files relative to this loaded
-skill. For absolute reads, follow [Content Paths]({{MPX_SHARED_INSTRUCTIONS}}/CONTENT_PATHS.md).
+[Board Convention]({{MPX_SHARED_INSTRUCTIONS}}/BOARD_CONVENTION.md) now.
 
 ## Step 1: Resolve paths
 

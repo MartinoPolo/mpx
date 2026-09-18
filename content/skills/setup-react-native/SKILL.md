@@ -15,8 +15,7 @@ metadata:
 # Setup React Native Monorepo
 
 Read [PLATFORM_REFERENCE](PLATFORM_REFERENCE.md) and
-[provider routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md). Resolve linked files relative to this loaded
-skill. For absolute reads, follow [Content Paths]({{MPX_SHARED_INSTRUCTIONS}}/CONTENT_PATHS.md).
+[provider routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md).
 
 Because the destination and its `mpxconfig.json` do not exist yet, take the **repository provider as
 explicit setup input** (GitHub is the deliberate template source, but is not an automatic fallback).

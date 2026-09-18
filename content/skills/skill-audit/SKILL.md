@@ -17,14 +17,9 @@ metadata:
 
 # Skill Audit
 
-Read [Authoring Conventions]({{MPX_SHARED_INSTRUCTIONS}}/AUTHORING.md),
-[Writing for Agents]({{MPX_SHARED_INSTRUCTIONS}}/WRITING_FOR_AGENTS.md),
-[Sub-Agent Protocol]({{MPX_SHARED_INSTRUCTIONS}}/SUBAGENT_PROTOCOL.md), and [Exploration]({{MPX_SHARED_INSTRUCTIONS}}/EXPLORATION.md)
-completely before auditing. With `the invocation input`, audit only the named skill or path; without
-it, audit every active root.
-
-Resolve assets relative to this loaded skill; follow [Content Paths]({{MPX_SHARED_INSTRUCTIONS}}/CONTENT_PATHS.md)
-when a tool requires an absolute path.
+Read [Authoring Conventions]({{MPX_SHARED_INSTRUCTIONS}}/AUTHORING.md) and
+[Writing for Agents]({{MPX_SHARED_INSTRUCTIONS}}/WRITING_FOR_AGENTS.md) completely before auditing.
+With `the invocation input`, audit only the named skill or path; without it, audit every active root.
 
 ## Workflow
 
@@ -82,10 +77,9 @@ when a tool requires an absolute path.
    exposure earns its context cost.
 5. **Legacy docs and paths:** Find obsolete `REQUIREMENTS.md`, `VOCABULARY.md`, `ARCHITECTURE.md`,
    `legacy`, fallback references, old absolute roots, and runtime-only source paths. Replace only
-   when the current canonical target is verified. Require compiled-relative references plus the
-   `CONTENT_PATHS` runtime-read procedure.
+   when the current canonical target is verified. Require references that survive projection.
 6. **Explicit capabilities:** Name exact canonical agent identities, semantic model classes, MPX
-   capabilities, repository-relative scripts, and delegated exploration breadth wherever used.
+   capabilities, and repository-relative scripts wherever used.
    Verify runtime profiles translate semantic capabilities and model classes to concrete
    tools/models.
 7. **Vocabulary confirmation:** Skills writing the Domain Language section of `.mpx/CONTEXT.md` show
@@ -97,8 +91,7 @@ when a tool requires an absolute path.
    handoff. Ensure runtime projections translate identities without changing semantics.
 10. **Grant paths and projection:** Resolve every path-like capability/allowlist entry after
     supported root expansion and wildcard handling. Compile or inspect projection plans to verify
-    direct references remain correct relative to emitted files and use `CONTENT_PATHS` only when
-    relocation requires an absolute runtime read.
+    direct references remain correct relative to emitted files.
 11. **Dead grants:** Match every canonical capability to body behavior and every capability use to a
     grant. Then inspect runtime translation for unintended widening, missing tools, or unsupported
     omissions.
@@ -106,29 +99,26 @@ when a tool requires an absolute path.
     packs, and public identities with README tables or generated inventories. Report drift for the
     owning documentation workflow rather than editing out-of-scope files.
 13. **Model mechanics:** Flag prose-only model selection, concrete vendor model IDs in canonical
-    content, redundant or missing structured model classes/effort per Sub-Agent Protocol,
-    unsupported classes, and runtime profiles that fail to record translation. Call-site effort is
-    valid only where the canonical protocol and adapter support it.
+    content, redundant or missing structured model classes/effort, unsupported classes, and runtime
+    profiles that fail to record translation. Call-site effort is valid only where the runtime
+    metadata and adapter support it.
 14. **Shared integrity (repository-wide):** Resolve shared links from every active root. Flag copied
     shared rules that should be precise pointers and direct links that do not survive
     compiled-relative projection.
-15. **Exploration:** Require broad discovery to use `mpx-explorer` or the documented exploration
-    capability with quick, medium, or very-thorough breadth and a stopping condition. Exempt
-    deterministic inventories of fixed known patterns.
-16. **Personal paths:** Scan selected skill files and assets for personal roots or usernames.
+15. **Personal paths:** Scan selected skill files and assets for personal roots or usernames.
     Require runtime resolution through named `MPX_*` environment variables and loud failure when
     unset. Exempt documented runtime variables and genuine system paths; reject guessed fallbacks.
-17. **Semantic completion:** Assess whether every procedural step has an unambiguous behavioral
+16. **Semantic completion:** Assess whether every procedural step has an unambiguous behavioral
     endpoint. Flag plausible premature or false completion, no-op completion restatements, detached
     validation or stop conditions, and standalone gates outside approved ambiguous or risky
     transitions. Do not search for or require literal completion phrases.
-18. **Hierarchy and disclosure:** Classify procedural, reference, or mixed structure. Verify actions
+17. **Hierarchy and disclosure:** Classify procedural, reference, or mixed structure. Verify actions
     precede supporting detail, concepts are co-located, and branch-only material is disclosed
     through precise one-level pointers.
-19. **Single source and caches:** Flag duplicated meanings and environment facts cheaply
+18. **Single source and caches:** Flag duplicated meanings and environment facts cheaply
     discoverable from manifests, config, layout, scripts, runtime profiles, or `--help`. Retain
     reasons, policy, and hidden conventions that cannot be safely rediscovered.
-20. **Relevance and no-ops:** Flag stale or unrelated sentences. Compare suspected no-ops
+19. **Relevance and no-ops:** Flag stale or unrelated sentences. Compare suspected no-ops
     behaviorally against the target model/runtime default and preserve them as manual findings when
     behavior cannot be measured; never auto-delete solely from textual heuristics.
 

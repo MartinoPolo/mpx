@@ -18,10 +18,7 @@ Generate a self-contained interactive HTML tutorial page. You author ONLY a comp
 `<slug>.source.md`; `scripts/compile.js` renders the final page from `TEMPLATE.html` (Shiki
 highlighting, theme, progress, quiz — all template-owned). the invocation input
 
-Resolve bundled references, the template, and scripts relative to this loaded skill. For absolute
-filesystem reads, follow [Content Paths]({{MPX_SHARED_INSTRUCTIONS}}/CONTENT_PATHS.md). Store the loaded skill
-directory as `<skill-dir>` and use it in every command; never guess an installation checkout or
-treat the caller's directory as the skill directory.
+`<skill-dir>` is the loaded skill directory.
 
 ## Workflow
 

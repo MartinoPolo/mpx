@@ -19,9 +19,8 @@ Create one Epic whose body is the durable specification. Optional argument: mile
 
 ## Content and provider discovery
 
-Read [Issue tracker policy]({{MPX_SHARED_INSTRUCTIONS}}/ISSUE_TRACKER.md),
-[provider routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md), [exploration policy]({{MPX_SHARED_INSTRUCTIONS}}/EXPLORATION.md),
-and [sub-agent policy]({{MPX_SHARED_INSTRUCTIONS}}/SUBAGENT_PROTOCOL.md). Read the nearest valid `mpxconfig.json`
+Read [Issue tracker policy]({{MPX_SHARED_INSTRUCTIONS}}/ISSUE_TRACKER.md) and
+[provider routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md). Read the nearest valid `mpxconfig.json`
 before provider work. Resolve `issues.provider` independently from `repository.provider`; this
 workflow uses only `issues.provider`. Follow the selected provider guide and its documented native
 commands. Do not invent an MPX facade action.
@@ -40,8 +39,7 @@ design.
 
 ### 2. Explore current state
 
-Delegate medium-breadth exploration to named agent `mpx-explorer` (declared `exploration` model
-policy). Ask it to identify project name, dependencies/scripts, structural boundaries, existing
+Delegate exploration to named agent `mpx-explorer`. Ask it to identify project name, dependencies/scripts, structural boundaries, existing
 docs, patterns/frameworks, and test prior art. Stop when both obvious locations and one alternate
 naming convention have been checked.
 

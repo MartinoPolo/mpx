@@ -23,12 +23,9 @@ Create a portable skill following the target repository's canonical content and 
 conventions. Use `the invocation input` for known requirements.
 
 Read [Authoring Conventions]({{MPX_SHARED_INSTRUCTIONS}}/AUTHORING.md) and
-[Writing for Agents]({{MPX_SHARED_INSTRUCTIONS}}/WRITING_FOR_AGENTS.md) completely. When the skill delegates, also
-read [Sub-Agent Protocol]({{MPX_SHARED_INSTRUCTIONS}}/SUBAGENT_PROTOCOL.md). These are the authoritative sources for
-writing, invocation, naming, paths, capabilities, model classes, and versioning.
-
-Resolve assets relative to this loaded skill; follow [Content Paths]({{MPX_SHARED_INSTRUCTIONS}}/CONTENT_PATHS.md)
-when a tool requires an absolute path.
+[Writing for Agents]({{MPX_SHARED_INSTRUCTIONS}}/WRITING_FOR_AGENTS.md) completely. These are the authoritative
+sources for writing, invocation, naming, capabilities, and versioning. Use structured runtime
+metadata and configuration for model and delegation mechanics.
 
 ## Workflow
 

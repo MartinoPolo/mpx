@@ -55,9 +55,9 @@ genuinely needed. Fix unjustified suppressions, verify checks pass, and create a
 
 ### Step 1: Detect Check Commands
 
-Read [content paths]({{MPX_SHARED_INSTRUCTIONS}}/CONTENT_PATHS.md). Resolve the sibling compiled skill script at
-`../{{MPX_SKILL_PREFIX}}check-fix/scripts/detect-check-scripts.mjs`, validate it, and store its
-literal absolute path as `<detector>`. If that supporting skill is unavailable in the active pack,
+Resolve the sibling compiled skill script at
+`../{{MPX_SKILL_PREFIX}}check-fix/scripts/detect-check-scripts.mjs` from this loaded skill, validate
+it, and store its literal absolute path as `<detector>`. If that supporting skill is unavailable in the active pack,
 report the dependency and stop this workflow rather than searching or guessing another root. Run `node <detector>` (optionally pass
 the project directory and package manager as arguments). It prints `KEY=value` pairs (e.g.
 `CHECK_ALL=...`, `TYPECHECK=...`, `LINT=...`, `FORMAT=...`, `BUILD=...`, `TEST_UNIT=...` or
@@ -72,12 +72,7 @@ For each scope, store:
 
 ### Step 2: Scan for All Suppressions
 
-Read [exploration policy]({{MPX_SHARED_INSTRUCTIONS}}/EXPLORATION.md),
-[sub-agent policy]({{MPX_SHARED_INSTRUCTIONS}}/SUBAGENT_PROTOCOL.md), and [content paths]({{MPX_SHARED_INSTRUCTIONS}}/CONTENT_PATHS.md).
-Resolve links relative to this loaded skill; for absolute filesystem reads, follow
-[Content Paths]({{MPX_SHARED_INSTRUCTIONS}}/CONTENT_PATHS.md).
-
-Spawn the named `mpx-explorer` agent using its declared very-thorough exploration policy to find
+Spawn the named `mpx-explorer` agent to find
 every suppression comment in source files (exclude `node_modules`, `dist`, `.svelte-kit`, lock
 files). For each match, have it record:
 
@@ -87,7 +82,7 @@ files). For each match, have it record:
 
 ### Step 3: Scan Config Files
 
-Spawn the named `mpx-explorer` agent using its declared medium-breadth exploration policy to find
+Spawn the named `mpx-explorer` agent to find
 and read all lint config files (`eslint.config.*`, `.eslintrc.*`, `.oxlintrc.*`, `oxlint.json`).
 Have it, for each:
 

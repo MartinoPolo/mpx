@@ -23,8 +23,7 @@ merge request, or Gerrit change, as applicable.
 ## Content and provider discovery
 
 Read [Issue tracker policy]({{MPX_SHARED_INSTRUCTIONS}}/ISSUE_TRACKER.md),
-[provider routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md),
-[sub-agent policy]({{MPX_SHARED_INSTRUCTIONS}}/SUBAGENT_PROTOCOL.md), [analysis branches](ANALYSIS_BRANCHES.md),
+[provider routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md), [analysis branches](ANALYSIS_BRANCHES.md),
 [execution](EXECUTION.md), and [phase-end template](PHASE_END_TEMPLATE.md). Read nearest valid
 `mpxconfig.json`. Resolve `issues.provider` for Epic/child operations and `repository.provider`
 independently for PR and CI. Read both selected shared provider guides and use their target-bound

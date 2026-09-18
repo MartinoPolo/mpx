@@ -24,10 +24,6 @@ Existing repositories are preserved; registration never initializes or publishes
 Follow-up skills below use their native commands. They run only when selected and available in the
 active pack.
 
-Resolve links and scripts relative to this loaded skill. For absolute reads, follow
-[Content Paths]({{MPX_SHARED_INSTRUCTIONS}}/CONTENT_PATHS.md). Use the loaded skill directory in every script command
-below; `./scripts/...` means that directory, not the caller's working directory.
-
 Scripts live in `./scripts/`:
 
 | Script           | Purpose                                                             |

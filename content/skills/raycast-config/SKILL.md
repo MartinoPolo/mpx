@@ -19,8 +19,7 @@ Read and rewrite the Raycast quicklink set — including aliases and hotkeys, wh
 route carries. Use the invocation input when it identifies the export to edit.
 
 Format spec, record schemas, import semantics and the naming rules: [REFERENCE.md](REFERENCE.md).
-Read it before editing any config. Resolve this and bundled scripts relative to this loaded skill.
-For absolute filesystem reads, follow [Content Paths]({{MPX_SHARED_INSTRUCTIONS}}/CONTENT_PATHS.md).
+Read it before editing any config.
 
 Scripts live in `<resolved skill directory>/scripts/`:
 

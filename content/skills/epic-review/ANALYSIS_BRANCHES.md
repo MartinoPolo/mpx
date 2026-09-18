@@ -7,7 +7,7 @@ provider facts; agents do not discover or change providers.
 ## 7. Architecture
 
 The parent applies the existing `architecture-review` method and reads its linked deep-module and
-interface-design references. Dispatch `mpx-explorer` with medium breadth to gather facts and
+interface-design references. Dispatch `mpx-explorer` to gather facts and
 evidence from the Epic's changed files, including coupling, shallow modules, misplaced policy,
 unstable interfaces, test boundaries, and decomposition candidates. Supply the changed-file stats
 and confirmed architectural decisions, and stop after the changed surfaces and their direct
@@ -20,8 +20,8 @@ architecture-review's interactive candidate-selection or Issue- creation stages.
 
 ## 8. Cleanup
 
-Dispatch named canonical agent `mpx-explorer` (declared `exploration` policy), medium breadth,
-stopping after changed files and one repository-wide usage search per candidate:
+Dispatch named canonical agent `mpx-explorer`, stopping after changed files and one repository-wide
+usage search per candidate:
 
 > Scan Epic changed files/diff for unused exports/types/functions, stale imports, cross-PR
 > duplication, superseded helpers, and orphaned test fixtures. Verify every usage before reporting.
@@ -38,7 +38,7 @@ Suggested action: ...
 
 ## 9. Documentation
 
-Dispatch `mpx-explorer`, medium breadth, stopping after existing `.mpx/CONTEXT.md`,
+Dispatch `mpx-explorer`, stopping after existing `.mpx/CONTEXT.md`,
 `.mpx/DECISIONS.md`, and `README.md` are compared with confirmed Epic behavior. Missing files are
 out of scope.
 

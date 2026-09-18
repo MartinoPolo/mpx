@@ -196,10 +196,11 @@ test('adapted support remains self-contained and bundled JavaScript parses witho
   assert.doesNotMatch(windows, /PowerShell tool is\nnot intercepted/);
 
   const platform = await readFile(path.join(contentRoot, 'setup-react-native/PLATFORM_REFERENCE.md'), 'utf8');
-  assert.match(platform, /projected `rules\/projects\/react\.md`/);
+  assert.match(platform, /dist\/\{\{MPX_HARNESS\}\}\/rules\/projects\/react\.md/);
   const notebookFlow = await readFile(path.join(contentRoot, 'podcast/reference/NOTEBOOKLM_FLOW.md'), 'utf8');
   assert.match(notebookFlow, /\{\{MPX_SKILL_COMMAND\}\}notebooklm/);
-  assert.match(notebookFlow, /\{\{MPX_SHARED_INSTRUCTIONS\}\}\/SUBAGENT_PROTOCOL\.md/);
+  assert.match(notebookFlow, /`mechanical` class through the active runtime profile/);
+  assert.match(notebookFlow, /runtime's real `model`/);
 
   const template = await readFile(path.join(contentRoot, 'tutorial-create/TEMPLATE.html'), 'utf8');
   const compiler = await readFile(path.join(contentRoot, 'tutorial-create/scripts/compile.js'), 'utf8');

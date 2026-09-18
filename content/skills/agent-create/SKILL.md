@@ -19,13 +19,10 @@ metadata:
 Create a focused custom agent following the target repository's canonical conventions. Use
 `the invocation input` for known requirements.
 
-Before starting, read [Authoring Conventions]({{MPX_SHARED_INSTRUCTIONS}}/AUTHORING.md),
-[Writing for Agents]({{MPX_SHARED_INSTRUCTIONS}}/WRITING_FOR_AGENTS.md), and
-[Sub-Agent Protocol]({{MPX_SHARED_INSTRUCTIONS}}/SUBAGENT_PROTOCOL.md) completely. They are the authoritative sources
-for writing, identity, tools, model classes, lifecycle, and permissions.
-
-Resolve assets relative to this loaded skill; follow [Content Paths]({{MPX_SHARED_INSTRUCTIONS}}/CONTENT_PATHS.md)
-when a tool requires an absolute path.
+Before starting, read [Authoring Conventions]({{MPX_SHARED_INSTRUCTIONS}}/AUTHORING.md) and
+[Writing for Agents]({{MPX_SHARED_INSTRUCTIONS}}/WRITING_FOR_AGENTS.md) completely. They are the authoritative sources
+for writing, identity, and permissions. Use the target runtime's structured metadata and runtime
+configuration for tools, model classes, and lifecycle mechanics.
 
 ## Workflow
 
@@ -70,13 +67,13 @@ when a tool requires an absolute path.
    - color only where canonical schema supports it or in the runtime projection that owns it;
    - a focused role, numbered workflow, stop conditions, and parseable output contract.
 
-   Follow Sub-Agent Protocol for MCP, overrides, model parameters, nesting, and grants. Align
-   filename and identity. Grant every used capability and no unused capability. Account for all
+   Follow the target runtime's structured metadata and runtime configuration for MCP, overrides,
+   model parameters, nesting, and grants. Align filename and identity. Grant every used capability and no unused capability. Account for all
    requested branches in behavior and output. Write imperative steps with semantic endpoints;
    integrate relevant validation and stop conditions into those actions. Add a standalone gate only
    for an ambiguous or risky transition allowed by shared policy.
 
-5. **Validate and prune.** Compare the draft against the fetched mechanics and all three shared
+5. **Validate and prune.** Compare the draft against the fetched mechanics and both shared
    references. Check every gathered requirement, filename/identity alignment, branch coverage,
    capability use, model configuration, output parseability, and reference resolution. Apply the
    single-source, environment-cache, relevance, positive-target, no-op, hierarchy, and

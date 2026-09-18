@@ -38,8 +38,8 @@ the component it belongs to.
 
 Discovery is generalized — no config assumed. Auto-detect, then read real APIs.
 
-1. **Locate the components folder(s).** Spawn the named `mpx-explorer` agent using its declared
-   medium-breadth exploration policy to glob common roots under the scan path —
+1. **Locate the components folder(s).** Spawn the named `mpx-explorer` agent to glob common roots
+   under the scan path —
    `**/lib/components/**`, `**/components/**`, `**/ui/**` — and return the component folder paths.
    Strong signals: a directory of single-purpose folders each with a `.svelte`/`.tsx` + an
    `index.ts` + a variants file.
@@ -61,11 +61,8 @@ actually exist, not a generic list.
 
 ### Step 2: Fan-out audit (parallel sub-agents)
 
-Read [exploration policy]({{MPX_SHARED_INSTRUCTIONS}}/EXPLORATION.md) and
-[sub-agent policy]({{MPX_SHARED_INSTRUCTIONS}}/SUBAGENT_PROTOCOL.md). Resolve bundled skill assets relative to this
-loaded skill. For literal absolute reads, follow [Content Paths]({{MPX_SHARED_INSTRUCTIONS}}/CONTENT_PATHS.md). Spawn
-named `mpx-explorer` agents in parallel using their declared medium-breadth policy, **roughly one
-per base component or component group** (per user preference), each given: the inventory, the
+Spawn named `mpx-explorer` agents in parallel, **roughly one per base component or component
+group** (per user preference), each given: the inventory, the
 exclusion set, and one axis checklist from [CHECKLISTS.md](CHECKLISTS.md). For large component sets,
 use the runtime's background-agent facility and process findings as each returns.
 

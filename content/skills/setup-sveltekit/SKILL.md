@@ -14,8 +14,7 @@ metadata:
 
 # SvelteKit Project Setup
 
-Read [provider routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md). Resolve linked files relative to this loaded
-skill. For absolute reads, follow [Content Paths]({{MPX_SHARED_INSTRUCTIONS}}/CONTENT_PATHS.md). Because the
+Read [provider routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md). Because the
 destination and its `mpxconfig.json` do not exist yet, take the **repository provider as explicit
 setup input** (GitHub is the deliberate template source, not an automatic fallback), load its native provider guide, and preserve the selected native account authentication. Never invent an MPX facade command or
 derive the provider from another project's configuration.

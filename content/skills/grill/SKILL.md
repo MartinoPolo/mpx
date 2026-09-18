@@ -41,8 +41,8 @@ grill.
 
 Interview relentlessly. For each branch of the decision tree:
 
-1. Delegate codebase exploration to the named `mpx-explorer` agent at medium breadth instead of
-   asking the user — see [Exploration]({{MPX_SHARED_INSTRUCTIONS}}/EXPLORATION.md). Give it the subject, scope,
+1. Delegate codebase exploration to the named `mpx-explorer` agent instead of asking the user.
+   Give it the subject, scope,
    exclusions, and stopping condition; use repository evidence for facts and ask the user only for
    product intent or owned trade-offs.
 2. **Batch related questions** into thematic groups. Present each group in one round.

@@ -48,13 +48,11 @@ test('shared instruction, provider, rule, output-style, and helper closure is ca
     'shared/AUTHORING.md',
     'shared/BOARD_CONVENTION.md',
     'shared/COMPACT.md',
-    'shared/CONTENT_PATHS.md',
     'shared/DESIGN_PIPELINE.md',
     'shared/DOCUMENTATION_STRATEGY.md',
     'shared/EXECUTOR_CONTRACT.md',
     'shared/EXECUTOR_MOCKING.md',
     'shared/EXECUTOR_TESTS.md',
-    'shared/EXPLORATION.md',
     'shared/GIT_COMMIT_WORKFLOW.md',
     'shared/ISSUE_TRACKER.md',
     'shared/PLAYWRIGHT_TESTING.md',
@@ -63,7 +61,6 @@ test('shared instruction, provider, rule, output-style, and helper closure is ca
     'shared/REPAIR_ORCHESTRATION.md',
     'shared/REVIEWER_PROTOCOL.md',
     'shared/SENTRY.md',
-    'shared/SUBAGENT_PROTOCOL.md',
     'shared/WRITING_FOR_AGENTS.md',
     'shared/deep-modules.md',
     'shared/interface-design.md',
@@ -118,6 +115,25 @@ test('reporting links are self-contained in native presentation instructions', a
   for (const projection of projections) {
     assert.doesNotMatch(projection.path, /REPORTING_LINKS\.md/);
     assert.doesNotMatch(projection.content.toString('utf8'), /REPORTING_LINKS\.md/);
+  }
+});
+
+test('discovery guidance does not depend on retired shared policies', async () => {
+  const retiredPolicy = /(?:CONTENT_PATHS|EXPLORATION|SUBAGENT_PROTOCOL)\.md/;
+  for (const file of await filesBelow(content)) {
+    assert.doesNotMatch(file, retiredPolicy);
+    if (file.endsWith('.md')) {
+      assert.doesNotMatch(await readFile(path.join(content, file), 'utf8'), retiredPolicy, file);
+    }
+  }
+  for (const projection of await projectContent(root)) {
+    assert.doesNotMatch(projection.path, retiredPolicy);
+    if (projection.path.endsWith('/instructions/shared/AGENTS.md')) {
+      const guidance = projection.content.toString('utf8');
+      assert.match(guidance, /Delegate broad discovery to the exploration agent/);
+      assert.match(guidance, /Prefer declared agent model and effort\s+defaults/);
+      assert.doesNotMatch(guidance, /MPX_ACTIVE_CONTENT_ROOT/);
+    }
   }
 });
 

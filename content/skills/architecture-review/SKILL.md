@@ -32,18 +32,13 @@ Before starting, read these complete inputs:
 3. [reference](REFERENCE.md) — dependency categories and the Issue template.
 4. [provider routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md) and the selected native provider guide —
    Issue-provider resolution and commands.
-5. [content paths]({{MPX_SHARED_INSTRUCTIONS}}/CONTENT_PATHS.md) — absolute runtime-read resolution when projection
-   does not preserve these relative locations.
-
-Resolve assets relative to this loaded skill; follow [Content Paths]({{MPX_SHARED_INSTRUCTIONS}}/CONTENT_PATHS.md)
-when a tool requires an absolute path.
 
 ## Process
 
 ### 1. Explore the codebase
 
-Spawn `mpx-explorer` with very-thorough breadth and the exploration model class to navigate the
-codebase naturally. Give it the resolved scope and ask it to stop when it can cite the major
+Spawn `mpx-explorer` to navigate the codebase naturally. Give it the resolved scope and ask it to
+stop when it can cite the major
 architectural clusters, seams, and test boundaries. Explore organically and note where understanding
 creates friction:
 

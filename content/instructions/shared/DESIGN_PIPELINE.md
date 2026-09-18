@@ -46,8 +46,7 @@ Assume nothing about the stack. At the start of each stage discover:
    executors are `pnpm dlx`, `yarn dlx`, `bunx`, and `npx`.
 5. **Library APIs** — use the approved documentation route rather than memory.
 
-Use [EXPLORATION.md](EXPLORATION.md) for search boundaries and spawn `mpx-context7-docs-fetcher` for
-library documentation.
+Spawn `mpx-context7-docs-fetcher` for library documentation.
 
 ## Mockup HTML
 
@@ -84,4 +83,4 @@ structured manual handoff; never silently skip or invent the gate.
 
 Design and architecture require the `advanced` model class with task-matched effort. Canonical agent
 definitions declare classes; call sites omit concrete model IDs. If a generic agent has no class
-declaration, the caller must pass `advanced`. See [SUBAGENT_PROTOCOL.md](SUBAGENT_PROTOCOL.md).
+declaration, resolve `advanced` through the active runtime profile and pass the concrete model.

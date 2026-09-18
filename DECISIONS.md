@@ -22,6 +22,10 @@ history; see `migration/` for those records.
 
 ## Content and discovery
 
+- **Keep discovery mechanics with the explorer.** Global agent guidance states only delegation
+  essentials; native harnesses supply resource resolution and delegation mechanics. Model and effort
+  defaults belong in structured agent metadata and runtime mappings, not repeated policy tables.
+
 - **Author once and compile deterministic projections.** Canonical content lives under `content/`;
   committed Claude/Pi projections live under `dist/`. This makes harness differences explicit and
   reviewable without maintaining independent workflow copies.
