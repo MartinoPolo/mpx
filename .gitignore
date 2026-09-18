@@ -3,3 +3,5 @@ node_modules/
 coverage/
 *.tsbuildinfo
 # Projections in dist/ are intentionally committed.
+
+dist/
