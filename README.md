@@ -124,8 +124,10 @@ pnpm test
 pnpm status
 ```
 
-Author canonical resources under `content/`. The compiler writes committed projections under
-`dist/`; do not edit generated projections directly. Runtime code is under `src/`, native Pi adapters
+Author canonical resources under `content/`, then run `pnpm build` from the repository root.
+The compiler writes ignored, reproducible projections under `dist/`; do not edit or commit them.
+Build after a fresh checkout and after content changes before launching a harness or running tests.
+Runtime code is under `src/`, native Pi adapters
 are under `extensions/`, and migration/recovery utilities are under `migration/`.
 
 Orca can prepare a worktree before dependencies are installed:

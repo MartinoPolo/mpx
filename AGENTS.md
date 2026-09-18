@@ -14,7 +14,9 @@ pnpm test
 ## Source map
 
 - `content/` is the authored skill, specialist, rule, and shared-instruction source.
-- `dist/` is deterministic committed output. Change source and rebuild; never hand-edit projections.
+- `dist/` is ignored, reproducible build output. Edit canonical content under `content/`, then run
+  `pnpm build` from the repository root before launching a harness or running content checks.
+  Never hand-edit or force-add generated projections.
 - `src/` contains the compiler, configuration, launch, resume, safeguard, and runtime implementation.
 - `extensions/` contains thin native Pi adapters.
 - `bin/` contains Git Bash entrypoints.
