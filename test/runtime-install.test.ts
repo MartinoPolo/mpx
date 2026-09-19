@@ -21,6 +21,7 @@ test('scoped personal Pi runtime installation never accesses other roots and pre
   try {
     await mkdir(selected);
     await writeFile(join(selected, 'settings.json'), JSON.stringify({ packages: ['keep-pinned'], providers: { local: { key: 'keep' } }, model: 'unchanged' }));
+    await writeFile(join(selected, 'subagents.json'), JSON.stringify({ rememberAgents: true, maxSubagentDepth: 2, widgetMode: 'all', fleetView: true }));
     const first = await syncRuntimeScope(resolve('.'), config, { account: 'personal', harness: 'pi' }, false);
     assert.equal(first.ok, true, JSON.stringify(first));
     assert.ok(first.entries.every(entry => entry.account === 'personal' && entry.harness === 'pi'));
@@ -29,6 +30,9 @@ test('scoped personal Pi runtime installation never accesses other roots and pre
     assert.deepEqual(settings.providers, { local: { key: 'keep' } });
     assert.equal(settings.model, 'unchanged');
     assert.equal(settings.treeFilterMode, 'no-tools');
+    assert.deepEqual(JSON.parse(await readFile(join(selected, 'subagents.json'), 'utf8')), {
+      rememberAgents: true, maxSubagentDepth: 2, widgetMode: 'off', fleetView: false, showModel: true,
+    });
     assert.ok((await syncRuntimeScope(resolve('.'), config, { account: 'personal', harness: 'pi' }, false)).entries.every(entry => entry.status === 'unchanged'));
   } finally { await rm(scratch, { recursive: true, force: true }); }
 });

@@ -90,9 +90,12 @@ conventions belong in `AGENTS.md`; rollout evidence and recovery belong in `migr
 
 - **Prefer native UI and tools.** MPX adds thin presentation and lifecycle data without replacing
   native tool rendering, questions, MCP, web tools, shortcuts, or transcript semantics.
-- **Keep status displays compact and operational.** Show session identity, current context and usage,
-  and bounded child activity; omit cumulative token totals, ports, branch-state counts, and shortcut
-  hints from the Pi footer. Claude retains native status-line and subagent payloads; renderers own
+- **Keep status displays compact and operational.** Default the Pi footer to its expanded operational
+  summary with collapsed child history; retain a one-line identity, context, and quota mode and put
+  optional bounded child details behind expansion.
+  Configure upstream agent widgets off so one lifecycle-driven live display owns active agents and
+  disappears when idle. Omit unavailable prices, parent cumulative token totals, ports, branch-state
+  counts, and shortcut hints. Claude retains native status-line and subagent payloads; renderers own
   presentation and bounded caches, not services.
   Use native location links rather than generated editor launchers.
 - **Use native account quota data without reading credential files.** Bounded selected-account

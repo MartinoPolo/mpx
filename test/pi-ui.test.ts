@@ -4,6 +4,7 @@ import { stripVTControlCharacters } from 'node:util';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { createPiUiExtension } from '../extensions/pi-ui.js';
 import type { UserConfig } from '../src/contracts.js';
+import { LIVE_AGENT_WIDGET } from '../src/pi-agent-display.js';
 import {
   PI_ACTIVITY_EVENT,
   PI_ACTIVITY_REQUEST_EVENT,
@@ -195,6 +196,16 @@ test('wheel override is Windows Terminal marker-only, with positive Orca precede
   assert.equal(applyThreeLineFullscreenWheel({ mode: 'default', wheelScrollLines: 1 }), false);
 });
 
+test('finished lifecycle prefers cache-inclusive usage and omits unknown pricing', () => {
+  const agent = finishedAgentFromLifecycle({ id: 'one', tokens: { total: 30 }, usage: { totalTokens: 100, cost: { total: 0.5 } } });
+  assert.equal(agent?.tokens, 100);
+  assert.equal(agent?.cost, 0.5);
+  for (const cost of [undefined, 0, NaN, -1]) {
+    assert.equal(finishedAgentFromLifecycle({ id: 'one', usage: { cost: { total: cost } } })?.cost, undefined);
+  }
+  assert.equal(mergeFinishedAgentToolResult(agent, { agentId: 'one', cost: undefined })?.cost, 0.5);
+});
+
 test('prompt title fallback is bounded and deterministic', () => {
   assert.equal(fallbackTitle('  Implement **the** pi-ui footer, please!  '), 'Implement the pi-ui footer, please');
   assert.ok(fallbackTitle('word '.repeat(100)).length <= 80);
@@ -208,10 +219,16 @@ function extensionHarness(options: { titleResult?: () => Promise<string> } = {})
   const emitted: Array<{ name: string; payload: unknown }> = [];
   let sessionName: string | undefined;
   let footerFactory: any;
+  const widgets = new Map<string, any>();
+  const commands = new Map<string, any>();
+  const shortcuts = new Map<string, any>();
+  const notifications: string[] = [];
   const completedCalls: any[] = [];
   const model = { provider: 'openai-codex', id: 'gpt-5.6-luna', contextWindow: 272_000, reasoning: true };
 
   const pi = {
+    registerCommand(name: string, command: unknown) { commands.set(name, command); },
+    registerShortcut(key: string, shortcut: unknown) { shortcuts.set(key, shortcut); },
     on(name: string, handler: Handler) {
       const list = handlers.get(name) ?? [];
       list.push(handler);
@@ -266,7 +283,11 @@ function extensionHarness(options: { titleResult?: () => Promise<string> } = {})
     },
     getContextUsage: () => ({ tokens: 12_345, percent: 25, contextWindow: 50_000 }),
     ui: {
-      setWidget() {},
+      setWidget(name: string, factory: unknown) {
+        if (factory === undefined) widgets.delete(name);
+        else widgets.set(name, factory);
+      },
+      notify(message: string) { notifications.push(message); },
       setFooter(factory: unknown) { footerFactory = factory; },
     },
   };
@@ -281,6 +302,10 @@ function extensionHarness(options: { titleResult?: () => Promise<string> } = {})
     entries,
     emitted,
     completedCalls,
+    widgets,
+    commands,
+    shortcuts,
+    notifications,
     call,
     emitBus(name: string, payload: unknown) { (pi as any).events.emit(name, payload); },
     footerFactory: () => footerFactory,
@@ -396,6 +421,92 @@ test('a child-bound extension instance emits no aggregate activity or child aler
 
 const footerTheme = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
 
+test('footer commands and shortcut toggle compact presentation without sending model messages', async () => {
+  const harness = extensionHarness();
+  registerPiUi(harness.pi, { environment: {} });
+  try {
+    await harness.call('session_start');
+    const component = harness.footerFactory()({ requestRender() {} }, footerTheme, {
+      getGitBranch: () => 'main', onBranchChange: () => () => {},
+    });
+    assert.ok(component.render(100).length > 1);
+    const command = harness.commands.get('footer');
+    await command.handler('', harness.ctx);
+    assert.equal(component.render(100).length, 1);
+    assert.doesNotMatch(stripVTControlCharacters(component.render(100)[0]), /[█░]/);
+    await harness.shortcuts.get('ctrl+alt+f').handler(harness.ctx);
+    assert.ok(component.render(100).length > 1);
+    await command.handler('details', harness.ctx);
+    assert.ok(component.render(100).length > 1);
+    await command.handler('invalid', harness.ctx);
+    assert.match(harness.notifications.at(-1)!, /Usage: \/footer/);
+    assert.equal(harness.completedCalls.length, 0);
+  } finally { await harness.call('session_shutdown'); }
+});
+
+test('live display disappears on completion and resume never duplicates finished history', async () => {
+  const records = new Map<string, RegistryFixtureRecord>([['one', { status: 'queued', resultConsumed: true }]]);
+  const restore = installNativeRegistryFixture(records);
+  const harness = extensionHarness();
+  registerPiUi(harness.pi, { environment: {} });
+  try {
+    await harness.call('session_start');
+    assert.equal(harness.widgets.has(LIVE_AGENT_WIDGET), false);
+    const component = harness.footerFactory()({ requestRender() {} }, footerTheme, {
+      getGitBranch: () => 'main', onBranchChange: () => () => {},
+    });
+    component.setView('details');
+    const liveText = () => stripVTControlCharacters(harness.widgets.get(LIVE_AGENT_WIDGET)?.({}, footerTheme).render(120).join('\n') ?? '');
+    harness.emitBus('subagents:created', { id: 'one', type: 'Explore' });
+    assert.match(liveText(), /1 queued/);
+    records.set('one', { status: 'running', invocation: { modelId: 'gpt-5.6-luna', thinking: 'low' } });
+    harness.emitBus('subagents:started', { id: 'one', type: 'Explore', description: 'Investigate footer' });
+    assert.match(liveText(), /Explore.*gpt-5.6-luna.*Investigate footer/);
+    assert.doesNotMatch(component.render(120).join('\n'), /Explore/);
+    records.set('one', { status: 'completed', resultConsumed: true });
+    harness.emitBus('subagents:completed', { id: 'one', type: 'Explore', status: 'completed' });
+    assert.equal(harness.widgets.has(LIVE_AGENT_WIDGET), false);
+    assert.match(component.render(120).join('\n'), /Explore/);
+    harness.emitBus('subagents:created', { id: 'one' });
+    assert.equal(harness.widgets.has(LIVE_AGENT_WIDGET), false, 'late creation cannot restore a finished row');
+    harness.emitBus('subagents:started', { id: 'one', type: 'Explore' });
+    assert.equal(harness.widgets.has(LIVE_AGENT_WIDGET), false, 'late start cannot restore a finished row');
+    assert.match(component.render(120).join('\n'), /Explore/);
+    records.set('one', { status: 'running' });
+    harness.emitBus('subagents:started', { id: 'one', type: 'Explore' });
+    assert.doesNotMatch(component.render(120).join('\n'), /Explore/);
+    await harness.call('tool_result', { toolName: 'get_subagent_result', details: { agentId: 'one', status: 'completed' } });
+    assert.equal(harness.widgets.has(LIVE_AGENT_WIDGET), true, 'stale result cannot hide a resumed run');
+  } finally { await harness.call('session_shutdown'); restore(); }
+  assert.equal(harness.widgets.has(LIVE_AGENT_WIDGET), false);
+});
+
+test('footer restores only the selected branch history and refreshes it on tree changes', async () => {
+  const harness = extensionHarness();
+  harness.entries.push({ type: 'custom', customType: 'subagents:record', data: {
+    id: 'saved', type: 'SavedExplorer', status: 'completed', parentSessionId: 'session-12345678',
+    invocation: { modelId: 'gpt-5.6-luna', thinking: 'low' },
+    lifetimeUsage: { input: 1000, output: 100, cacheWrite: 0, cacheRead: 500, cost: 0.2 },
+  } });
+  registerPiUi(harness.pi, { environment: {} });
+  try {
+    await harness.call('session_start');
+    const component = harness.footerFactory()({ requestRender() {} }, footerTheme, {
+      getGitBranch: () => 'main', onBranchChange: () => () => {},
+    });
+    component.setView('details');
+    let text = stripVTControlCharacters(component.render(120).join('\n'));
+    assert.match(text, /SavedExplorer/);
+    assert.match(text, /1.6k/);
+    assert.match(text, /\$0.200/);
+    assert.equal(harness.widgets.has(LIVE_AGENT_WIDGET), false);
+    harness.entries.length = 0;
+    await harness.call('session_tree');
+    text = stripVTControlCharacters(component.render(120).join('\n'));
+    assert.doesNotMatch(text, /SavedExplorer|1.6k/);
+  } finally { await harness.call('session_shutdown'); }
+});
+
 test('Pi UI footer uses the repository loader supplied by runtime composition', async () => {
   const harness = extensionHarness();
   const calls: string[] = [];
@@ -430,6 +541,7 @@ test('footer keeps current context tokens, compaction and responsive agents with
     onBranchChange: () => () => {},
   };
   const component = harness.footerFactory()(tui, footerTheme, footerData);
+  component.setView('details');
   assert.equal(component.render(180).length, 6, 'five core rows plus compaction; running agents stay upstream');
 
   harness.emitBus('subagents:completed', {
@@ -466,16 +578,17 @@ test('background footer uses resolved native invocation without waiting for a re
     const component = harness.footerFactory()({ requestRender() {} }, footerTheme, {
       getGitBranch: () => 'dev', onBranchChange: () => () => {},
     });
+    component.setView('details');
     harness.emitBus('subagents:completed', { id: 'background', type: 'Explore', status: 'completed', durationMs: 2_000 });
     const text = stripVTControlCharacters(component.render(180).join('\n'));
     assert.match(text, /Personal/);
-    assert.match(text, /Explore.*gpt-5\.6-luna.*◆◆◇◇◇◇/);
+    assert.match(text, /Explore.*Luna.*◆◆◇◇◇◇/);
     assert.doesNotMatch(text, /other-model|\bmax\b|model unknown/);
     await harness.call('tool_result', { toolName: 'Agent', details: {
       agentId: 'background', status: 'background', modelName: 'other-model', tags: ['thinking: low (asked max)'],
     } });
     const afterResult = stripVTControlCharacters(component.render(180).join('\n'));
-    assert.match(afterResult, /✓ Explore.*gpt-5\.6-luna.*◆◆◇◇◇◇/);
+    assert.match(afterResult, /✓ Explore.*Luna.*◆◆◇◇◇◇/);
     assert.doesNotMatch(afterResult, /other-model|<unknown>/);
   } finally {
     await harness.call('session_shutdown');
@@ -491,6 +604,7 @@ test('footer refreshes native cost, compaction, naming, model and quota without 
   const component = harness.footerFactory()({ requestRender() {} }, footerTheme, {
     getGitBranch: () => 'dev', onBranchChange: () => () => { disposed++; },
   });
+  component.setView('summary');
   try {
     harness.pi.setSessionName('Readable session title');
     await harness.call('message_end');
@@ -538,6 +652,7 @@ test('quota restores native acquisition with throttling, header precedence and l
   const component = harness.footerFactory()({ requestRender() {} }, footerTheme, {
     getGitBranch: () => 'dev', onBranchChange: () => () => {},
   });
+  component.setView('summary');
   try {
     assert.equal(calls.length, 1, 'quota acquisition starts without an inference response');
     for (let index = 0; index < 3; index++) await harness.call('agent_settled');

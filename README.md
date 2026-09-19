@@ -108,6 +108,16 @@ ordinary-folder fallback behavior to an unidentified repository. `mpx project co
 returns the same resolved metadata as the launcher, allowing workflows to use local overrides without
 writing them into a repository.
 
+Pi starts with the expanded operational footer and collapsed agent history. Click its disclosure arrow
+in fullscreen mode, use `Ctrl+Alt+F`, or run `/footer` to toggle the single-line footer. That compact
+line contains session, model, effort, context usage, and quota percentages with reset countdowns.
+`/footer details` shows bounded finished-agent details; `/footer compact` collapses everything. Agent
+names and the main model follow contrasting tier colors: Astra green, Sol blue, Luna yellow, and Terra orange. History groups agents
+by model and effort, sorts priced groups by estimated cost
+and unpriced groups by tokens, and omits unavailable prices. The live-agent widget disappears when idle.
+Runtime sync disables the upstream widget and fleet view to avoid duplicate displays; project
+`.pi/subagents.json` overrides should retain `"widgetMode": "off"` and `"fleetView": false`.
+
 Both Claude accounts load the main and subagent status lines from
 [`src/claude-statusline/`](src/claude-statusline/README.md). Their existing layout is retained without
 legacy script links, credential-file reads, port-manager dependencies, or generated editor launchers.

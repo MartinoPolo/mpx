@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
+import type { TuiMouseEvent } from '@earendil-works/pi-tui';
+import { stripTerminalSequences } from '@earendil-works/pi-tui';
 import { createPiFooterComponent } from '../src/pi-footer-runtime.js';
 import { fallbackFooterRepository, type FooterRepository } from '../src/pi-footer-data.js';
 import type { FooterReview } from '../src/pi-footer.js';
@@ -35,6 +37,7 @@ test('review refreshes at startup, branch changes, and the clock without render 
     }, {}, () => [], async () => repository, async () => undefined, async () => undefined,
     async (_repository, requestedBranch) => new Promise(resolve => reviewRequests.push({ branch: requestedBranch, resolve })),
   );
+  component.setView('summary');
   await flush();
   assert.deepEqual(reviewRequests.map(request => request.branch), ['main']);
   component.render(100);
@@ -87,6 +90,7 @@ test('footer refreshes coalesce, retain valid settings on failure, and fence dis
     () => { loads++; return new Promise(resolve => pending.push(resolve)); },
     async () => settingsLoads++ === 0 ? { enabled: true, reserveTokens: 40_000 } : undefined,
   );
+  component.setView('summary');
   for (let index = 0; index < 20; index++) branchChanged();
   assert.equal(loads, 1);
   pending.shift()!(fallbackFooterRepository(context.cwd));
@@ -107,4 +111,34 @@ test('footer refreshes coalesce, retain valid settings on failure, and fence dis
   assert.equal(renders, rendersBeforeDisposal);
   assert.equal(unsubscribed, 1);
   assert.deepEqual(component.render(100), []);
+});
+
+test('runtime defaults to expanded footer with collapsed history and mouse controls toggle only on glyph cells', () => {
+  let renders = 0;
+  const context = {
+    cwd: process.cwd(), model: undefined, thinkingLevel: 'high',
+    sessionManager: { getEntries: () => [], getBranch: () => [], getSessionFile: () => undefined, getSessionId: () => 'mouse-session', getLeafId: () => null },
+    getContextUsage: () => ({ tokens: 1000, percent: 1, contextWindow: 100_000 }),
+  } as unknown as ExtensionContext;
+  const component = createPiFooterComponent(
+    { getSessionName: () => undefined } as unknown as ExtensionAPI, context, { requestRender: () => { renders++; } },
+    { fg: (_color, text) => text, bold: text => text },
+    { getGitBranch: () => 'main', getExtensionStatuses: () => new Map(), getAvailableProviderCount: () => 1, onBranchChange: () => () => {} },
+    {}, () => [{ id: 'a', type: 'reviewer', status: 'done', model: 'gpt-5.6-luna', effort: 'high', tokens: 1000, cost: 0 }],
+    async cwd => fallbackFooterRepository(cwd), async () => undefined, async () => undefined,
+  );
+  const click = (x: number, y: number): TuiMouseEvent => ({ type: 'click', button: 'left', x, y, screenX: x, screenY: y, width: 120, height: 20, shift: false, alt: false, ctrl: false });
+  const summary = component.render(120).map(stripTerminalSequences);
+  const historyRow = summary.indexOf('▸ History (1)');
+  assert.ok(historyRow > 0);
+  assert.equal(component.handleMouse?.(click(1, historyRow)), undefined);
+  component.handleMouse?.(click(0, historyRow));
+  assert.ok(component.render(120).map(stripTerminalSequences).includes('▾ History (1)'));
+  assert.equal(component.handleMouse?.(click(1, 0)), undefined);
+  component.handleMouse?.(click(0, 0));
+  assert.equal(component.render(120).length, 1);
+  component.dispose();
+  const before = renders;
+  component.toggleView();
+  assert.equal(renders, before);
 });

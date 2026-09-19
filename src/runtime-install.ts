@@ -149,7 +149,7 @@ async function runRuntime(root: string, config: UserConfig, preview: boolean, sc
       const destination = path.join(accountRoot, 'extensions/mpx2.ts');
       await perform(source, destination, () => ownedPiRuntime(root, destination, preview));
       await perform('native treeFilterMode', path.join(accountRoot, 'settings.json'), () => mergeJson(path.join(accountRoot, 'settings.json'), current => ({ ...current, treeFilterMode: 'no-tools' }), preview));
-      await perform('upstream running-agent model display', path.join(accountRoot, 'subagents.json'), () => mergeJson(path.join(accountRoot, 'subagents.json'), current => ({ ...current, showModel: true }), preview));
+      await perform('compact subagent presentation', path.join(accountRoot, 'subagents.json'), () => mergeJson(path.join(accountRoot, 'subagents.json'), current => ({ ...current, showModel: true, widgetMode: 'off', fleetView: false }), preview));
       await perform('native newline keys', path.join(accountRoot, 'keybindings.json'), () => mergeJson(path.join(accountRoot, 'keybindings.json'), current => {
         const value = current['tui.input.newLine'];
         if (value !== undefined && typeof value !== 'string' && (!Array.isArray(value) || value.some(key => typeof key !== 'string'))) throw new Error('invalid native newline binding; preserve and repair explicitly');

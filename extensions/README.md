@@ -18,9 +18,23 @@ The installer writes a physical forwarding module at the native account's `exten
 Do not replace it with a file symlink: Pi resolves relative imports from the registration path. The
 forwarder activates only for an explicitly selected MPX account and checkout.
 
-## Footer links and reviews
+## Footer presentation, links and reviews
 
-The Pi footer keeps file links for the project and linked checkout, places the same VS Code icon as
+The footer starts with its operational summary expanded and agent history collapsed. `/footer` or
+`Ctrl+Alt+F` toggles the one-line footer; `/footer details` expands finished-agent details and
+`/footer compact` returns to one line. Agent and model names use stable tier colors: Astra green, Sol
+blue, Luna yellow, and Terra orange. The main footer model uses the same palette.
+Fullscreen disclosure arrows perform the same actions without intercepting existing hyperlinks.
+Compact context and quota values retain text colouring and reset countdowns without progress bars.
+Finished history is reconstructed from native branch records, grouped by model and effort, and bounded
+in both summary and detail views. Tokens include cache reads; prices are estimates and absent pricing
+is omitted. The upstream zero-cost placeholder is not treated as proof of a known price.
+
+Runtime sync sets `widgetMode: "off"` and `fleetView: false` in the selected account's `subagents.json`.
+MPX uses lifecycle events for a bounded running-agent widget with a queued count, removing it when idle.
+No dependency patch is needed for this presentation; result retrieval remains native.
+
+The expanded Pi footer keeps file links for the project and linked checkout, places the same VS Code icon as
 Claude beside the project name to open the active checkout, and bounds long checkout and branch labels
 without shortening their hyperlink targets. For a
 repository whose `repository.provider` is explicitly configured as `github` or `gitlab`, it uses the
@@ -76,6 +90,8 @@ The active native profile's `subagents.json` can slim unused tools while retaini
 
 ```json
 {
+  "widgetMode": "off",
+  "fleetView": false,
   "workflowsEnabled": false,
   "schedulingEnabled": false,
   "worktreeIsolation": false,

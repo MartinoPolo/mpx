@@ -6,6 +6,8 @@ import { getSupportedThinkingLevels } from '@earendil-works/pi-ai';
 import { withoutDeletedHeaders } from './context.js';
 import { createPiFooterComponent, type PiFooterComponent } from './pi-footer-runtime.js';
 import type { FooterRepository } from './pi-footer-data.js';
+import type { FooterAgent } from './pi-footer.js';
+import { LIVE_AGENT_WIDGET, renderLiveAgents, savedFinishedAgents, type LiveAgent } from './pi-agent-display.js';
 
 export const PI_ACTIVITY_EVENT = 'mpx2:pi-ui:activity';
 export const PI_ACTIVITY_REQUEST_EVENT = 'mpx2:pi-ui:activity:request';
@@ -288,16 +290,7 @@ export class PiActivityAggregate {
   }
 }
 
-export interface FinishedAgent {
-  id: string;
-  type: string;
-  status: string;
-  model?: string;
-  effort?: string;
-  elapsedMs?: number;
-  tokens?: number;
-  url?: string;
-}
+export type FinishedAgent = FooterAgent;
 
 function record(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : undefined;
@@ -317,6 +310,9 @@ export function finishedAgentFromLifecycle(payload: unknown): FinishedAgent | un
   const id = nonempty(source?.id);
   if (!source || !id) return undefined;
   const tokenSource = record(source.tokens);
+  const usage = record(source.usage);
+  const tokens = finiteNonNegative(usage?.totalTokens) ?? finiteNonNegative(tokenSource?.total);
+  const cost = finiteNonNegative(record(usage?.cost)?.total);
   return {
     id,
     type: nonempty(source.type) ?? 'agent',
@@ -324,9 +320,8 @@ export function finishedAgentFromLifecycle(payload: unknown): FinishedAgent | un
     ...(finiteNonNegative(source.durationMs) === undefined
       ? {}
       : { elapsedMs: finiteNonNegative(source.durationMs) }),
-    ...(finiteNonNegative(tokenSource?.total) === undefined
-      ? {}
-      : { tokens: finiteNonNegative(tokenSource?.total) }),
+    ...(tokens === undefined ? {} : { tokens }),
+    ...(cost !== undefined && cost > 0 ? { cost } : {}),
   };
 }
 
@@ -364,6 +359,8 @@ export function mergeFinishedAgentToolResult(
       ? {}
       : { elapsedMs: elapsedMs ?? existing?.elapsedMs }),
     ...(existing?.tokens === undefined ? {} : { tokens: existing.tokens }),
+    ...(finiteNonNegative(source.cost) !== undefined && Number(source.cost) > 0
+      ? { cost: Number(source.cost) } : existing?.cost === undefined ? {} : { cost: existing.cost }),
     ...(existing?.url === undefined ? {} : { url: existing.url }),
   };
 }
@@ -560,6 +557,7 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
   let currentSnapshot: Readonly<PiActivitySnapshot> | undefined;
   let diagnosticCount = 0;
   const finished = new Map<string, FinishedAgent>();
+  const liveAgents = new Map<string, LiveAgent>();
   const knownSubagents = new Set<string>();
   const terminalSubagents = new Set<string>();
   const reservedSubagentResults = new Set<string>();
@@ -674,10 +672,33 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
   const unsubscribeConsume = pi.events.on('subagents:rpc:consume', refreshConsumedResultsSoon);
   const unsubscribeDelivery = pi.events.on('subagents:result-delivered', refreshConsumedResultsSoon);
 
-  const beginChildRun = (id: string): void => {
+  const refreshLiveWidget = (): void => {
+    if (!own() || currentContext?.mode !== 'tui') return;
+    if (!liveAgents.size) {
+      currentContext.ui.setWidget(LIVE_AGENT_WIDGET, undefined);
+      return;
+    }
+    currentContext.ui.setWidget(LIVE_AGENT_WIDGET, (_tui, theme) => ({
+      render: width => renderLiveAgents([...liveAgents.values()].map(agent => {
+        const native = nativeRecord(agent.id);
+        return { ...agent, model: native?.model, effort: native?.effort };
+      }), width, theme),
+      invalidate() {},
+    }));
+  };
+  const beginChildRun = (id: string, payload: unknown, status: LiveAgent['status']): void => {
     terminalSubagents.delete(id);
+    finished.delete(id);
+    const source = record(payload);
+    liveAgents.set(id, {
+      id, type: nonempty(source?.type) ?? liveAgents.get(id)?.type ?? 'agent',
+      description: nonempty(source?.description) ?? liveAgents.get(id)?.description,
+      status,
+    });
     aggregate?.startChild(id);
     releaseSubagentResult(id);
+    refreshLiveWidget();
+    requestRender();
   };
   const onChildCreated = (payload: unknown): void => {
     if (!own()) return;
@@ -688,14 +709,19 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
       const status = nativeRecord(id)?.status;
       if (status !== 'queued' && status !== 'running') return;
     }
-    beginChildRun(id);
+    const status = nativeRecord(id)?.status;
+    beginChildRun(id, payload, status === 'running' || liveAgents.get(id)?.status === 'running' ? 'running' : 'queued');
   };
   const onChildStarted = (payload: unknown): void => {
     if (!own()) return;
     const id = nonempty(record(payload)?.id);
     if (!id) return;
     knownSubagents.add(id);
-    beginChildRun(id);
+    if (terminalSubagents.has(id)) {
+      const status = nativeRecord(id)?.status;
+      if (status !== 'queued' && status !== 'running') return;
+    }
+    beginChildRun(id, payload, 'running');
   };
   const onChildFinished = (payload: unknown): void => {
     if (!own()) return;
@@ -718,12 +744,29 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
       url: native?.url ?? prior?.url,
     });
     aggregate?.finishChild(agent.id);
+    liveAgents.delete(agent.id);
+    refreshLiveWidget();
     requestRender();
   };
   const unsubscribeCreated = pi.events.on('subagents:created', onChildCreated);
   const unsubscribeStarted = pi.events.on('subagents:started', onChildStarted);
   const unsubscribeCompleted = pi.events.on('subagents:completed', onChildFinished);
   const unsubscribeFailed = pi.events.on('subagents:failed', onChildFinished);
+
+  pi.registerCommand('footer', {
+    description: 'Toggle footer, or choose compact, summary, or details',
+    handler: async (argument, ctx) => {
+      if (!own() || ctx.mode !== 'tui') return;
+      const view = argument.trim();
+      if (!view) footer?.toggleView();
+      else if (view === 'compact' || view === 'summary' || view === 'details') footer?.setView(view);
+      else ctx.ui.notify('Usage: /footer [compact|summary|details]', 'warning');
+    },
+  });
+  pi.registerShortcut('ctrl+alt+f', {
+    description: 'Toggle compact footer',
+    handler: async ctx => { if (own() && ctx.mode === 'tui') footer?.toggleView(); },
+  });
 
   pi.on('session_start', (_event, ctx) => {
     const global = globalThis as GlobalWithOwner;
@@ -744,6 +787,9 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
       Math.min(2_000, Math.max(0, options.settleDelayMs ?? DEFAULT_SETTLE_DELAY_MS)),
     );
     finished.clear();
+    for (const agent of savedFinishedAgents(ctx.sessionManager.getBranch(), activitySessionId)) finished.set(agent.id, agent);
+    liveAgents.clear();
+    refreshLiveWidget();
     knownSubagents.clear();
     terminalSubagents.clear();
     reservedSubagentResults.clear();
@@ -796,7 +842,13 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
     if (own()) { currentContext = ctx; footer?.update(ctx); }
   });
   pi.on('session_tree', (_event, ctx) => {
-    if (own()) { currentContext = ctx; footer?.update(ctx, true); }
+    if (!own()) return;
+    currentContext = ctx;
+    finished.clear();
+    for (const agent of savedFinishedAgents(ctx.sessionManager.getBranch(), activitySessionId)) {
+      if (!liveAgents.has(agent.id)) finished.set(agent.id, agent);
+    }
+    footer?.update(ctx, true);
   });
   pi.on('session_compact', (event, ctx) => {
     if (own()) { currentContext = ctx; footer?.compacted(event.compactionEntry.id, event.reason, ctx); }
@@ -898,6 +950,9 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
     const merged = mergeFinishedAgentToolResult(id ? finished.get(id) : undefined, event.details);
     if (!merged) return;
     const native = nativeRecord(merged.id);
+    if (native?.status === 'running' || native?.status === 'queued') return;
+    liveAgents.delete(merged.id);
+    refreshLiveWidget();
     finished.set(merged.id, {
       ...merged,
       model: native?.model ?? merged.model,
@@ -928,6 +983,8 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
     abortTitle();
     footer?.dispose();
     footer = undefined;
+    liveAgents.clear();
+    refreshLiveWidget();
     aggregate?.reset();
     aggregate?.dispose();
     aggregate = undefined;

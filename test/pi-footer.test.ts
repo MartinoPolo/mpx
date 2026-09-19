@@ -3,6 +3,7 @@ import test from 'node:test';
 import type { Theme } from '@earendil-works/pi-coding-agent';
 import { stripTerminalSequences, visibleWidth } from '@earendil-works/pi-tui';
 import {
+  colorAgentModel,
   renderPiFooter,
   thinkingGauge,
   type FooterSnapshot,
@@ -44,7 +45,7 @@ test('renders the five core lines in order with exact account color and no runti
   const lines = renderPiFooter(snapshot({ account: 'personal' }), 100, theme);
   const text = plain(lines);
   assert.equal(lines.length, 5);
-  assert.match(text[0]!, /^New session · #12345678 · Personal$/);
+  assert.match(text[0]!, /^▾ New session · #12345678 · Personal$/);
   assert.ok(lines[0]!.includes('\x1b[38;2;71;127;204mPersonal\x1b[0m'));
   assert.match(text[1]!, /^claude-sonnet-4 · ◆◆◆◆◇◇$/);
   assert.equal(text[2], 'mpx2 · feature-tree · footer');
@@ -53,6 +54,20 @@ test('renders the five core lines in order with exact account color and no runti
   assert.match(text[3]!, /\$1\.250$/);
   assert.match(text[4]!, /^5h ██░░░░░░ 23% 1h$/);
   assert.doesNotMatch(text.join('\n'), /port|dirty|ahead|runtime/i);
+});
+
+test('agent model tiers use stable colors', () => {
+  assert.match(colorAgentModel('gpt-6-astra', 'Astra', theme), /^\x1b\[38;5;48m/);
+  assert.match(colorAgentModel('gpt-6-sol', 'Sol', theme), /^\x1b\[38;5;39m/);
+  assert.match(colorAgentModel('gpt-5.6-luna', 'Luna', theme), /^\x1b\[38;5;226m/);
+  assert.match(colorAgentModel('gpt-5.6-terra', 'Terra', theme), /^\x1b\[38;5;208m/);
+  assert.match(colorAgentModel('vendor/custom', 'custom', theme), /^\x1b\[37m/);
+});
+
+test('main model uses the same tier color in expanded and compact views', () => {
+  const value = snapshot({ model: 'gpt-6-sol' });
+  assert.match(renderPiFooter(value, 120, theme, 'summary')[1]!, /^\x1b\[38;5;39mSol/);
+  assert.match(renderPiFooter(value, 120, theme, 'compact')[0]!, /\x1b\[38;5;39mSol/);
 });
 
 test('thinkingGauge implements every original six-slot effort level', () => {
@@ -64,8 +79,8 @@ test('thinkingGauge implements every original six-slot effort level', () => {
 
 test('unknown and nonfinite metrics are unavailable rather than fabricated zeroes', () => {
   const text = plain(renderPiFooter(snapshot({ account: undefined, contextTokens: Number.NaN, contextPercent: Number.NaN, cost: Infinity, quota: undefined }), 90, theme));
-  assert.equal(text[0], 'New session · #12345678');
-  assert.match(text[3]!, /unavailable.*cost unavailable/);
+  assert.equal(text[0], '▾ New session · #12345678');
+  assert.equal(text[3], 'usage unavailable');
   assert.doesNotMatch(text[3]!, /Context/);
   assert.equal(text[4], 'unavailable');
   assert.doesNotMatch(text.join('\n'), /Personal| · Work$|0%|\$0/);
@@ -180,23 +195,20 @@ test('marks old quota observations stale and reached reset times awaiting update
   assert.equal(expired, '5h awaiting update');
 });
 
-test('places finished agents right only when both columns remain readable', () => {
+test('details preserves bounded individual agent status, model, effort, elapsed time, and links', () => {
   const agents = Array.from({ length: 7 }, (_, index) => ({
     id: `agent-${index}`, type: `reviewer-${index}`, status: index === 6 ? 'completed' : 'failed',
     model: 'openai/gpt-5', effort: 'medium', elapsedMs: 65_000 + index * 1000,
+    url: index === 6 ? 'https://example.test/agent' : undefined,
   }));
-  const wide = plain(renderPiFooter(snapshot({ agents }), 180, theme));
-  assert.match(wide[0]!, /│ .*Finished agents/);
-  assert.ok(wide.some(line => /… 2 earlier agents/.test(line)));
+  const wideLines = renderPiFooter(snapshot({ agents }), 180, theme, 'details');
+  const wide = plain(wideLines);
+  assert.ok(wide.some(line => /Finished agents \(7\)/.test(line)));
+  assert.ok(wide.some(line => /… 2 more agents/.test(line)));
   assert.ok(wide.some(line => /✓ reviewer-6 · gpt-5 · ◆◆◆◇◇◇ · 1m 11s/.test(line)));
-  assert.doesNotMatch(wide.join('\n'), /tokens/i);
-
-  const narrow = plain(renderPiFooter(snapshot({ agents: agents.slice(-1) }), 60, theme));
-  assert.equal(narrow.slice(0, 5).some(line => line.includes('reviewer-6')), false);
-  assert.match(narrow[5]!, /Finished agents/);
-  assert.match(narrow[6]!, /reviewer-6/);
-  assertBounded(renderPiFooter(snapshot({ agents }), 180, theme), 180);
-  assertBounded(renderPiFooter(snapshot({ agents }), 60, theme), 60);
+  assert.ok(wideLines.some(line => line.includes('https://example.test/agent')));
+  assertBounded(wideLines, 180);
+  assertBounded(renderPiFooter(snapshot({ agents }), 60, theme, 'details'), 60);
 });
 
 test('shortens only provider prefixes and formats valid cost safely', () => {
@@ -211,7 +223,7 @@ test('wide columns retain title, account, and all location values', () => {
     location: { project: 'project-name', worktree: 'worktree-name', branch: 'branch-name' },
     agents: [{ id: 'a', type: 'reviewer', status: 'done', model: 'openai/gpt-5', effort: 'max', elapsedMs: 1000 }],
   }), 180, theme));
-  assert.match(text[0]!, /^Footer title · #12345678 · Work .*│/);
+  assert.match(text[0]!, /^▾ Footer title · #12345678 · Work$/);
   assert.match(text[2]!, /^project-name · worktree-name · branch-name/);
 });
 
@@ -277,15 +289,67 @@ test('quota has no added labels and every footer separator is subdued gray', () 
   for (const line of lines) {
     const dots = stripTerminalSequences(line).split(' · ').length - 1;
     assert.equal(line.split('\x1b[90m · \x1b[0m').length - 1, dots);
-    assert.ok(line.includes('\x1b[90m │ \x1b[0m'));
   }
 });
 
 test('right-column links close OSC8 before padding and separator', () => {
   const lines = renderPiFooter(snapshot({
     agents: [{ id: 'a', type: 'reviewer', status: 'done', model: 'openai/gpt-5', effort: 'high', elapsedMs: 1000, url: 'https://example.test/agent' }],
-  }), 180, theme);
+  }), 180, theme, 'details');
   const linkedRow = lines.find(line => line.includes('https://example.test/agent'))!;
-  assert.match(linkedRow, /\x1b]8;;\x1b\\(?: +)?$/);
+  assert.match(linkedRow, /\x1b]8;;\x1b\\$/);
   assertBounded(lines, 180);
+});
+
+test('compact is one bounded bar-free line with aliases, context, and every quota reset', () => {
+  const lines = renderPiFooter(snapshot({
+    model: 'gpt-5.6-luna',
+    quota: [
+      { label: '5h', usedPercent: 23, resetAt: 1_700_003_600_000 },
+      { label: '7d', usedPercent: 42, resetAt: 1_700_007_200_000 },
+    ],
+  }), 120, theme, 'compact');
+  assert.equal(lines.length, 1);
+  assert.match(plain(lines)[0]!, /^▸ · #12345678 · Luna · ◆◆◆◆◇◇ · 42\.1k \(42%\) · 5h 23% 1h · 7d 42% 2h$/);
+  assert.doesNotMatch(plain(lines)[0]!, /[█░]/);
+  assertBounded(lines, 120);
+});
+
+test('history groups are bounded, priced groups sort first, and partial metrics are labelled or omitted', () => {
+  const agents = [
+    { id: 'run', type: 'runner', status: 'running', model: 'gpt-9-running', effort: 'high', tokens: 99_000, cost: 99 },
+    { id: 'priced', type: 'worker', status: 'done', model: 'gpt-6-astra', effort: 'high', tokens: 100, cost: 0 },
+    { id: 'partial-a', type: 'worker', status: 'done', model: 'unknown', effort: 'low', tokens: 9000 },
+    { id: 'partial-b', type: 'worker', status: 'failed', model: 'unknown', effort: 'low', cost: 5 },
+    ...Array.from({ length: 6 }, (_, index) => ({ id: `extra-${index}`, type: 'worker', status: 'done', model: `model-${index}`, effort: 'medium', tokens: index + 1 })),
+  ];
+  const text = plain(renderPiFooter(snapshot({ agents }), 140, theme, 'summary'));
+  const history = text.findIndex(line => line === '▸ History (9)');
+  assert.ok(history >= 0);
+  assert.match(text[history + 1]!, /Astra.*\$0\.000/);
+  assert.ok(text.some(line => /unknown.*9\.0k known tokens/.test(line)));
+  assert.ok(text.some(line => /… 3 more groups/.test(line)));
+  assert.doesNotMatch(text.join('\n'), /running|\$5\.000/);
+});
+
+test('history never merges distinct model versions sharing a short display alias', () => {
+  const agents = [
+    { id: 'one', type: 'Explore', status: 'completed', model: 'gpt-5.6-luna', effort: 'high', tokens: 100 },
+    { id: 'two', type: 'Explore', status: 'completed', model: 'gpt-6-luna', effort: 'high', tokens: 200 },
+    { id: 'three', type: 'Explore', status: 'steered', model: 'gpt-5-mini', effort: 'high', tokens: 300 },
+  ];
+  const text = plain(renderPiFooter(snapshot({ agents }), 120, theme, 'summary')).join('\n');
+  assert.match(text, /History \(3\)/);
+  assert.match(text, /gpt-5\.6-luna.*×1.*100 tokens/);
+  assert.match(text, /gpt-6-luna.*×1.*200 tokens/);
+  assert.match(text, /gpt-5-mini.*×1.*300 tokens/);
+  assert.doesNotMatch(text, /×2/);
+});
+
+test('details show no more than five finished agents and preserve zero cost', () => {
+  const agents = Array.from({ length: 7 }, (_, index) => ({ id: `${index}`, type: `agent-${index}`, status: 'done', model: 'gpt-5.6-luna', effort: 'high', tokens: index, cost: index === 0 ? 0 : index }));
+  const text = plain(renderPiFooter(snapshot({ agents }), 120, theme, 'details'));
+  assert.equal(text.filter(line => /^[✓■×] agent-/.test(line)).length, 5);
+  assert.ok(text.some(line => /… 2 more agents/.test(line)));
+  assert.ok(text.some(line => /\$0\.000/.test(line)) === false, 'lowest-cost agent falls outside the five sorted details');
 });
