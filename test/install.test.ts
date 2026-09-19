@@ -152,7 +152,7 @@ test('planning errors do not suppress healthy harness links and make inspect and
   } finally { await dispose(root); }
 });
 
-test('reports and preserves stale, unexpected, and externally targeted leftover mpx entries', async () => {
+test('removes stale managed links while preserving unexpected and externally targeted mpx entries', async () => {
   const { root, config } = await fixture();
   try {
     const plan = await planAgentLinks(root, config);
@@ -174,7 +174,8 @@ test('reports and preserves stale, unexpected, and externally targeted leftover 
 
     const synced = await syncAgentLinks(plan);
     assert.equal(synced.ok, false);
-    assert.equal(await readFile(path.join(agents, 'mpx-retired.md'), 'utf8'), 'retired bytes');
+    assert.equal(synced.results.find(item => path.basename(item.destination) === 'mpx-retired.md')?.action, 'removed');
+    await assert.rejects(lstat(path.join(agents, 'mpx-retired.md')), { code: 'ENOENT' });
     assert.equal(await readFile(path.join(agents, 'mpx-local.md'), 'utf8'), 'local bytes');
     assert.equal((await lstat(path.join(agents, 'mpx-external.md'))).isSymbolicLink(), true);
   } finally { await dispose(root); }

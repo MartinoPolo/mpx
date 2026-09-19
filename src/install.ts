@@ -1,4 +1,4 @@
-import { lstat, mkdir, readlink, readdir, symlink } from 'node:fs/promises';
+import { lstat, mkdir, readlink, readdir, symlink, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import type { Account, Harness, UserConfig } from './contracts.js';
 
@@ -65,7 +65,7 @@ export interface AgentLinkSyncEntry {
   account: Account;
   harness: Harness;
   status: AgentLinkStatus;
-  action: 'created' | 'unchanged' | 'failed';
+  action: 'created' | 'unchanged' | 'removed' | 'failed';
   target?: string;
   error?: string;
 }
@@ -222,7 +222,7 @@ async function inspectLeftovers(plan: AgentLinkPlan): Promise<AgentLinkInspectio
         const resolvedTarget = path.resolve(agentsDirectory, target);
         const sourceDirectory = entry.sourceDirectory;
         if (comparable(path.dirname(resolvedTarget)) === comparable(sourceDirectory) && generatedAgentName.test(path.basename(resolvedTarget))) {
-          results.push({ ...base, source: resolvedTarget, target, status: 'stale', error: `stale managed agent link is preserved: ${destination}` });
+          results.push({ ...base, source: resolvedTarget, target, status: 'stale', error: `stale managed agent link will be removed by sync: ${destination}` });
         } else {
           results.push({ ...base, source: resolvedTarget, target, status: 'conflict', error: `unexpected mpx agent link target is preserved: ${destination}` });
         }
@@ -274,6 +274,26 @@ export async function syncAgentLinks(plan: AgentLinkPlan): Promise<AgentLinkSync
   }
 
   const leftovers = await inspectLeftovers(plan);
-  for (const item of leftovers) results.push({ ...item, action: 'failed' });
+  for (const item of leftovers) {
+    if (item.status !== 'stale' || !item.source) {
+      results.push({ ...item, action: 'failed' });
+      continue;
+    }
+    try {
+      const agentsDirectory = path.dirname(item.destination);
+      const chain = await validateDirectoryChain(agentsDirectory);
+      if (chain.kind !== 'ok') throw new Error(`agents path became unsafe at ${chain.path}`);
+      const current = await lstat(item.destination);
+      if (!current.isSymbolicLink()) throw new Error('stale managed link was replaced before removal');
+      const target = await readlink(item.destination);
+      if (comparable(path.resolve(agentsDirectory, target)) !== comparable(item.source)) {
+        throw new Error('stale managed link target changed before removal');
+      }
+      await unlink(item.destination);
+      results.push({ ...item, action: 'removed' });
+    } catch (error) {
+      results.push({ ...item, action: 'failed', error: `failed to remove stale managed agent link ${item.destination}: ${message(error)}` });
+    }
+  }
   return { ok: plan.errors.length === 0 && results.every(result => result.action !== 'failed'), results, errors: [...plan.errors] };
 }
