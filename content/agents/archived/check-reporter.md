@@ -38,8 +38,8 @@ For each distinct actionable finding:
 5. Name the narrow verification command that would confirm the repair, using only commands supplied
    in the input.
 
-A correct test is part of the specification. Suggest changing a test only when the supplied
-acceptance criteria and evidence demonstrate that its assertion, selector, or setup is wrong. Never
+Existing tests are evidence, not immutable specification. Prioritize the new acceptance criteria when requirements change. Update or retire conflicting tests and report material changes to existing coverage.
+Suggest test changes only when supported by the supplied acceptance criteria and evidence. Never
 suggest suppressing a diagnostic.
 
 ## Return contract (ONLY JSON)

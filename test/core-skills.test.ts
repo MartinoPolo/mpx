@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
-import { cp, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -10,7 +9,7 @@ import { projectContent } from '../src/compiler.js';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const skillsRoot = path.join(root, 'content', 'skills');
 const names = [
-  'batch-execute', 'bug-report', 'check-fix', 'commit', 'commit-push', 'commit-push-pr',
+  'batch-execute', 'bug-report', 'check-fix', 'commit', 'commit-push',
   'continue', 'decompose', 'epic-create', 'execute', 'issue-create', 'pr',
   'review', 'ship', 'sync-base', 'to-issues', 'board-to-issues', 'design-init', 'design-brief',
   'mockup', 'design-refine', 'grill',
@@ -21,7 +20,6 @@ const exposures: Record<(typeof names)[number], 'normal' | 'name-only' | 'explic
   'check-fix': 'name-only',
   commit: 'name-only',
   'commit-push': 'name-only',
-  'commit-push-pr': 'name-only',
   continue: 'explicit-only',
   decompose: 'name-only',
   'epic-create': 'explicit-only',
@@ -95,7 +93,7 @@ test('bounded core batch has exact canonical exposure metadata', async () => {
 
 test('private support closure is copied into every consuming skill', async () => {
   assert.deepEqual(await filesBelow(path.join(skillsRoot, 'execute')), [
-    'CLOSE_OUT.md', 'DEV_SERVER.md', 'SKILL.md', 'detect-check-scripts.mjs', 'mocking.md', 'tests.md',
+    'DEV_SERVER.md', 'SKILL.md', 'mocking.md', 'tests.md',
   ]);
   assert.deepEqual(await filesBelow(path.join(skillsRoot, 'board-to-issues')), ['ISSUE_TEMPLATE.md', 'SKILL.md']);
   assert.deepEqual(await filesBelow(path.join(skillsRoot, 'review')), ['SKILL.md', 'scripts/detect-base-branch.js']);
@@ -126,7 +124,7 @@ test('core workflows are native-first without retired services or cross-skill fi
   assert.match(source, /\{\{MPX_HARNESS\}\}/);
   assert.match(source, /\{\{MPX_SKILL_COMMAND\}\}/);
   assert.match(source, /\{\{MPX_SKILL_PREFIX\}\}/);
-  assert.match(source, /user-created Orca checkout/);
+  assert.match(source, /Do not create, switch, or remove worktrees/);
   assert.match(source, /does not manage development-server processes or port state/);
   assert.match(source, /explicitly approved project test-auth context/);
 });
@@ -144,20 +142,18 @@ test('execute projects autonomous server and delivery defaults with safety gates
     };
     const skill = textAt(`${skillDirectory}/SKILL.md`);
     const server = textAt(`${skillDirectory}/DEV_SERVER.md`);
-    const closeOut = textAt(`${skillDirectory}/CLOSE_OUT.md`);
     const instructions = textAt(`dist/${harness}/instructions/shared/AGENTS.md`);
     assert.match(skill, /delivery defaults without routine confirmation/);
     assert.match(skill, /\]\(DEV_SERVER\.md\)/);
     assert.match(skill, /Inline work commits\s+locally/);
     assert.match(skill, /`--no-auto-merge`/);
-    assert.match(skill, /For `PM_UNKNOWN=true`, ask for the package manager/);
+    assert.match(skill, /personal repositories require confirmed merge plus safe base update/);
+    assert.match(skill, /Three shipping attempts total: initial attempt plus two repair\/retry attempts/);
+    assert.match(skill, /clean index\/worktree, correct\s+upstream, no in-progress Git operation, and fast-forward only/);
     assert.match(server, /`package\.json` scripts and `packageManager`/);
     assert.match(server, /confirm readiness with a bounded wait/);
     assert.match(server, /stop only processes started for this execution/);
     assert.match(server, /Required browser verification remains blocked/);
-    assert.match(closeOut, /prefer squash, then merge,\s+then rebase/);
-    assert.match(closeOut, /Invocation\s+authorizes this without confirmation/);
-    assert.match(closeOut, /Merge only after the explicit green gate/);
     assert.match(instructions, /parent may start a server/);
     const browser = textAt(`dist/${harness}/agents/mpx-chrome-devtools-tester.md`);
     const playwright = textAt(`dist/${harness}/instructions/shared/PLAYWRIGHT_TESTING.md`);
@@ -174,38 +170,16 @@ test('repository and Issue provider roles remain independent', async () => {
   assert.match(source, /repository providers are GitHub, GitLab, or Gerrit/);
   assert.match(source, /Issue\s+providers are GitHub or KanbanFlow/);
   assert.match(source, /independently resolve `issues\.provider` and `repository\.provider`/);
-  assert.match(source, /Native status\/login diagnostics may inspect the active account/);
+  assert.match(source, /status\/login diagnostics may inspect the active account/i);
   assert.doesNotMatch(source, /Issue provider[^\n]*(?:GitLab|Gerrit)/i);
 });
 
-test('compiler closure is valid, with MPX_SKILL_PREFIX owned by parent integration', async () => {
-  try {
-    const projected = new Map((await projectContent(root)).map(item => [item.path, item.content.toString('utf8')]));
-    assert.match(projected.get('dist/packs/development/pi/skills/mp-mockup/SKILL.md')!, /\/skill:mp-design-refine/);
-    assert.match(projected.get('dist/packs/development/claude/.claude/skills/mp-mockup/SKILL.md')!, /\/mp-design-refine/);
-    assert.match(projected.get('dist/packs/development/pi/skills/mp-design-init/SKILL.md')!, /mp-design-brief/);
-    return;
-  } catch (error) {
-    assert.match(String(error), /unknown placeholder \{\{MPX_SKILL_PREFIX\}\}/);
-  }
-
-  // Validate the rest of the current compiler contract without weakening the source placeholder.
-  const temporary = await mkdtemp(path.join(tmpdir(), 'mpx-core-skills-'));
-  try {
-    await cp(path.join(root, 'content'), path.join(temporary, 'content'), { recursive: true });
-    for (const name of names) {
-      for (const relative of await filesBelow(path.join(temporary, 'content', 'skills', name))) {
-        if (!/\.md$/.test(relative)) continue;
-        const file = path.join(temporary, 'content', 'skills', name, relative);
-        const source = await readFile(file, 'utf8');
-        await writeFile(file, source.replaceAll('{{MPX_SKILL_PREFIX}}', ''));
-      }
-    }
-    const projected = await projectContent(temporary);
-    assert.ok(projected.some(item => item.path.endsWith('/skills/mp-execute/detect-check-scripts.mjs')));
-    assert.ok(projected.some(item => item.path.endsWith('/skills/mp-board-to-issues/ISSUE_TEMPLATE.md')));
-    assert.ok(!projected.some(item => item.path.includes('/skills/mp-grill-voice/')));
-  } finally {
-    await rm(temporary, { recursive: true, force: true });
-  }
+test('compiler closure resolves skill prefixes without a placeholder fallback', async () => {
+  const projected = new Map((await projectContent(root)).map(item => [item.path, item.content.toString('utf8')]));
+  assert.match(projected.get('dist/packs/development/pi/skills/mp-mockup/SKILL.md')!, /\/skill:mp-design-refine/);
+  assert.match(projected.get('dist/packs/development/claude/.claude/skills/mp-mockup/SKILL.md')!, /\/mp-design-refine/);
+  assert.match(projected.get('dist/packs/development/pi/skills/mp-design-init/SKILL.md')!, /mp-design-brief/);
+  assert.ok([...projected.keys()].some(item => item.endsWith('/skills/mp-execute/references/instructions/shared/detect-check-scripts.mjs')));
+  assert.ok([...projected.keys()].some(item => item.endsWith('/skills/mp-board-to-issues/ISSUE_TEMPLATE.md')));
+  assert.ok(![...projected.keys()].some(item => item.includes('/skills/mp-grill-voice/')));
 });

@@ -6,8 +6,8 @@ description:
 metadata:
   mpx:
     schemaVersion: 1
-    modelClass: standard
-    thinking: low
+    modelClass: mechanical
+    thinking: high
     capabilities: [read, search, shell]
 ---
 
@@ -17,12 +17,8 @@ Find the Issue that the branch changes resolve. This is read-only. Prefer precis
 
 ## Provider setup (required)
 
-Resolve `MPX_ACTIVE_CONTENT_ROOT` from the environment once to an absolute literal path. Read the
-[provider routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md) at
-`<resolved-root>/dist/{{MPX_HARNESS}}/instructions/shared/PROVIDER_ROUTING.md`. If the variable is unset or the
-contained file is unavailable, request a parent-resolved absolute root and stop; never search or guess. Load the repository's `mpxconfig.json`, resolve
-`issues.provider`, then read the matching projected guide under
-`<resolved-root>/dist/{{MPX_HARNESS}}/instructions/shared/providers/`.
+Apply the inlined provider routing and native provider guides below. Load the repository's
+`mpxconfig.json`, resolve `issues.provider`, then use only the matching inlined guide.
 
 Use only the selected provider branch:
 
@@ -75,3 +71,13 @@ PR bodies use canonical URLs without a closing keyword. Do not call native paren
 
 `candidates` contains at most three entries; confidence is between 0 and 1. Never modify Issues or
 PRs.
+
+## Inlined Provider Instructions
+
+{{include:../instructions/shared/PROVIDER_ROUTING.md}}
+
+{{include:../instructions/shared/providers/GITHUB.md}}
+
+{{include:../instructions/shared/providers/KANBANFLOW.md}}
+
+{{include:../instructions/shared/providers/LOCAL.md}}

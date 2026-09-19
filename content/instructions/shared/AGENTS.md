@@ -63,11 +63,13 @@ Invoke MPX skills with their native command: `/skill:mp-<name>` in Pi and `/mp-<
 ## Sub-agents
 
 Delegate broad discovery to the exploration agent using direct tools for known paths and small
-lookups. Give delegates the task scope, relevant constraints, stopping condition, and required
-evidence. The parent evaluates findings and owns decisions. Prefer declared agent model and effort
-defaults; use supported overrides only when needed. For external-tool implementation questions,
-check a relevant clone under `MPX_CLONED`; use Context7 for current API documentation, with public
-web fallback.
+lookups. Exploration agents only locate files, symbols, references, and supporting evidence; never
+ask them to diagnose root causes, evaluate correctness, recommend changes, or make implementation
+decisions. The parent or a reasoning-capable specialist synthesizes their findings. Give delegates
+the task scope, relevant constraints, stopping condition, and required evidence. The parent evaluates
+findings and owns decisions. Prefer declared agent model and effort defaults; use supported overrides
+only when needed. For external-tool implementation questions, check a relevant clone under
+`MPX_CLONED`; use Context7 for current API documentation, with public web fallback.
 
 ## Preferences
 

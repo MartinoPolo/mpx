@@ -38,8 +38,9 @@ browser sees as transcript-visible and keep credentials out of the report.
 
 
 **This is the exploratory path, not the reliability path.** Any check that must be trustworthy,
-repeatable, or run unattended belongs in raw Playwright — see
-[Playwright Testing]({{MPX_SHARED_INSTRUCTIONS}}/PLAYWRIGHT_TESTING.md).
+repeatable, or run unattended belongs in raw Playwright.
+
+{{include:../instructions/shared/PLAYWRIGHT_TESTING.md}}
 
 ## Input from Parent
 

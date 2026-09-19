@@ -27,6 +27,24 @@ Windows/WSL `bash` executable. Reopen existing terminals after migration to disc
 Pi launchers leave the startup overview at its native compact default rather than forcing verbose
 output. Pass `pi --verbose` or `piw --verbose` when expanded resource paths are useful.
 
+## Execution and delivery skills
+
+Use `/skill:mp-<name>` in Pi or `/mp-<name>` in Claude Code:
+
+| Skill | Endpoint |
+| --- | --- |
+| `execute` | Implement and verify; work stops at green CI with an open PR/MR, personal continues through merge and safe base synchronization |
+| `commit` | Local commit only |
+| `commit-push` | Commit and push |
+| `pr` | Commit, push, create/update a draft PR/MR, and monitor CI |
+| `ship` | Confirmed merge; `--no-auto-merge` stops at green CI |
+
+`execute --no-tdd` skips creating tests during implementation, not running existing tests.
+`--full-review` adds specialist review axes; `--no-auto-merge` leaves the PR/MR open. Inline work
+commits locally without hosted delivery. Shipping stops after its shared retry budget is exhausted.
+Base synchronization requires an identified idle checkout, clean Git state, correct upstream, and
+a fast-forward-only update. A confirmed merge and blocked synchronization are reported separately.
+
 ## Project configuration
 
 A repository may define `mpxconfig.json`:
@@ -47,6 +65,17 @@ A provider-dependent workflow still requires its corresponding role. Supported r
 are GitHub, GitLab, and Gerrit; supported Issue providers are GitHub and KanbanFlow. An explicit empty `packs` array
 loads no MPX global packs while retaining native project and account resources. Linked worktrees use
 the main checkout's configuration.
+
+Optional `fast_checks` and `full_checks` arrays contain `{ "command": "pnpm test", "cwd": "." }`
+entries. Working directories are relative to the repository root. Each explicit array overrides its
+discovery category, including an empty array. Complete verification runs both arrays; `full_checks`
+contains deferred checks rather than a duplicate of fast checks. Explicit configuration takes
+precedence over deterministic script discovery, with unresolved discovery investigated by the checker.
+Formatting runs before parallel checks/review and may write files; other checks must not repair code.
+The bundled detector accepts `node "<detector>" "<checkout>" "<package-manager-or-empty>" "<config-json-file>"`
+when resolved main-checkout configuration or machine-local overrides must be supplied. Pass only the
+resolved `config` object, not the surrounding `mpx project config` result. Detector `cwd` values are
+relative to the checkout passed to it.
 
 User configuration lives at `$APPDATA/mpx2/config.json` and maps personal/work Pi and Claude roots,
 recursive domain roots, optional default packs, executable overrides, and local project overrides.
@@ -137,6 +166,12 @@ pnpm status
 Author canonical resources under `content/`, then run `pnpm build` from the repository root.
 Keep retired skills in `content/skills/archived/` and incomplete skills in
 `content/skills/unfinished/`; both trees are excluded from build validation and distribution.
+Keep retired agents in `content/agents/archived/`, also excluded from build validation and distribution.
+Use `{{include:relative/path.md}}` for build-time instruction inclusion, resolved from the authored
+file. Includes expand transitively; cycles and paths outside `content/` fail the build. Deferred
+Markdown links remain references: the compiler bundles their transitive dependencies inside each
+consuming skill and rewrites links locally. Keep operational agent instructions inline.
+
 The compiler writes ignored, reproducible projections under `dist/`; do not edit or commit them.
 Build after a fresh checkout and after content changes before launching a harness or running tests.
 Runtime code is under `src/`, native Pi adapters

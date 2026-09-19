@@ -19,6 +19,8 @@ substitute GitLab for the independently selected GitHub or KanbanFlow Issue prov
 
 ```text
 glab mr view <iid> --repo <TARGET> --output json
+glab api projects/<ENCODED_PROJECT>/merge_requests --hostname <HOST> --method GET \
+    --raw-field source_branch=<source> --raw-field state=all --paginate
 glab api projects/<ENCODED_PROJECT>/merge_requests --hostname <HOST> --method POST \
     --raw-field title=<title> --field description=@<body-file> \
     --raw-field source_branch=<source> --raw-field target_branch=<target>
@@ -35,6 +37,11 @@ glab ci retry <job-id> --repo <TARGET>
 glab mr merge <iid> --yes --repo <TARGET> [--squash|--rebase]
 ```
 
+For draft creation through the API, prefix the title with GitLab's required `Draft: ` marker and
+verify the returned draft state. The authored title after that provider marker retains the verified
+Issue identifier. Removing the marker is a readiness transition and needs workflow authorization.
+
 Poll explicit pipeline/job IDs boundedly; never infer an update or retry target. Merge requires
-fresh human authorization. Reliable cross-version watch semantics, client-selected non-exposed merge
+explicit authorization for the current run and permitted strategy. An invoked workflow that
+explicitly authorizes merge supplies that authorization; otherwise ask the user. Reliable cross-version watch semantics, client-selected non-exposed merge
 behavior, native hierarchy, and automatic body-link synchronization are unsupported.

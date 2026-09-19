@@ -1,96 +1,11 @@
-# When to Mock
+# Test Doubles
 
-## Mock at System Boundaries Only
+Use mocks, fakes, or controlled implementations when they make a relevant boundary deterministic,
+safe, or practical. Typical cases include external services, time, randomness, unavailable
+infrastructure, and expensive resources. Prefer a realistic collaborator when it is reliable,
+proportionate, and gives stronger evidence.
 
-Mocks replace things **you don't control** — the outside world:
-
-- **External APIs** — third-party HTTP services, webhooks
-- **Databases** — when a real test database is impractical (prefer real DB in integration tests)
-- **Time / randomness** — `Date.now()`, `Math.random()`, UUIDs
-- **File system** — when tests must stay fast and side-effect-free
-
-## Never Mock What You Own
-
-- Your own classes, modules, or internal collaborators
-- Anything you can change the source of
-- Internal utility functions
-
-If you need to mock your own code to test something, the design is wrong — fix the design.
-
-## Designing for Mockability
-
-### 1. Dependency Injection: Pass Dependencies In
-
-**Injectable (testable):**
-
-```typescript
-interface EmailSender {
-  send(to: string, subject: string, body: string): Promise<void>;
-}
-
-function createOrderService(dependencies: { emailSender: EmailSender }) {
-  return {
-    async placeOrder(order: Order) {
-      const saved = await saveOrder(order);
-      await dependencies.emailSender.send(
-        order.email,
-        'Order confirmed',
-        `Order #${saved.id} placed.`,
-      );
-      return saved;
-    },
-  };
-}
-
-// In test: pass a fake emailSender
-// In production: pass the real one
-```
-
-**Non-injectable (hard to test):**
-
-```typescript
-import { sendEmail } from '../lib/email'; // hard-coded import
-
-function createOrderService() {
-  return {
-    async placeOrder(order: Order) {
-      const saved = await saveOrder(order);
-      // How do you replace sendEmail in a test?
-      await sendEmail(order.email, 'Order confirmed', `Order #${saved.id}`);
-      return saved;
-    },
-  };
-}
-```
-
-### 2. Prefer Specific Interfaces Over Generic Fetchers
-
-**Specific (easy to fake):**
-
-```typescript
-interface WeatherProvider {
-  getCurrentTemperature(city: string): Promise<number>;
-}
-
-// Test fake is trivial:
-const fakeWeather: WeatherProvider = {
-  getCurrentTemperature: async () => 22,
-};
-```
-
-**Generic (painful to fake):**
-
-```typescript
-interface HttpClient {
-  get(url: string, headers?: Record<string, string>): Promise<unknown>;
-  post(url: string, body: unknown): Promise<unknown>;
-}
-
-// Now your fake must know about URLs, payloads, headers...
-// You're testing HTTP plumbing instead of weather logic.
-```
-
-## Decision Rule
-
-> Can I swap this dependency in production for a different provider? If yes, it's a system boundary
-> — mock it in tests. If no, it's internal — test the real thing.
+Choose the smallest interface that expresses the behavior the caller needs. Keep test setup focused
+on inputs and observable outcomes. Avoid doubles that reproduce implementation logic or assertions
+about incidental internal calls, order, or counts. A collaborator's ownership alone does not decide
+whether replacing it is appropriate; judge the boundary and the evidence required by the test.

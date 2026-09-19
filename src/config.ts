@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 const TRUSTED_GIT_CWD = path.dirname(fileURLToPath(import.meta.url));
 import type {
   Account,
+  CheckCommand,
   Harness,
   PackSelection,
   ProjectOverride,
@@ -51,6 +52,21 @@ function allowedKeys(source: Record<string, unknown>, allowed: readonly string[]
   if (extra !== undefined) throw new Error(`${label} contains unsupported field ${extra}`);
 }
 
+function checkCommands(value: unknown, label: string): CheckCommand[] {
+  if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
+  return value.map((entry, index) => {
+    const entryLabel = `${label}[${index}]`;
+    const source = object(entry, entryLabel);
+    allowedKeys(source, ['command', 'cwd'], entryLabel);
+    const command = nonemptyString(source.command, `${entryLabel}.command`);
+    const cwd = nonemptyString(source.cwd, `${entryLabel}.cwd`);
+    if (/^[A-Za-z]:/.test(cwd) || path.isAbsolute(cwd) || cwd.split(/[\\/]/).includes('..')) {
+      throw new Error(`${entryLabel}.cwd must be relative to the repository root`);
+    }
+    return { command, cwd };
+  });
+}
+
 function packNames(value: unknown, label: string): string[] {
   if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
   const result = value.map((entry, index) => {
@@ -66,7 +82,7 @@ function packNames(value: unknown, label: string): string[] {
 
 export function parseRepositoryConfig(value: unknown): RepositoryConfig {
   const source = object(value, 'repository config');
-  allowedKeys(source, ['projectId', 'repository', 'issues', 'packageManager', 'packs'], 'repository config');
+  allowedKeys(source, ['projectId', 'repository', 'issues', 'packageManager', 'packs', 'fast_checks', 'full_checks'], 'repository config');
   const projectId = nonemptyString(source.projectId, 'projectId');
 
   let repository: RepositoryConfig['repository'];
@@ -109,6 +125,8 @@ export function parseRepositoryConfig(value: unknown): RepositoryConfig {
   if (issues !== undefined) result.issues = issues;
   if (packageManager !== undefined) result.packageManager = packageManager;
   if (source.packs !== undefined) result.packs = packNames(source.packs, 'packs');
+  if (source.fast_checks !== undefined) result.fast_checks = checkCommands(source.fast_checks, 'fast_checks');
+  if (source.full_checks !== undefined) result.full_checks = checkCommands(source.full_checks, 'full_checks');
   return result;
 }
 

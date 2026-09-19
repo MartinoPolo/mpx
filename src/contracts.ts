@@ -26,12 +26,18 @@ export interface RuntimeProfiles {
 export interface Projection { path: string; content: Buffer }
 export interface BuildResult { files: string[]; changed: string[] }
 
+export interface CheckCommand {
+  command: string;
+  cwd: string;
+}
 export interface RepositoryConfig {
   projectId: string;
   repository?: { provider: 'github' | 'gitlab' | 'gerrit'; remote: string };
   issues?: { provider: 'github' | 'kanbanflow'; metadata?: Record<string, unknown> };
   packageManager?: 'pnpm' | 'npm' | 'yarn' | 'bun';
   packs?: string[];
+  fast_checks?: CheckCommand[];
+  full_checks?: CheckCommand[];
 }
 export const WARNING_SEVERITY = { red: 'red', orange: 'orange', yellow: 'yellow' } as const;
 export type WarningSeverity = (typeof WARNING_SEVERITY)[keyof typeof WARNING_SEVERITY];

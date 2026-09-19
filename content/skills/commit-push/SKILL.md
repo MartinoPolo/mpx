@@ -1,10 +1,10 @@
 ---
 name: commit-push
-description: 'Stages, commits, and pushes changes without opening a PR.'
+description: 'Stages, commits, and pushes explicit intended changes without opening a PR.'
 argument-hint: '[commit hint]'
 metadata:
   author: MartinoPolo
-  version: '0.6'
+  version: '0.8'
   category: git-workflow
   mpx:
     schemaVersion: 1
@@ -14,21 +14,19 @@ metadata:
 
 # Commit and Push
 
-Stage, commit, and push changes. Do not create a PR. `the invocation input`
+Prepare a substantive summary of the intended change before delivery. Invoke `mpx-shipper` with
+endpoint `push`, the explicit intended paths, the summary and `the invocation input`, and all
+required repository, branch, configured remote, provider, Issue, and existing immutable identities.
+Preserve native authentication.
 
-## Workflow
+The parent owns **three total shipping attempts: the initial attempt plus two retries across all
+stages and any continuation**. Never reset this budget or replace identities established by an
+earlier attempt. On failure, evaluate the bounded evidence,
+dispatch a fresh `mpx-executor` for each accepted repair with the requirements, precise repair
+objective, file pointers, acceptance criteria, and verification commands. Tell it to inspect the
+current diff and relevant files. Verify the repair before invoking the shipper again. The shipper
+never repairs.
 
-1. Read [Git Commit Workflow]({{MPX_SHARED_INSTRUCTIONS}}/GIT_COMMIT_WORKFLOW.md) through the
-   compiler-resolved shared link.
-2. Run **Phase A** through `mpx-git-committer` with `push: true` and
-   `commit_hint: the invocation input`, preserving its structured result handling and bounded
-   escalation. Only Phase A applies; it covers commit and push.
-3. Preserve the native CLI authentication environment. Native status/login diagnostics may inspect
-   the active account, but do not log in or out, substitute credentials, or switch accounts during
-   push troubleshooting.
-
-## Output
-
-- Commit hash and message, when committed
-- Push status
-- “Nothing to commit — already up-to-date”, when applicable
+Completion requires the verified commit and selected-remote push state. Do not create a PR. Report
+actual results after delivery, including completed stage, commit/branch/repository identities, push
+state, excluded artifacts, retries, remaining work, and blockers.

@@ -25,7 +25,8 @@ test('separate native Pi loaders preserve additive trusted discovery, exposure a
     const repoB = join(root, 'repo-b');
     await put(join(content, 'content', 'runtime-profiles.json'), await readFile(join(packageRoot, 'content', 'runtime-profiles.json'), 'utf8'));
     for (const [name, pack, exposure] of [['normal', 'development', 'normal'], ['named', 'development', 'name-only'], ['private', 'personal', 'explicit-only']] as const) {
-      await put(join(content, 'content', 'skills', name, 'SKILL.md'), `---\nname: ${name}\ndescription: Meaningful ${name} description\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [${pack}]\n    defaultExposure: ${exposure}\n---\nUNIQUE_BODY_${name}\n[Support](support.txt)\n`);
+      const crossSkillReference = name === 'normal' ? '[Named reference](../named/SKILL.md)\n' : '';
+      await put(join(content, 'content', 'skills', name, 'SKILL.md'), `---\nname: ${name}\ndescription: Meaningful ${name} description\nmetadata:\n  mpx:\n    schemaVersion: 1\n    skillPacks: [${pack}]\n    defaultExposure: ${exposure}\n---\nUNIQUE_BODY_${name}\n[Support](support.txt)\n${crossSkillReference}`);
       await put(join(content, 'content', 'skills', name, 'support.txt'), `SUPPORT_${name}\n`);
     }
     await build(content);
@@ -61,6 +62,7 @@ test('separate native Pi loaders preserve additive trusted discovery, exposure a
       const names = result.skills.map(skill => skill.name);
       for (const name of ['mp-normal', 'mp-named', 'independent', 'packaged', 'shared-global', 'project-native', 'pi-project']) assert.ok(names.includes(name), `missing ${name}: ${names}`);
       assert.equal(new Set(names).size, names.length);
+      assert.ok(!names.includes('named'), `bundled reference discovered as a native skill: ${names}`);
       assert.equal(result.extensions.length, 0);
       assert.ok(result.contexts.some(file => file.endsWith('AGENTS.md')));
       assert.equal(result.diagnostics.length, 0);

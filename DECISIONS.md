@@ -41,6 +41,24 @@ conventions belong in `AGENTS.md`; rollout evidence and recovery belong in `migr
 - **Propagate selected packs to subagents.** Parent and child sessions need the same effective
   workflow vocabulary; discovery and named-skill preloading must preserve that selection.
 
+## Execution and delivery
+
+- **Keep analysis and acceptance with main.** One bounded executor owns implementation and meaningful
+  test design; a separate advanced simplifier makes a scoped behavior-preserving pass. Fresh repair
+  executors inspect current files rather than inherit stale implementation context. Main evaluates
+  check/review findings directly; CI investigation belongs to the bounded repair rather than a
+  mandatory analysis stage.
+- **Verify stable source.** Formatting may write and finishes before parallel checks/review. Project
+  check overrides precede deterministic discovery; unresolved discovery goes to the checker.
+- **Separate shipping from repair.** One standard-class shipper owns delivery; main evaluates failures
+  and authorizes repairs under a shared attempt budget that survives continuation.
+- **Make delivery intent explicit.** `pr` publishes a draft for human-controlled readiness. Execute
+  leaves work PRs unmerged and autonomously merges personal work when authorized and verified.
+  Base synchronization requires an identified idle checkout and safe fast-forward; clean Git state
+  alone cannot establish that another session is not using it.
+- **Treat tests as evidence of requirements.** New acceptance criteria take priority over obsolete
+  tests. `--no-tdd` excludes test creation during implementation, not existing verification.
+
 ## Configuration and accounts
 
 - **Separate account configuration from project metadata.** User configuration owns native roots,

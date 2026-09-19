@@ -53,6 +53,25 @@ test('parseRepositoryConfig accepts a projectId-only configuration', () => {
   assert.deepEqual(parseRepositoryConfig({ projectId: 'personal/orca' }), { projectId: 'personal/orca' });
 });
 
+test('parseRepositoryConfig retains explicit check commands and relative working directories', () => {
+  const fast_checks = [{ command: 'pnpm exec prettier --write .  ', cwd: '.' }];
+  const full_checks: never[] = [];
+  assert.deepEqual(parseRepositoryConfig({ projectId: 'checks', fast_checks, full_checks }), {
+    projectId: 'checks', fast_checks, full_checks,
+  });
+});
+
+test('parseRepositoryConfig rejects malformed or escaping check commands', () => {
+  for (const value of [
+    { projectId: 'checks', fast_checks: {} },
+    { projectId: 'checks', fast_checks: [{ command: '', cwd: '.' }] },
+    { projectId: 'checks', full_checks: [{ command: 'pnpm test', cwd: '../other' }] },
+    { projectId: 'checks', full_checks: [{ command: 'pnpm test', cwd: '/tmp' }] },
+    { projectId: 'checks', full_checks: [{ command: 'pnpm test', cwd: 'D:checks' }] },
+    { projectId: 'checks', full_checks: [{ command: 'pnpm test', cwd: '.', extra: true }] },
+  ]) assert.throws(() => parseRepositoryConfig(value), /checks|command|cwd|unsupported/i);
+});
+
 test('parseRepositoryConfig accepts repository and issue roles independently', () => {
   assert.deepEqual(parseRepositoryConfig({
     projectId: 'repository-only', repository: repositoryConfig.repository,

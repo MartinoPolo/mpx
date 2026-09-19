@@ -5,17 +5,21 @@ metadata:
   mpx:
     schemaVersion: 1
     modelClass: standard
-    thinking: medium
+    thinking: high
     capabilities: [read, search, shell]
 ---
 
 # Reviewer: Performance
 
-Resolve `MPX_ACTIVE_CONTENT_ROOT` from the environment once to an absolute literal path, then read the
-[Reviewer Protocol]({{MPX_SHARED_INSTRUCTIONS}}/REVIEWER_PROTOCOL.md) at
-`<resolved-root>/dist/{{MPX_HARNESS}}/instructions/shared/REVIEWER_PROTOCOL.md` and follow it for
-scope and output format. If the environment variable is unset, request a parent-resolved absolute
-path; never guess or search.
+{{include:../instructions/shared/REVIEWER_PROTOCOL.md}}
+
+{{include:../instructions/shared/PROVIDER_ROUTING.md}}
+
+{{include:../instructions/shared/providers/GITHUB.md}}
+
+{{include:../instructions/shared/providers/GITLAB.md}}
+
+{{include:../instructions/shared/providers/GERRIT.md}}
 
 Review changed scope for meaningful performance risks.
 

@@ -29,6 +29,8 @@ const PLACEHOLDERS = [
   '{{MPX_HARNESS}}',
 ] as const;
 const BARE_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const INCLUDE_PATTERN = /\{\{include:((?:\{\{MPX_(?:SHARED_INSTRUCTIONS|AGENT_REFERENCES)\}\}|[^{}])+)\}\}/g;
+const INCLUDE_START = '{{include:';
 
 type Mapping = Record<string, unknown>;
 interface SourceFile { relative: string; content: Buffer }
@@ -209,7 +211,7 @@ async function collectSource(contentRoot: string): Promise<SourceFile[]> {
     for (const entry of entries) {
       const absolute = path.join(directory, entry.name);
       const relative = joined(relativeDirectory, entry.name);
-      if (relative === 'skills/archived' || relative === 'skills/unfinished') continue;
+      if (relative === 'agents/archived' || relative === 'skills/archived' || relative === 'skills/unfinished') continue;
       const info = await lstat(absolute);
       if (info.isSymbolicLink()) {
         const target = await realpath(absolute).catch(() => '');
@@ -237,6 +239,80 @@ function relativeReference(fromFile: string, targetDirectory: string): string {
   return value || '.';
 }
 
+function sourceLookup(sources: readonly SourceFile[]): Map<string, SourceFile> {
+  const result = new Map<string, SourceFile>();
+  for (const source of sources) {
+    const key = path.posix.normalize(source.relative).toLowerCase();
+    const previous = result.get(key);
+    if (previous) throw new Error(`case-insensitive source collision: content/${source.relative} conflicts with content/${previous.relative}`);
+    result.set(key, source);
+  }
+  return result;
+}
+
+function authoredTarget(from: string, rawTarget: string): string {
+  let target = rawTarget.replaceAll('{{MPX_SHARED_INSTRUCTIONS}}', '/instructions/shared')
+    .replaceAll('{{MPX_AGENT_REFERENCES}}', '/agents/references')
+    .replaceAll('{{MPX_SKILL_PREFIX}}', '');
+  target = target.startsWith('/')
+    ? path.posix.normalize(target.slice(1))
+    : path.posix.normalize(path.posix.join(path.posix.dirname(from), target));
+  if (target === '..' || target.startsWith('../') || path.posix.isAbsolute(target)) {
+    throw new Error(`authored path escapes content from content/${from}: ${rawTarget}`);
+  }
+  return target;
+}
+
+function replaceEligibleIncludes(markdown: string, replace: (requested: string) => string, where: string): string {
+  const visible = maskMarkdownCode(markdown);
+  const parts: string[] = [];
+  let cursor = 0;
+  for (const match of visible.matchAll(INCLUDE_PATTERN)) {
+    if (visible.slice(cursor, match.index).includes(INCLUDE_START)) throw new Error(`malformed include in ${where}`);
+    parts.push(markdown.slice(cursor, match.index), replace(match[1]!.trim()));
+    cursor = match.index! + match[0].length;
+  }
+  parts.push(markdown.slice(cursor));
+  if (visible.slice(cursor).includes(INCLUDE_START)) throw new Error(`malformed include in ${where}`);
+  return parts.join('');
+}
+
+function expandIncludes(
+  relative: string,
+  sources: ReadonlyMap<string, SourceFile>,
+  stack: readonly string[] = [],
+  consumer = relative,
+): Buffer {
+  const source = sources.get(relative.toLowerCase());
+  if (!source) throw new Error(`missing include source: content/${relative}`);
+  const text = textOf(source.content);
+  if (text === undefined) {
+    if (stack.length) throw new Error(`included source must be UTF-8 text: content/${source.relative}`);
+    return source.content;
+  }
+  if (stack.some((item) => item.toLowerCase() === source.relative.toLowerCase())) {
+    throw new Error(`include cycle: ${[...stack, source.relative].map((item) => `content/${item}`).join(' -> ')}`);
+  }
+  const frontmatter = /^---\r?\n([\s\S]*?)^---[ \t]*(?:\r?\n|$)/m.exec(text);
+  if (frontmatter?.index === 0 && frontmatter[1]!.includes(INCLUDE_START)) {
+    throw new Error(`include directives are only allowed in bodies: content/${source.relative}`);
+  }
+  const rebased = stack.length === 0 ? source.content : rewriteMarkdownTargets(source.content, (raw) => {
+    const target = parseLocalTarget(raw);
+    if (!target) return raw;
+    const canonical = authoredTarget(source.relative, target.path);
+    return serializeLocalTarget(path.posix.relative(path.posix.dirname(consumer), canonical) || '.', target);
+  });
+  const rebasedText = textOf(rebased)!;
+  const expanded = replaceEligibleIncludes(rebasedText, (requested) => {
+    const target = authoredTarget(source.relative, requested);
+    const included = sources.get(target.toLowerCase());
+    if (!included) throw new Error(`missing include in content/${source.relative}: ${requested}`);
+    return expandIncludes(included.relative, sources, [...stack, source.relative], consumer).toString('utf8');
+  }, `content/${source.relative}`);
+  return expanded === text ? source.content : Buffer.from(expanded);
+}
+
 function replacePlaceholders(content: Buffer, harness: Harness, outputPath: string, canonical = false): Buffer {
   const text = textOf(content);
   if (text === undefined) return content;
@@ -257,70 +333,204 @@ function replacePlaceholders(content: Buffer, harness: Harness, outputPath: stri
   };
   // Named compiler placeholders use uppercase identifiers. Vue/React/Handlebars
   // examples are content, not a request to rewrite or discard template syntax.
-  const replaced = text.replace(/\{\{[A-Z][A-Z0-9_]*\}\}/g, (token) => {
+  const codeMask = maskMarkdownCode(text);
+  const replaced = text.replace(/\{\{[A-Z][A-Z0-9_]*\}\}/g, (token, offset: number) => {
     if (!PLACEHOLDERS.includes(token as (typeof PLACEHOLDERS)[number])) throw new Error(`unknown placeholder ${token} in ${outputPath}`);
-    return values[token as (typeof PLACEHOLDERS)[number]];
+    const literalInclude = codeMask[offset] === ' ' && text.lastIndexOf(INCLUDE_START, offset) > text.lastIndexOf('}}', offset);
+    return literalInclude ? token : values[token as (typeof PLACEHOLDERS)[number]];
   });
-  if (/\{\{\s*MPX_/.test(replaced)) throw new Error(`unresolved or malformed MPX placeholder in ${outputPath}`);
+  const validationMask = maskMarkdownCode(replaced);
+  for (const match of replaced.matchAll(/\{\{\s*MPX_/g)) {
+    const literalInclude = validationMask[match.index!] === ' ' && replaced.lastIndexOf(INCLUDE_START, match.index) > replaced.lastIndexOf('}}', match.index);
+    if (!literalInclude) throw new Error(`unresolved or malformed MPX placeholder in ${outputPath}`);
+  }
   return replaced === text ? content : Buffer.from(replaced);
 }
 
-function withoutCode(markdown: string): string {
-  const lines = markdown.split(/(?<=\n)/);
+interface MarkdownTarget { start: number; end: number; raw: string }
+
+function maskMarkdownCode(markdown: string): string {
+  const masked = markdown.split('');
+  const hide = (start: number, end: number): void => {
+    for (let index = start; index < end; index++) if (masked[index] !== '\n' && masked[index] !== '\r') masked[index] = ' ';
+  };
+  const frontmatter = /^---\r?\n[\s\S]*?^---[ \t]*(?:\r?\n|$)/m.exec(markdown);
+  if (frontmatter?.index === 0) hide(0, frontmatter[0].length);
+  const lines = markdown.matchAll(/.*(?:\n|$)/g);
   let fence: string | undefined;
-  return lines.map((line) => {
-    const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
-    if (fence) {
-      if (marker?.startsWith(fence.charAt(0)) && marker.length >= fence.length) fence = undefined;
-      return line.endsWith('\n') ? '\n' : '';
-    }
-    if (marker) {
-      fence = marker;
-      return line.endsWith('\n') ? '\n' : '';
-    }
-    if (/^(?: {4}|\t)/.test(line)) return line.endsWith('\n') ? '\n' : '';
-    return line.replace(/(`+)[^\n]*?\1/g, '');
-  }).join('');
+  for (const line of lines) {
+    if (!line[0]) continue;
+    const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line[0])?.[1];
+    if (fence || marker || /^(?: {4}|\t)/.test(line[0])) hide(line.index!, line.index! + line[0].length);
+    if (fence && marker?.startsWith(fence.charAt(0)) && marker.length >= fence.length) fence = undefined;
+    else if (!fence && marker) fence = marker;
+  }
+  const visible = masked.join('');
+  for (const match of visible.matchAll(/(`+)[^\n]*?\1/g)) hide(match.index!, match.index! + match[0].length);
+  return masked.join('');
 }
 
-function markdownTargets(content: Buffer): string[] {
+function markdownTargetSpans(content: Buffer): MarkdownTarget[] {
   const text = textOf(content);
   if (text === undefined) return [];
-  const clean = withoutCode(text.replace(/^---\r?\n[\s\S]*?^---[ \t]*(?:\r?\n|$)/m, ''));
-  const targets: string[] = [];
+  const clean = maskMarkdownCode(text);
+  const targets: MarkdownTarget[] = [];
   for (const match of clean.matchAll(/!?\[[^\]\n]*\]\(\s*/g)) {
     let cursor = match.index! + match[0].length;
     if (clean[cursor] === '<') {
       const end = clean.indexOf('>', cursor + 1);
-      if (end >= 0) targets.push(clean.slice(cursor + 1, end));
+      if (end >= 0) targets.push({ start: cursor + 1, end, raw: text.slice(cursor + 1, end) });
       continue;
     }
-    let target = ''; let depth = 0;
+    const start = cursor;
+    let depth = 0;
     for (; cursor < clean.length; cursor++) {
       const char = clean[cursor]!;
-      if (char === '\\' && cursor + 1 < clean.length) { target += char + clean[++cursor]!; continue; }
-      if (char === ')' && depth === 0 || /\s/.test(char) && depth === 0) break;
+      if (char === '\\' && cursor + 1 < clean.length) { cursor++; continue; }
+      if ((char === ')' || /\s/.test(char)) && depth === 0) break;
       if (char === '(') depth++;
       if (char === ')') depth--;
-      target += char;
     }
-    if (target) targets.push(target);
+    if (cursor > start) targets.push({ start, end: cursor, raw: text.slice(start, cursor) });
   }
-  for (const match of clean.matchAll(/<(?:a|img|source)\b[^>]*?\b(?:href|src)\s*=\s*(["'])(.*?)\1/gi)) targets.push(match[2]!);
-  for (const match of clean.matchAll(/^ {0,3}\[[^\]\n]+\]:\s*(<[^>]+>|\S+)/gm)) targets.push(match[1]!);
-  return targets;
+  for (const match of clean.matchAll(/<(?:a|img|source)\b[^>]*?\b(?:href|src)\s*=\s*(["'])(.*?)\1/gi)) {
+    const offset = match[0].indexOf(match[2]!);
+    const start = match.index! + offset;
+    targets.push({ start, end: start + match[2]!.length, raw: text.slice(start, start + match[2]!.length) });
+  }
+  for (const match of clean.matchAll(/^ {0,3}\[[^\]\n]+\]:\s*(<[^>]+>|\S+)/gm)) {
+    const offset = match[0].lastIndexOf(match[1]!);
+    const start = match.index! + offset;
+    targets.push({ start, end: start + match[1]!.length, raw: text.slice(start, start + match[1]!.length) });
+  }
+  return targets.sort((left, right) => left.start - right.start);
+}
+
+function markdownTargets(content: Buffer): string[] {
+  return markdownTargetSpans(content).map(({ raw }) => raw);
+}
+
+interface LocalMarkdownTarget { path: string; suffix: string; angled: boolean }
+
+function parseLocalTarget(raw: string): LocalMarkdownTarget | undefined {
+  const angled = raw.startsWith('<') && raw.endsWith('>');
+  const target = angled ? raw.slice(1, -1) : raw;
+  if (!target || target.startsWith('#') || target.startsWith('/') || target.startsWith('//') || /^[a-z][a-z0-9+.-]*:/i.test(target)) return undefined;
+  let suffixStart = target.length;
+  for (let index = 0; index < target.length; index++) {
+    if (target[index] === '\\') { index++; continue; }
+    if (target[index] === '?' || target[index] === '#') { suffixStart = index; break; }
+  }
+  const authoredPath = target.slice(0, suffixStart);
+  if (!authoredPath) return undefined;
+  let decodedPath: string;
+  try {
+    decodedPath = decodeURIComponent(authoredPath);
+  } catch {
+    decodedPath = authoredPath;
+  }
+  return {
+    path: decodedPath.replace(/\\([() #])/g, '$1').replaceAll('\\', '/'),
+    suffix: target.slice(suffixStart),
+    angled,
+  };
+}
+
+function encodeMarkdownPath(targetPath: string): string {
+  return targetPath.split('/').map((segment) => encodeURIComponent(segment).replace(/[!'()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`)).join('/');
+}
+
+function serializeLocalTarget(targetPath: string, original: LocalMarkdownTarget): string {
+  const serialized = `${encodeMarkdownPath(targetPath)}${original.suffix}`;
+  return original.angled ? `<${serialized}>` : serialized;
 }
 
 function localTarget(raw: string): string | undefined {
-  let target = raw.startsWith('<') && raw.endsWith('>') ? raw.slice(1, -1) : raw;
-  if (!target || target.startsWith('#') || target.startsWith('/') || target.startsWith('//') || /^[a-z][a-z0-9+.-]*:/i.test(target)) return undefined;
-  target = target.split('#', 1)[0]!.split('?', 1)[0]!;
-  if (!target) return undefined;
-  try {
-    return decodeURIComponent(target).replace(/\\([() ])/g, '$1').replaceAll('\\', '/');
-  } catch {
-    return target.replaceAll('\\', '/');
+  return parseLocalTarget(raw)?.path;
+}
+
+function rewriteMarkdownTargets(content: Buffer, rewrite: (raw: string) => string): Buffer {
+  const text = textOf(content);
+  if (text === undefined) return content;
+  let cursor = 0;
+  let changed = false;
+  const parts: string[] = [];
+  for (const target of markdownTargetSpans(content)) {
+    const replacement = rewrite(target.raw);
+    parts.push(text.slice(cursor, target.start), replacement);
+    cursor = target.end;
+    changed ||= replacement !== target.raw;
   }
+  if (!changed) return content;
+  parts.push(text.slice(cursor));
+  return Buffer.from(parts.join(''));
+}
+
+function bundledDependency(dependency: SourceFile): { destination: string; content: Buffer } {
+  const skillMatch = /^skills\/([^/]+)\/SKILL\.md$/.exec(dependency.relative);
+  if (!skillMatch) return { destination: `references/${dependency.relative}`, content: dependency.content };
+  return {
+    destination: `references/skills/${skillMatch[1]}/REFERENCE.md`,
+    content: parseMarkdown(`content/${dependency.relative}`, dependency.content).body,
+  };
+}
+
+function skillSupportFiles(
+  skill: SourceFile,
+  localSupport: readonly SourceFile[],
+  sources: ReadonlyMap<string, SourceFile>,
+): { skillContent: Buffer; support: SourceFile[] } {
+  const skillRoot = path.posix.dirname(skill.relative);
+  const bundled = new Map(localSupport.map((file) => [file.relative.slice(`${skillRoot}/`.length).toLowerCase(), {
+    relative: file.relative.slice(`${skillRoot}/`.length), content: file.content,
+  }]));
+  const origins = new Map(localSupport.map((file) => [file.relative.slice(`${skillRoot}/`.length).toLowerCase(), file.relative.toLowerCase()]));
+  const queue: Array<{ source: SourceFile; destination: string; content: Buffer }> = [
+    { source: skill, destination: 'SKILL.md', content: skill.content },
+    ...localSupport.map((source) => ({ source, destination: source.relative.slice(`${skillRoot}/`.length), content: source.content })),
+  ];
+  const visited = new Set<string>();
+  let skillContent = skill.content;
+  const addDependency = (dependency: SourceFile): string => {
+    const materialized = bundledDependency(dependency);
+    const key = materialized.destination.toLowerCase();
+    const previous = bundled.get(key);
+    if (previous && origins.get(key) !== dependency.relative.toLowerCase()) {
+      throw new Error(`case-insensitive skill bundle collision: ${materialized.destination} conflicts with ${previous.relative}`);
+    }
+    if (!previous) {
+      origins.set(key, dependency.relative.toLowerCase());
+      const item = { relative: materialized.destination, content: materialized.content };
+      bundled.set(key, item);
+      queue.push({ source: dependency, destination: materialized.destination, content: materialized.content });
+    }
+    return materialized.destination;
+  };
+  while (queue.length) {
+    const current = queue.shift()!;
+    const visitKey = `${current.source.relative.toLowerCase()}\0${current.destination.toLowerCase()}`;
+    if (visited.has(visitKey)) continue;
+    visited.add(visitKey);
+    if (!current.destination.toLowerCase().endsWith('.md')) continue;
+    const rewritten = rewriteMarkdownTargets(current.content, (raw) => {
+      const target = parseLocalTarget(raw);
+      if (!target) return raw;
+      const canonical = authoredTarget(current.source.relative, target.path);
+      const direct = sources.get(canonical.toLowerCase());
+      const directoryFiles = direct ? [] : [...sources.values()].filter((file) => file.relative.toLowerCase().startsWith(`${canonical.toLowerCase()}/`));
+      if (!direct && directoryFiles.length === 0) return raw;
+      if (canonical === skillRoot || canonical.startsWith(`${skillRoot}/`)) {
+        const destination = canonical === skillRoot ? '.' : canonical.slice(`${skillRoot}/`.length);
+        return serializeLocalTarget(path.posix.relative(path.posix.dirname(current.destination), destination) || '.', target);
+      }
+      for (const dependency of direct ? [direct] : directoryFiles) addDependency(dependency);
+      const destination = direct ? bundledDependency(direct).destination : `references/${canonical}`;
+      return serializeLocalTarget(path.posix.relative(path.posix.dirname(current.destination), destination) || '.', target);
+    });
+    if (current.destination !== 'SKILL.md') bundled.set(current.destination.toLowerCase(), { relative: current.destination, content: rewritten });
+    else skillContent = rewritten;
+  }
+  return { skillContent, support: [...bundled.values()].sort((left, right) => left.relative.localeCompare(right.relative)) };
 }
 
 function validateReferences(files: readonly { path: string; content: Buffer }[], label: string): void {
@@ -373,14 +583,16 @@ function nativeAgent(data: Mapping, metadata: AgentMetadata, profiles: RuntimePr
 
 export async function projectContent(root: string): Promise<Projection[]> {
   const contentRoot = path.resolve(root, 'content');
-  const sources = await collectSource(contentRoot);
-  const sourceByPath = new Map(sources.map((file) => [file.relative, file]));
+  const collectedSources = await collectSource(contentRoot);
+  const collectedByPath = sourceLookup(collectedSources);
+  const sources = collectedSources.map((file) => ({ ...file, content: expandIncludes(file.relative, collectedByPath) }));
+  const sourceByPath = sourceLookup(sources);
   const profileSource = sourceByPath.get('runtime-profiles.json');
   if (!profileSource) throw new Error('content/runtime-profiles.json is required');
   const profiles = runtimeProfiles(profileSource.content, 'content/runtime-profiles.json');
   const skillDirectories = new Set(sources.filter((file) => file.relative.startsWith('skills/')).map((file) => file.relative.split('/')[1]!));
   for (const directory of skillDirectories) {
-    if (!sourceByPath.has(`skills/${directory}/SKILL.md`)) throw new Error(`content/skills/${directory} is missing SKILL.md`);
+    if (!sourceByPath.has(`skills/${directory}/skill.md`)) throw new Error(`content/skills/${directory} is missing SKILL.md`);
   }
 
   const canonical = sources.map((file) => {
@@ -408,9 +620,10 @@ export async function projectContent(root: string): Promise<Projection[]> {
   for (const skill of skills) {
     const [, directoryName] = /^skills\/([^/]+)\/SKILL\.md$/.exec(skill.relative)!;
     assertBareName(directoryName, `content/${skill.relative} directory`);
-    const parsed = parseMarkdown(`content/${skill.relative}`, skill.content);
+    const localSupport = sources.filter((file) => file.relative.startsWith(`skills/${directoryName}/`) && file.relative !== skill.relative);
+    const bundled = skillSupportFiles(skill, localSupport, sourceByPath);
+    const parsed = parseMarkdown(`content/${skill.relative}`, bundled.skillContent);
     const metadata = skillMetadata(parsed.data, directoryName, `content/${skill.relative}`);
-    const support = sources.filter((file) => file.relative.startsWith(`skills/${directoryName}/`) && file.relative !== skill.relative);
     for (const pack of metadata.skillPacks) {
       for (const harness of HARNESSES) {
         const skillRoot = harness === 'pi'
@@ -419,9 +632,8 @@ export async function projectContent(root: string): Promise<Projection[]> {
         const outputPath = `${skillRoot}/SKILL.md`;
         const body = replacePlaceholders(parsed.body, harness, outputPath);
         add(outputPath, renderMarkdown(nativeSkill(parsed.data, metadata, harness), body));
-        for (const file of support) {
-          const relative = file.relative.slice(`skills/${directoryName}/`.length);
-          const destination = `${skillRoot}/${relative}`;
+        for (const file of bundled.support) {
+          const destination = `${skillRoot}/${file.relative}`;
           add(destination, replacePlaceholders(file.content, harness, destination));
         }
       }

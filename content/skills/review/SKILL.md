@@ -76,9 +76,13 @@ Partial coverage runs the first four.
    exist; otherwise return a clean summary and residual verification gaps.
 6. Decide autofix from the explicit flag or threshold. Keep review read-only when fixes are off or
    no findings exist.
-7. For autofix, analyze each finding into an exact file, current code, and concrete change, then
-   spawn `mpx-executor` with only those instructions. Re-run the same reviewers after changes, up to
-   three iterations or until clean, appending post-fix results to `REVIEW.md`.
+7. For autofix, analyze each finding into an exact file, current code, and concrete change. Discover
+   bounded checks from project `fast_checks` / `full_checks` or repository scripts. For every
+   accepted repair, spawn `mpx-executor` with relevant requirements, failures, acceptance criteria,
+   the precise repair objective, and file pointers; instruct it to inspect the current `git diff`
+   and relevant files itself. Then dispatch `mpx-checker` and await formatting and early checks
+   before running the same reviewers and deferred checks in parallel, up to three iterations or
+   until clean. Reviewers do not write source. Append post-fix results to `REVIEW.md`.
 8. State which acceptance criteria are verified, unverified, or contradicted. Report findings first
    with precise locations and consequences; separate blockers from optional improvements.
 

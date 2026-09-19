@@ -44,13 +44,16 @@ Parse `the invocation input` into explicit file or folder targets.
 Spawn one native subagent per unit using the Agent capability available in {{MPX_HARNESS}}. Select
 the canonical `advanced` class with medium effort through structured runtime options when the native
 agent has no declared policy; do not embed a vendor model ID or add model-resolution machinery. Use
-fresh bounded context for each unit and dispatch disjoint units in parallel. Each prompt must name
-the target, allowed related paths, project conventions, and exact verification commands when known.
+fresh bounded context for each unit and dispatch disjoint units in parallel. Each prompt must name the target, allowed related paths and file pointers, relevant requirements and
+known failures, observable acceptance criteria, the precise decomposition objective, project
+conventions, and exact verification commands when known. Instruct the fresh executor to inspect the
+current `git diff` and relevant files itself.
 
 Use this prompt contract for every unit:
 
 ```text
-You are decomposing one large file into multiple files/modules.
+You are the fresh executor for one bounded decomposition unit. Inspect the current git diff and
+relevant files before editing.
 
 Goal:
 - Split the target file into logical modules (constants, utilities, types, hooks,
@@ -61,6 +64,9 @@ Goal:
 Input:
 - Target unit: <file path>
 - Allowed scope: <related module paths>
+- Requirements and known failures: <relevant requirements/failures or none>
+- Acceptance criteria: <observable criteria>
+- File pointers: <target and relevant dependency paths>
 - Constraints: no feature changes and no behavior changes.
 
 Required actions:
@@ -70,9 +76,10 @@ Required actions:
 4) Move code into clearly named modules.
 5) Update imports, exports, and every reference in the allowed scope.
 6) Remove dead code discovered during extraction.
-7) Run the supplied targeted checks/tests; when none were supplied, perform static
-   verification of imports, exports, and call paths and say that final command verification
-   remains with the parent.
+7) Preserve existing meaningful coverage and add or update tests only when they proportionally
+   verify changed behavior, important failure modes, or a known regression.
+8) Run the supplied targeted checks/tests; when none were supplied, perform static verification of
+   imports, exports, and call paths and say that final command verification remains with the parent.
 
 Required output:
 - New file tree for this unit.

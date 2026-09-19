@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -104,10 +104,17 @@ test('balanced Markdown/HTML references and skill-prefix placeholders resolve wi
   const file = path.join(root, 'content/skills/review/SKILL.md');
   const body = await readFile(file, 'utf8');
   await put(root, 'content/skills/review/references/nested(a).md', 'Guide');
-  await writeFile(file, `${body}\n[balanced](references/nested(a).md)\n<a href="references/nested(a).md">HTML</a>\n[other](../{{MPX_SKILL_PREFIX}}personal-note/SKILL.md)\n`);
+  await put(root, 'content/skills/review/references/guide # (one).md', 'Special');
+  await writeFile(file, `${body}\n[balanced](references/nested(a).md)\n<a href="references/nested(a).md">HTML</a>\n[encoded](references/guide%20%23%20%28one%29.md?raw=1#part)\n[escaped](references/guide\\ \\#\\ \\(one\\).md#part)\n[angle](<references/guide%20%23%20(one).md#part>)\n[special]: <references/guide%20%23%20(one).md?raw=1#part>\n[other](../{{MPX_SKILL_PREFIX}}personal-note/SKILL.md)\n`);
   // Both fixture skills need matching packs for a sibling reference.
   const other = path.join(root, 'content/skills/personal-note/SKILL.md');
   await writeFile(other, (await readFile(other, 'utf8')).replace('skillPacks: [personal]', 'skillPacks: [development, personal]'));
+  const projected = new Map((await projectContent(root)).map(({ path: outputPath, content }) => [outputPath, content.toString()]));
+  const output = projected.get('dist/packs/development/pi/skills/mp-review/SKILL.md')!;
+  assert.match(output, /references\/guide%20%23%20%28one%29\.md\?raw=1#part/);
+  assert.match(output, /\[escaped\]\(references\/guide%20%23%20%28one%29\.md#part\)/);
+  assert.match(output, /\[angle\]\(<references\/guide%20%23%20%28one%29\.md#part>\)/);
+  assert.match(output, /\[special\]: <references\/guide%20%23%20%28one%29\.md\?raw=1#part>/);
   await build(root);
   await writeFile(file, `${body}\n<img src="missing-image.png">\n`);
   await assert.rejects(projectContent(root), /missing-image/);
@@ -151,10 +158,11 @@ test('projects deterministic native metadata while preserving bodies and support
   });
   assert.match(piSkill.toString(), /Use \/skill:mp-review and mpx-explorer\./);
   assert.match(claudeSkill.toString(), /Use \/mp-review and mpx-explorer\./);
-  assert.match(piSkill.toString(), /\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/pi\/instructions\/shared\/base\.md/);
-  assert.ok(piSkill.toString().endsWith('agent reference]: ../../../../../pi/agents/references/roles.md\r\n'));
+  assert.match(piSkill.toString(), /references\/instructions\/shared\/base\.md/);
+  assert.ok(piSkill.toString().endsWith('agent reference]: references/agents/references/roles.md\r\n'));
 
-  assert.deepEqual(markdownBody(piSkill), Buffer.from(`# Review 🧪\r\n\r\nUse /skill:mp-review and mpx-explorer.\r\nSee [guide](references/guide.md), ![pixel](assets/pixel.bin), and [shared](../../../../../pi/instructions/shared/base.md).\r\n[agent reference]: ../../../../../pi/agents/references/roles.md\r\n`));
+  assert.deepEqual(markdownBody(piSkill), Buffer.from(`# Review 🧪\r\n\r\nUse /skill:mp-review and mpx-explorer.\r\nSee [guide](references/guide.md), ![pixel](assets/pixel.bin), and [shared](references/instructions/shared/base.md).\r\n[agent reference]: references/agents/references/roles.md\r\n`));
+  assert.equal(byPath.get('dist/packs/development/pi/skills/mp-review/references/instructions/shared/base.md')?.toString(), '# Shared\n');
   assert.deepEqual(byPath.get('dist/packs/development/pi/skills/mp-review/assets/pixel.bin'), Buffer.from([0, 255, 1, 2, 3]));
   assert.deepEqual(byPath.get('dist/claude/hooks/helper.bin'), Buffer.from([8, 0, 9, 10]));
   assert.equal(byPath.has('dist/pi/instructions/claude/native.md'), false);
@@ -239,6 +247,29 @@ test('excludes archived and unfinished skill trees and removes their stale outpu
   assert.ok(!(await filesBelow(path.join(root, 'dist'))).some(file => file.includes('mp-draft')));
 });
 
+test('archiving an agent removes both harness outputs without validating archived content', async () => {
+  const root = await fixture();
+  const agentPath = path.join(root, 'content/agents/explorer.md');
+  await writeFile(agentPath, `${await readFile(agentPath, 'utf8')}{{include:../instructions/shared/base.md}}`);
+  await build(root);
+  const unaffectedPath = path.join(root, 'dist/packs/development/pi/skills/mp-review/SKILL.md');
+  const unaffectedContent = await readFile(unaffectedPath);
+  const archivedPath = path.join(root, 'content/agents/archived/explorer.md');
+  const authoredContent = await readFile(agentPath);
+  await mkdir(path.dirname(archivedPath), { recursive: true });
+  await rename(agentPath, archivedPath);
+  assert.deepEqual(await readFile(archivedPath), authoredContent);
+
+  const result = await build(root);
+  const generatedAgents = ['dist/claude/agents/mpx-explorer.md', 'dist/pi/agents/mpx-explorer.md'];
+  assert.deepEqual(result.changed, generatedAgents);
+  for (const generatedAgent of generatedAgents) {
+    await assert.rejects(stat(path.join(root, generatedAgent)), { code: 'ENOENT' });
+  }
+  assert.deepEqual(await readFile(unaffectedPath), unaffectedContent);
+  assert.deepEqual(await checkOutput(root), []);
+});
+
 test('rejects malformed metadata, unknown placeholders, duplicate outputs, and broken local Markdown references', async (t) => {
   const cases: Array<[string, (root: string) => Promise<void>, RegExp]> = [
     ['unsafe skill name', async (root) => put(root, 'content/skills/review/SKILL.md', `---\nname: ../review\ndescription: bad\nmetadata: { mpx: { schemaVersion: 1, skillPacks: [development] } }\n---\nbody\n`), /safe lowercase bare name/],
@@ -267,6 +298,87 @@ test('rejects malformed metadata, unknown placeholders, duplicate outputs, and b
   const root = await fixture();
   await put(root, 'content/rules/examples.md', `A URL [site](https://example.com/nope), [anchor](#part), and inline code \`[sample](missing.ts)\`.\n\n\`\`\`ts\nimport './missing.js';\n[example](also-missing.md)\n\`\`\`\n\n    [indented example](not-real.md)\n`);
   await projectContent(root);
+});
+
+test('expands explicit includes transitively for both harnesses and rejects invalid include graphs', async (t) => {
+  await t.test('transitive shared-root include', async () => {
+    const root = await fixture();
+    await put(root, 'content/instructions/shared/guides/guide # (one).md', 'Leaf guide.\n');
+    await put(root, 'content/instructions/shared/leaf.md', 'Exact wording. [leaf](guides/guide%20%23%20(one).md)\n');
+    await put(root, 'content/instructions/shared/middle.md', 'Before\n{{include:leaf.md}}After\n');
+    const agent = path.join(root, 'content/agents/explorer.md');
+    await writeFile(agent, (await readFile(agent, 'utf8')).replace('Remain an exploration-class agent.', '{{include:{{MPX_SHARED_INSTRUCTIONS}}/middle.md}}') + '\n`{{include:{{MPX_SHARED_INSTRUCTIONS}}/leaf.md}}`\n```text\n{{include:{{MPX_SHARED_INSTRUCTIONS}}/leaf.md}}\n```\n');
+    const projected = new Map((await projectContent(root)).map(({ path: outputPath, content }) => [outputPath, content.toString()]));
+    for (const harness of ['pi', 'claude']) {
+      const output = projected.get(`dist/${harness}/agents/mpx-explorer.md`)!;
+      assert.match(output, /Before\nExact wording\.\n? \[leaf\]\(\.\.\/instructions\/shared\/guides\/guide%20%23%20%28one%29\.md\)\nAfter/);
+      assert.equal((output.match(/\{\{include:\{\{MPX_SHARED_INSTRUCTIONS\}\}\/leaf\.md\}\}/g) ?? []).length, 2);
+    }
+  });
+
+  const cases: Array<[string, (root: string) => Promise<void>, RegExp]> = [
+    ['missing', async (root) => put(root, 'content/instructions/shared/base.md', '{{include:missing.md}}'), /missing include/],
+    ['cycle', async (root) => {
+      await put(root, 'content/instructions/shared/base.md', '{{include:other.md}}');
+      await put(root, 'content/instructions/shared/other.md', '{{include:base.md}}');
+    }, /include cycle/],
+    ['escape', async (root) => put(root, 'content/instructions/shared/base.md', '{{include:../../../outside.md}}'), /escapes content/],
+    ['malformed body directive', async (root) => put(root, 'content/instructions/shared/base.md', '{{include:missing.md'), /malformed include/],
+    ['frontmatter directive', async (root) => put(root, 'content/agents/explorer.md', '---\nname: explorer\ndescription: "{{include:description.md}}"\n---\nBody\n'), /only allowed in bodies/],
+    ['unknown placeholder in literal include', async (root) => put(root, 'content/instructions/shared/base.md', '`{{include:{{UNKNOWN}}/example.md}}`\n'), /unknown placeholder/],
+  ];
+  for (const [name, mutate, expected] of cases) await t.test(name, async () => {
+    const root = await fixture();
+    await mutate(root);
+    await assert.rejects(projectContent(root), expected);
+  });
+});
+
+test('bundles cross-skill bodies and their transitive closure without nested discoverable skills', async () => {
+  const root = await fixture();
+  const skill = path.join(root, 'content/skills/review/SKILL.md');
+  await writeFile(skill, `${await readFile(skill, 'utf8')}\n[external](../personal-note/SKILL.md#section)\n[tools]({{MPX_SHARED_INSTRUCTIONS}}/tooling)\n`);
+  const dependencySkill = path.join(root, 'content/skills/personal-note/SKILL.md');
+  await writeFile(dependencySkill, `${await readFile(dependencySkill, 'utf8')}\n[binary](media/pixel.bin#raw)\n[back](../review/SKILL.md)\n`);
+  await put(root, 'content/skills/personal-note/media/pixel.bin', Buffer.from([9, 0, 8]));
+  await put(root, 'content/instructions/shared/tooling/run.sh', '#!/bin/sh\n');
+  const first = await projectContent(root);
+  const second = await projectContent(root);
+  assert.deepEqual(first, second);
+  const files = new Map(first.map(({ path: outputPath, content }) => [outputPath, content]));
+  const prefix = 'dist/packs/development/pi/skills/mp-review/';
+  assert.match(files.get(`${prefix}SKILL.md`)!.toString(), /references\/skills\/personal-note\/REFERENCE\.md#section/);
+  const reference = files.get(`${prefix}references/skills/personal-note/REFERENCE.md`)!.toString();
+  assert.ok(!reference.startsWith('---'));
+  assert.match(reference, /media\/pixel\.bin#raw/);
+  assert.match(reference, /\.\.\/\.\.\/\.\.\/SKILL\.md/);
+  assert.deepEqual(files.get(`${prefix}references/skills/personal-note/media/pixel.bin`), Buffer.from([9, 0, 8]));
+  assert.equal(files.has(`${prefix}references/skills/personal-note/SKILL.md`), false);
+  assert.equal(files.get(`${prefix}references/instructions/shared/tooling/run.sh`)?.toString(), '#!/bin/sh\n');
+});
+
+test('rewrites only Markdown target spans and resolves canonical cross-skill prefixes', async () => {
+  const root = await fixture();
+  const skill = path.join(root, 'content/skills/review/SKILL.md');
+  const original = await readFile(skill, 'utf8');
+  await writeFile(skill, `${original}\nLiteral {{MPX_SHARED_INSTRUCTIONS}}/base.md\n\`{{MPX_SHARED_INSTRUCTIONS}}/base.md\`\n\`\`\`text\n[code]({{MPX_SHARED_INSTRUCTIONS}}/base.md)\n\`\`\`\n[cross](../{{MPX_SKILL_PREFIX}}personal-note/SKILL.md)\n`);
+  const other = path.join(root, 'content/skills/personal-note/SKILL.md');
+  await writeFile(other, (await readFile(other, 'utf8')).replace('skillPacks: [personal]', 'skillPacks: [development, personal]'));
+  const output = new Map((await projectContent(root)).map(({ path: outputPath, content }) => [outputPath, content.toString()]))
+    .get('dist/packs/development/pi/skills/mp-review/SKILL.md')!;
+  assert.match(output, /Literal \.\.\/\.\.\/\.\.\/\.\.\/\.\.\/pi\/instructions\/shared\/base\.md/);
+  assert.match(output, /`\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/pi\/instructions\/shared\/base\.md`/);
+  assert.match(output, /\[code\]\(\.\.\/\.\.\/\.\.\/\.\.\/\.\.\/pi\/instructions\/shared\/base\.md\)/);
+  assert.match(output, /\[cross\]\(references\/skills\/personal-note\/REFERENCE\.md\)/);
+  assert.equal((output.match(/references\/instructions\/shared\/base\.md/g) ?? []).length, 1);
+});
+
+test('rejects case-insensitive skill bundle destination collisions', async () => {
+  const root = await fixture();
+  const skill = path.join(root, 'content/skills/review/SKILL.md');
+  await writeFile(skill, `${await readFile(skill, 'utf8')}\n[shared]({{MPX_SHARED_INSTRUCTIONS}}/base.md)\n`);
+  await put(root, 'content/skills/review/references/instructions/shared/base.md', 'local collision\n');
+  await assert.rejects(projectContent(root), /skill bundle collision/);
 });
 
 test('accepts the longest skill name whose mp- projection is 64 characters', async () => {

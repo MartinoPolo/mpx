@@ -42,8 +42,9 @@ Use body links, not native sub-Issues.
 ## Pull requests and CI
 
 ```text
+gh pr list --repo <target> --head <branch> --state all --limit 100 --json number,id,url,state,isDraft,baseRefName,headRefName,headRefOid,headRepositoryOwner
 gh pr create --repo <target> --base <base> --head <branch> --title <title> --body-file <file> [--draft]
-gh pr view <pr> --repo <target> --comments --json number,id,title,body,state,isDraft,mergeable,statusCheckRollup,url
+gh pr view <pr> --repo <target> --comments --json number,id,title,body,state,isDraft,mergeable,statusCheckRollup,url,baseRefName,headRefName,headRefOid,headRepositoryOwner
 gh pr edit <pr> --repo <target> [--title <title>] [--body-file <file>] \
     [--base <base>] [--add-label <label>] [--remove-label <label>]
 gh pr comment <pr> --repo <target> --body-file <file>
@@ -56,5 +57,6 @@ gh run rerun <run-id> --repo <target> --failed
 gh pr merge <pr> --repo <target> --merge|--squash|--rebase
 ```
 
-Merge only with fresh human authorization for the exact strategy. Arbitrary review-state
+Merge only with explicit authorization for the current run and permitted strategy. An invoked
+workflow that explicitly authorizes merge supplies that authorization; otherwise ask the user. Arbitrary review-state
 transitions, native hierarchy, and automatic body-link synchronization are unsupported.

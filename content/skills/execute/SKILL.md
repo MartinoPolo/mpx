@@ -1,8 +1,8 @@
 ---
 name: execute
 description:
-  Execute one Issue or inline work end to end with TDD, code review, PR, CI, and default merge
-argument-hint: '[issue|inline/checklist] [--full-review|--no-auto-merge]'
+  Execute one Issue or inline work with implementation, testing, review, and verified delivery
+argument-hint: '[issue|inline/checklist] [--no-tdd|--full-review|--no-auto-merge]'
 metadata:
   author: MartinoPolo
   version: '2.10'
@@ -15,13 +15,15 @@ metadata:
 
 # Execute Work
 
-Unified execution for a single Issue or inline tasks. Invocation explicitly authorizes the original
-end-to-end defaults: implement, commit, push, create/update a PR, GitLab MR, or Gerrit change, wait
-for CI, and merge after green unless `--no-auto-merge` opts out of merging. Inline work commits
-locally without push, PR, or CI. Main is the parent orchestrator: specialists return bounded
-evidence, while main evaluates findings, decides repairs, and owns retries, publication, and final
-verification. Follow the shared [parent-owned repair workflow]({{MPX_SHARED_INSTRUCTIONS}}/REPAIR_ORCHESTRATION.md).
-Use concise normal prose for progress updates and a professional final report.
+Main owns issue/specification analysis, evaluates results, approves repairs, and consolidates
+decisions. After analysis, delegate implementation, checks, reviews, simplification, publication,
+and CI monitoring. Invocation authorizes delivery: work repositories stop at green CI with an
+unmerged PR/MR; personal repositories require confirmed merge plus safe base update.
+`--no-auto-merge` stops at green CI with the PR/MR open. Inline work commits locally without push,
+PR, or CI. Establish personal/work ownership from the resolved account/domain context; ask if it
+is unavailable or contradictory. Do not infer ownership from the Git host.
+
+Keep the issue identity, agreed acceptance criteria, and selected delivery endpoint as the execution objective. Recheck them before accepting implementation, before publication, and in the final report. Completion requires evidence that the acceptance criteria and delivery endpoint are satisfied;
 
 Apply these delivery defaults without routine confirmation. Ask for unresolved prerequisites or
 material ambiguity, not preferences already settled by the workflow.
@@ -33,7 +35,7 @@ providers are GitHub or KanbanFlow. Use each selected provider's documented nati
 invent `mpx issue`, `mpx review`, or `mpx ci` facade actions. Preserve the native authentication
 environment; status/login diagnostics may inspect the active account but must not switch it.
 
-## 1. Resolve and isolate
+## 1. Resolve
 
 Parse `the invocation input`:
 
@@ -52,21 +54,13 @@ design first.
 
 ## 2. Analyze
 
-Invoke `mpx-explorer` with the Issue/task, current checkout, and breadth `medium`. Stop when
-relevant files, callers, existing tests, and project patterns are located; return bounded evidence
-with file/line references. For provider Issues, pass that evidence and the verified Issue
-identity/data to `mpx-issue-analyzer`:
-
-> Issue: [provider, target, ID, title, body, labels, comments, acceptance criteria, linked Issues]
-> Codebase: [current checkout and exploration evidence] Constraints: [scope, repository
-> instructions, known blockers] Classify bug/task/feature; return an execution plan with files, TDD
-> behaviors, acceptance-to-test mapping, risks, open questions, external-library uncertainty, and
-> referenced design artifacts. Return only the agent contract.
-
-Present the analyzer's acceptance-to-behavior mapping and ask for confirmation only when it appears
-incomplete or materially ambiguous; otherwise continue under the invocation's end-to-end
-authorization. Ask only unresolved material questions. If external library behavior is uncertain,
-invoke `mpx-context7-docs-fetcher`; do not guess APIs.
+Read the actual requirements, comments, and constraints yourself. Invoke `mpx-explorer` for broad
+discovery with the Issue/task, current checkout, and breadth `medium`. Stop when relevant files,
+callers, existing tests, and project patterns are located; return bounded evidence with file/line
+references. Main synthesizes the implementation scope, observable acceptance criteria, risks, and
+verification plan. Ask only unresolved material
+questions. If external library behavior is uncertain, invoke `mpx-context7-docs-fetcher`; do not
+guess APIs.
 
 ### Design Mapping
 
@@ -77,55 +71,68 @@ divergent control. Pass these constraints unchanged to execution and verificatio
 
 ## 3. Discover checks
 
-Resolve the bundled [check detector](detect-check-scripts.mjs) relative to this loaded skill. Store
-its validated literal absolute path as `<detector>` and run from the current checkout:
+Use explicit project `fast_checks` / `full_checks` configuration first, the bundled
+[check detector]({{MPX_SHARED_INSTRUCTIONS}}/detect-check-scripts.mjs) second, and checker
+investigation of unresolved discovery last. Resolve the detector relative to this loaded skill and
+run `node "<absolute-detector>" "<checkout>"`. Retain its ordered JSON `fast_checks`, `full_checks`,
+and `unresolved` result. Pass exact command strings and working directories unchanged; resolve
+relative `cwd` values against the checkout, not the skill folder. If configuration comes from the
+main checkout or a machine-local override, supply its resolved config object in a temporary JSON
+file as the detector's third argument, after the checkout and package manager (empty to discover).
+Do not write temporary discovery configuration into the repository.
 
-```bash
-node "<detector>" .
-```
-
-For `PM_UNKNOWN=true`, ask for the package manager and rerun `node "<detector>" . <chosen_pm>`. For
-`NO_PROJECT=true` or no runnable commands, report the missing discovery result and ask for the
-project's verification commands before continuing; do not treat absent checks as passing.
-
-Preserve the exact key=value output: `CHECK_ALL`, `TYPECHECK`, `LINT`, `FORMAT`, `BUILD`, `TEST`,
-`TEST_UNIT`, `TEST_E2E`, package-prefixed keys, and matching `_DIR` working directories when
-emitted. Pass command strings byte-for-byte with their working directories to every agent that
-verifies, resolves conflicts, or fixes CI. Test commands are first-class CI-parity checks: checks
-run in CI must pass locally before push.
+Fast defaults are formatting, typechecking, unit tests, Oxlint, and project-configured Fallow.
+Deferred/full checks are ESLint, build, E2E, and opaque combined checks. These are scheduling
+categories, not measured duration guarantees. Fallow stays project-owned; do not install or enable
+it globally. Missing or unresolved verification is not a passing result; ask only when checker
+investigation cannot establish the required commands.
 
 When verification needs a server, main follows [server discovery and lifecycle](DEV_SERVER.md)
 and supplies the verified URL to check/browser agents. A user-provided URL is optional.
 
-## 4. Execute with TDD
+## 4. Implement and simplify
 
-Map each acceptance criterion to the confirmed observable behaviors. Hand the bounded implementation
-to named agent `mpx-tdd-executor` with the exact behaviors, acceptance criteria, relevant context,
-Design Mapping constraints, and exact discovered commands. Have the executor read [tests](tests.md)
-and [mocking](mocking.md) before designing tests. Require red → minimal green → refactor for each
-behavior and only its executor contract in return. Route `Completed` to verification; route
-`Partial` with completed evidence and remaining items to one bounded retry; route `Blocked` to the
-user without continuing to review or publication. Never weaken a correct test. Correct a test only
-when its assertion, selector, or setup is demonstrably wrong against the acceptance criteria;
-require the executor to return the reason and carry it into the commit message.
+Dispatch one bounded `mpx-executor` with the agreed requirements, acceptance criteria, scope,
+relevant file pointers, Design Mapping constraints, exact focused check commands, and selected test
+mode. Pass that test mode to every fresh executor, including each implementation or CI repair.
+The executor chooses implementation/test details within that scope or follows concrete edit
+instructions when supplied. Default to meaningful test-first implementation. `--no-tdd` excludes
+creating tests during implementation, not running existing tests during verification. Necessary
+updates or retirement of obsolete existing tests follow the new acceptance criteria and must be
+reported. Do not invent tests merely to satisfy TDD.
+
+Evaluate the executor's actual diff and verification evidence. Material ambiguity returns to main.
+Dispatch `mpx-simplifier` for one justified behavior-preserving pass within scope before final
+review; leaving good code unchanged is success. Give it the same requirements, constraints, and
+selected test mode; under `--no-tdd` it must not create or invent tests.
+Consolidate material independent choices, reasons, and uncertainty or alternatives worth human
+review for the final report. Routine coding choices need no entry; create no report files.
 
 ## 5. Verify and review
 
-Follow [Parent-owned Check and CI Repair]({{MPX_SHARED_INSTRUCTIONS}}/REPAIR_ORCHESTRATION.md). Dispatch `mpx-checker`
-with the exact static and test command arrays. In parallel where supported, dispatch the default
-reviewers `mpx-reviewer-code-quality`, `mpx-reviewer-best-practices`, `mpx-reviewer-spec-alignment`,
-and `mpx-reviewer-test-quality`; add `mpx-reviewer-security`, `mpx-reviewer-performance`, and
-`mpx-reviewer-error-handling` for `--full-review`. Give each specialist the context, acceptance
-criteria, Design Mapping constraints, branch, and changed files. Use `mpx-chrome-devtools-tester` only where UI interaction lacks e2e coverage. For authenticated
-browser verification, it may read explicitly approved project test-auth context according to
-repository instructions; this is distinct from provider credential routing. Never expose or commit
-the values, and never repurpose provider credentials.
+Pass the resolved absolute detector path and exact check arrays with working directories to
+`mpx-checker`. Run formatting and early checks before parallel review. Formatting writes
+are allowed and preferred; include resulting changes in verification and review. Then dispatch
+deferred checks and independent reviewers against stable source. Do not run simultaneous writers
+or parallel checks sharing mutable fixtures or servers.
 
-Supply all bounded checker, reviewer, and browser results to `mpx-check-reporter`. Evaluate its
-assessment and send only accepted, precise repairs to `mpx-executor` or behavior repairs to
-`mpx-tdd-executor`. Recheck after repairs. Route remaining unresolved findings to triage; on a
-blocker, do not push. Main owns a maximum of three repair/review iterations and a fresh complete
-local verification before publication.
+Default reviewers are `mpx-reviewer-code-quality`, `mpx-reviewer-best-practices`,
+`mpx-reviewer-spec-alignment`, and `mpx-reviewer-test-quality`; add `mpx-reviewer-security`,
+`mpx-reviewer-performance`, and `mpx-reviewer-error-handling` for `--full-review`. Give each the
+context, acceptance criteria, Design Mapping constraints, branch, and changed files. Prefer
+Playwright for meaningful browser verification. Use `mpx-chrome-devtools-tester` where UI
+interaction lacks adequate E2E coverage. For authenticated browser verification, it may read
+explicitly approved project test-auth context according to repository instructions; this is
+distinct from provider credential routing. Never expose or commit the values, and never repurpose
+provider credentials.
+
+Evaluate supplied findings and contradictory advice before accepting repairs. Use a fresh executor
+for each repair, never a resumed one. Include the selected test mode, relevant requirements,
+failures, acceptance criteria, precise repair objective, and file pointers. Instruct it to inspect
+current `git diff` and relevant files itself; do not paste large diffs/source into the prompt.
+Recheck and review changed code.
+Main owns a maximum of three local repair/review iterations and a fresh complete local verification
+before publication. A blocker or exhausted budget stops publication.
 
 ## 6. Unresolved triage
 
@@ -135,43 +142,32 @@ preserving exact content and linking source/child Issues through body links. It 
 and siblings, appends where scope matches, and otherwise creates/updates the provider-native
 unresolved tracking Issue with `HITL`. Inline work reports unresolved items locally.
 
-## 7. Commit and push
+## 7. Deliver and report
 
-Invoke `mpx-git-committer`:
+Prepare the substantive change summary before delivery so commit/PR wording uses the best
+synthesis. Recheck the execution objective and final verified state, then invoke `mpx-shipper`
+with explicit intended paths, summary, exact verification evidence, and the selected endpoint.
+Inline work always uses `commit` and requires no provider configuration, remote, repository target,
+or Issue identity. Only provider Issue work uses `pr` for work repositories or `--no-auto-merge`;
+otherwise personal provider Issue work uses `merge`. For provider Issue delivery, supply the
+configured remote and validated repository target, independently verified Issue identity and
+canonical link, source and actual target branches, existing immutable PR/run identities, merge
+authorization, and repository merge policy. For personal base synchronization, identify an
+existing target-branch checkout and confirm it is idle; require clean index/worktree, correct
+upstream, no in-progress Git operation, and fast-forward only. Git status alone does not prove
+availability. Do not switch, create, or remove checkouts. Report confirmed merge and blocked base
+synchronization separately; do not claim the full personal endpoint when synchronization is blocked. Three shipping attempts total: initial attempt plus two repair/retry attempts. Do not
+reset this budget between stages or via goal continuation. Main evaluates shipping failures,
+delegates accepted repairs to a fresh executor, verifies again, and invokes the
+shipper with completed-stage evidence so it does not repeat completed operations.
+For CI repairs, supply the validated repository, PR, branch, commit, and failing run/job identities.
 
-> push: true for provider Issues; false for inline work issue_ref: verified
-> provider/target-appropriate closing/reference syntax, absent for inline work commit_hint:
-> [implemented behaviors and any test-correction reasons for the commit message] Return only the
-> agent contract.
-
-Route `OK`; for `SKIP`, verify whether push remains; for `FAIL`, give the concrete failure to a
-bounded executor and retry at most twice. No secret, generated artifact, or unrelated file may be
-staged.
-
-## 8. Publish and close out
-
-Inline work skips provider PR and CI: report implemented behaviors, tests added/modified and their
-results, changed files, local commit, review summary, unresolved items, and blockers. State that
-push and provider close-out were skipped.
-
-Otherwise invoke `mpx-review-manager` with the validated repository target, source branch, selected
-Issue provider, target, ID and canonical reference, base branch, and implementation summary. It uses
-the consolidated repository-provider guide to find or create/update exactly one PR with parent/child
-body links and provider closing syntax. Route `selection_required` to the user to select the
-returned existing PR ID/URL, then reinvoke with that explicit immutable ID. Route `OK` only when an
-explicit PR ID/URL is returned; route `FAIL` to a bounded fix/retry (maximum two), then stop. Before
-retrying an uncertain create, resolve whether it succeeded; never duplicate a PR. Retain that
-identity and never replace it by discovery. Then read and follow [CLOSE_OUT.md](CLOSE_OUT.md).
+The final user report comes after delivery and includes actual acceptance and delivery evidence,
+verification results, material choices and uncertainty, unresolved issues, and any blocked merge
+or base synchronization. Durable decisions go into DECISIONS only after confirmation.
 
 ## Flags
 
+- `--no-tdd`: do not create tests during implementation; existing checks still run.
 - `--full-review`: seven-reviewer set.
-- `--no-auto-merge`: stop after green CI and final-report comment, leaving the PR open.
-
-## Invariants
-
-TDD is mandatory; one focused behavior per test; red before green; minimal green; fix causes rather
-than suppressing diagnostics. Commit after the selected Issue. CI is the completion gate. Default
-after green is provider-policy-compliant merge; checkout handling follows [CLOSE_OUT.md](CLOSE_OUT.md). Main never
-requests or exposes raw reviewer findings, test output, or CI logs when a bounded agent contract
-exists.
+- `--no-auto-merge`: stop after green CI, leaving the PR/MR open.

@@ -128,14 +128,18 @@ decide.
 1. **Pre-analyze each fix** — resolve exact file path, current code, and the precise change
    (`mpx-executor` applies; it does not diagnose). For a C-clear variant addition, specify both the
    edit to the component's variants file and every call-site migration.
-2. Spawn named `mpx-executor` with the concrete per-finding instructions plus the requirement to fix
-   only in-scope findings and preserve each component's public API when refactoring internals.
+2. Spawn named `mpx-executor` with the concrete per-finding instructions, relevant
+   requirements, failures, acceptance criteria, a precise repair objective, and file pointers. Tell
+   it to inspect the current `git diff` and relevant files itself, fix only in-scope findings, and
+   preserve each component's public API when refactoring internals.
 3. After `mpx-executor` completes, **re-read the changed files on disk** (a concurrent rebase/hook
    can silently revert edits — verify the final on-disk state directly, rather than trusting an
-   earlier diff), then run the narrow repository-documented validation applicable to the touched files. Use an
-   existing project check script when documented; do not impose or guess a global typecheck command. Distinguish
-   pre-existing errors from new ones, and account for every actionable finding as applied or with a
-   recorded reason.
+   earlier diff), then run the narrow repository-documented validation applicable to the touched
+   files. Let checker formatting complete before parallel review or deferred checks. Use an existing
+   project check script when documented; do not impose or guess a global typecheck command. Preserve
+   existing meaningful coverage and add or update tests only when they proportionally verify changed
+   behavior, important failure modes, or a known regression. Distinguish pre-existing errors from
+   new ones, and account for every actionable finding as applied or with a recorded reason.
 4. In the output, list any new component variants added so the user can review the design changes.
 
 ### Skip list

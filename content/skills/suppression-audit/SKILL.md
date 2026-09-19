@@ -55,20 +55,23 @@ genuinely needed. Fix unjustified suppressions, verify checks pass, and create a
 
 ### Step 1: Detect Check Commands
 
-Resolve the sibling compiled skill script at
-`../{{MPX_SKILL_PREFIX}}check-fix/scripts/detect-check-scripts.mjs` from this loaded skill, validate
-it, and store its literal absolute path as `<detector>`. If that supporting skill is unavailable in the active pack,
-report the dependency and stop this workflow rather than searching or guessing another root. Run `node <detector>` (optionally pass
-the project directory and package manager as arguments). It prints `KEY=value` pairs (e.g.
-`CHECK_ALL=...`, `TYPECHECK=...`, `LINT=...`, `FORMAT=...`, `BUILD=...`, `TEST_UNIT=...` or
-`TEST=...`, `TEST_E2E=...`, plus `_DIR` companions and `MONOREPO=true` when applicable).
+Resolve the bundled canonical [check detector]({{MPX_SHARED_INSTRUCTIONS}}/detect-check-scripts.mjs)
+from this compiled skill, validate it, and store its literal absolute path as `<detector>`. If it is
+unavailable, report the dependency and stop rather than searching or guessing another root. Run
+`node <detector>` with the project directory when needed. It prints JSON with this schema:
 
-For each scope, store:
+```json
+{"fast_checks":[{"command":"<exact command>","cwd":"<working directory>"}],"full_checks":[{"command":"<exact command>","cwd":"<working directory>"}],"unresolved":[]}
+```
 
-- **Fast plan:** `CHECK_ALL` when present; otherwise `TYPECHECK`, `LINT`, and `FORMAT`, in that
-  order.
-- **Full plan:** the fast plan followed by detected `BUILD`, `TEST_UNIT` or `TEST`, and `TEST_E2E`,
-  in that order.
+Preserve each command and working directory exactly; resolve relative `cwd` values against the
+checkout. For resolved main-checkout configuration or machine-local overrides, pass the config
+object in a temporary JSON file outside the repository as the detector's third argument after the
+checkout and package manager (empty to discover). Explicit project `fast_checks` and
+`full_checks` configuration takes precedence over detector output; ask `mpx-checker` to investigate
+only entries in `unresolved`. The two arrays are ordered plans: run formatting in `fast_checks` to
+completion before any parallel review or deferred check, and include both arrays in final full
+verification.
 
 ### Step 2: Scan for All Suppressions
 
@@ -124,29 +127,37 @@ Log the evaluation as a table (printed to the user) and immediately proceed to f
 
 ### Step 5: Fix Suppressions
 
-Automatically fix every suppression marked REMOVE or UPGRADE — no confirmation needed.
+Automatically fix every suppression marked REMOVE or UPGRADE — no confirmation needed. Pre-analyze
+each accepted fix, then dispatch a fresh `mpx-executor` with relevant requirements, failures,
+acceptance criteria, a precise repair objective, and file pointers. Instruct it to inspect the
+current `git diff` and relevant files itself.
 
 For each fix:
 
-1. Remove the suppression comment
-2. Fix the underlying code issue
-3. Run that scope's detected fast plan to get per-fix feedback
-4. If the fix breaks something, revert and reclassify as KEEP with explanation
+1. Remove the suppression comment.
+2. Fix the underlying code issue.
+3. Preserve existing meaningful coverage and add or update tests only when they proportionally
+   verify changed behavior, important failure modes, or a known regression.
+4. Run that scope's detected `fast_checks` to get per-fix feedback.
+5. If the fix breaks something, revert and reclassify it as KEEP with an explanation.
 
-After all individual fixes pass, run every scope's detected full plan once as final verification. Do
-not substitute guessed commands or repeat the full plan after each fix.
+After all individual fixes pass, run every scope's `fast_checks` and `full_checks` once as final
+verification. Finish any formatting write before parallel review or deferred checks. Do not
+substitute guessed commands or repeat full verification after each fix.
 
 ### Step 6: Create PR
 
-Before provider work, read [provider routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md), load the nearest valid
-`mpxconfig.json`, resolve `repository.provider` independently, and read its planned native guide
-under `{{MPX_SHARED_INSTRUCTIONS}}/providers/`. Use only that guide's native commands; never invent an MPX facade
-action. Then invoke `{{MPX_SKILL_COMMAND}}commit-push-pr` to commit all changes and create a PR. Include the evaluation
-table in the PR body so reviewers can see the reasoning for each decision. If the provider, guide,
-authentication, or tooling is unavailable, preserve local evidence and return the exact blocker and
-manual step rather than switching providers.
-
-PR title format: `chore: audit and fix code quality suppressions`
+Before provider work, read [provider routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md), resolve
+project configuration as described there, resolve `repository.provider` independently, and read
+the selected native guide linked there. Use only that guide's native commands; never invent an MPX facade
+action. Then invoke `{{MPX_SKILL_COMMAND}}pr` with the explicit `pr` endpoint to stage and commit the
+intended changes, push, create or update a draft PR, and monitor CI. Keep the evaluation table in
+the local user report; use the shipper's title/body contract for publication. On hook or CI failure, evaluate
+the bounded evidence, dispatch accepted repairs to a fresh executor with the repair inputs above,
+verify locally, and invoke the shipper workflow again. Allow three aggregate shipping attempts
+total—the initial attempt plus two repair/retry attempts—with no budget reset between delivery
+stages. If the provider, guide, authentication, or tooling is unavailable, preserve local evidence
+and return the exact blocker and manual step rather than switching providers.
 
 ## Edge Cases
 

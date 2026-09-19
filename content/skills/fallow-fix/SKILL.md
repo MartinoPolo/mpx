@@ -78,10 +78,16 @@ For each issue, determine the correct action:
 
 ## Step 3: Apply Fixes
 
+Pre-analyze accepted fixes, then dispatch a fresh `mpx-executor` with the relevant Fallow output,
+requirements, known failures, observable acceptance criteria, precise repair objective, and file
+pointers. Instruct it to inspect the current `git diff` and relevant files itself.
+
 1. Fix or suppress each issue.
-2. After each fix, use the narrowest available form of the original diagnostic as incremental
+2. Preserve existing meaningful coverage and add or update tests only when they proportionally
+   verify changed behavior, important failure modes, or a known regression.
+3. After each fix, use the narrowest available form of the original diagnostic as incremental
    feedback. Do not treat this per-fix rerun as final verification.
-3. If dead-code count legitimately changed (new public API, refactored exports), update the
+4. If dead-code count legitimately changed (new public API, refactored exports), update the
    baseline:
 
 ```bash

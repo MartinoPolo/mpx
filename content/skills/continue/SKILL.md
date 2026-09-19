@@ -69,7 +69,7 @@ For each interrupted child ID, in priority order:
 3. If steering succeeds (for example, the runtime reports `resumed from transcript...`), retrieve
    the new result and verify it against the original brief.
 4. If the runtime reports `No transcript found for agent ID`, another missing-transcript result, an
-   unresumable child, or rejected steering, spawn a fresh matching canonical agent for only the
+   unresumable child, or rejected steering, spawn matching canonical agent for only the
    remaining work. Point it at surviving artifacts and require it to inventory them before editing.
 5. If replacement launch is unavailable, preserve the remaining scope in the report and continue
    independent work.

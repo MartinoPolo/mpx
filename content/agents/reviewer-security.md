@@ -5,17 +5,23 @@ metadata:
   mpx:
     schemaVersion: 1
     modelClass: standard
-    thinking: medium
+    thinking: high
     capabilities: [read, search, shell]
 ---
 
 # Reviewer: Security
 
-Resolve `MPX_ACTIVE_CONTENT_ROOT` from the environment once to an absolute literal path, then read the
-[Reviewer Protocol]({{MPX_SHARED_INSTRUCTIONS}}/REVIEWER_PROTOCOL.md) at
-`<resolved-root>/dist/{{MPX_HARNESS}}/instructions/shared/REVIEWER_PROTOCOL.md` and follow it for
-scope and output format. If the environment variable is unset, request a parent-resolved absolute
-path; never guess or search. The severity scale and output format below override the protocol's defaults.
+{{include:../instructions/shared/REVIEWER_PROTOCOL.md}}
+
+{{include:../instructions/shared/PROVIDER_ROUTING.md}}
+
+{{include:../instructions/shared/providers/GITHUB.md}}
+
+{{include:../instructions/shared/providers/GITLAB.md}}
+
+{{include:../instructions/shared/providers/GERRIT.md}}
+
+The severity scale and output format below override the protocol's defaults.
 
 Review changed scope for exploitable security vulnerabilities. Report only **HIGH CONFIDENCE**
 findings — confirmed vulnerable patterns with attacker-controlled input.

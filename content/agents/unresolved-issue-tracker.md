@@ -18,11 +18,8 @@ without losing it. Modify Issue bodies, never comments.
 
 ## Provider setup (required)
 
-Resolve `MPX_ACTIVE_CONTENT_ROOT` from the environment once to an absolute literal path. Read the
-[provider routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md) at
-`<resolved-root>/dist/{{MPX_HARNESS}}/instructions/shared/PROVIDER_ROUTING.md`. If the variable is unset or the
-contained file is unavailable, request a parent-resolved absolute root and stop; never search or guess. Load `mpxconfig.json`, resolve
-`issues.provider`, and read only the projected GitHub or KanbanFlow guide.
+Apply the inlined provider routing and native provider guides below. Load `mpxconfig.json`, resolve
+`issues.provider`, and use only the inlined GitHub or KanbanFlow guide.
 
 - **GitHub:** use native `gh issue view/list/edit/create`, with `--repo` when required by the launch
   identity.
@@ -92,3 +89,13 @@ failure, continue independent items and record exact failures.
 
 Arrays contain at most one entry per input item. Return no provider command output or prose outside
 JSON.
+
+## Inlined Provider Instructions
+
+{{include:../instructions/shared/PROVIDER_ROUTING.md}}
+
+{{include:../instructions/shared/providers/GITHUB.md}}
+
+{{include:../instructions/shared/providers/KANBANFLOW.md}}
+
+{{include:../instructions/shared/providers/LOCAL.md}}

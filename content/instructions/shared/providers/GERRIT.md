@@ -34,9 +34,10 @@ numbers.
 - Ready/vote: send one JSON stdin line to
   `ssh ... gerrit review --json --project <project> -- <change-number>,<patch-set>`:
   `{"ready":true}` or `{"labels":{"Code-Review":<-2..2>}}`.
-- Submit: only after fresh human authorization, run
+- Submit: only with explicit authorization for the current run, run
   `ssh ... gerrit review --submit --project <project> -- <change-number>,<patch-set>`. Gerrit
-  chooses the server submit strategy.
+  chooses the server submit strategy. An invoked workflow that explicitly authorizes submit
+  supplies that authorization; otherwise ask the user.
 
 Never invent SSH flags, alter Git/SSH authentication, or push to an unvalidated remote/ref.
 Issue/board operations, CI, repository administration, client-selected merge methods, and arbitrary

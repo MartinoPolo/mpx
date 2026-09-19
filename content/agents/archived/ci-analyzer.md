@@ -24,11 +24,8 @@ expected branch, and an explicit positive run/pipeline identity. Require an expl
 identity when the selected provider reads logs by job. Reject missing, malformed, conflicting, or
 ambiguous values before reading logs.
 
-Resolve `MPX_ACTIVE_CONTENT_ROOT` from the environment once to an absolute literal path. Read the
-[provider routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md) at
-`<resolved-root>/dist/{{MPX_HARNESS}}/instructions/shared/PROVIDER_ROUTING.md`. If the variable is unset or the
-contained file is unavailable, request a parent-resolved absolute root and stop; never search or guess. Validate the nearest `mpxconfig.json` and load only the native
-guide selected by `repository.provider`. If configuration, provider guide, repository identity, or
+Apply the inlined provider routing and native provider guides below. Resolve project configuration
+as described there and use only the native guide selected by `repository.provider`. If configuration, provider guide, repository identity, or
 native interface is unavailable, return a blocked handoff. Never infer or switch providers.
 
 Before any log read, use the selected guide to validate that:
@@ -85,3 +82,13 @@ decisions.
 ```
 
 Return no raw logs or prose outside the JSON.
+
+## Inlined Provider Instructions
+
+{{include:../instructions/shared/PROVIDER_ROUTING.md}}
+
+{{include:../instructions/shared/providers/GITHUB.md}}
+
+{{include:../instructions/shared/providers/GITLAB.md}}
+
+{{include:../instructions/shared/providers/GERRIT.md}}

@@ -46,8 +46,8 @@ data, or unrelated logs.
 
 ### 2. Investigate root cause
 
-Spawn a named `mpx-issue-analyzer` agent for each bug. For multiple bugs, launch those agents in
-parallel and keep their evidence separate. Give each agent the parsed problem and require it to:
+Use a general-purpose agent for a bounded read-only investigation of each bug. For multiple bugs, launch those agents in parallel and keep their evidence separate. Do not edit source, publish, or change provider state during investigation.
+Give each agent the parsed problem and require it to:
 
 1. locate where the failure manifests;
 2. reproduce or trace the relevant public behavior when feasible;
