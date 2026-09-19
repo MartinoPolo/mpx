@@ -4,6 +4,9 @@ Find the root cause before fixing. Claim completion only when the work is done a
 approach is getting messy or you've patched the same area repeatedly, stop and redesign instead of
 polishing it.
 
+When the user signals uncertainty (e.g. “maybe” or “probably”), critically assess the proposal rather
+than treating it as settled. Recommend a better alternative when warranted, with a brief rationale.
+
 ## Code
 
 DRY. Full descriptive names, no abbreviations. Code comments are extremely rare and explain why —
