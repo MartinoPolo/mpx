@@ -50,8 +50,8 @@ Present the plan and **wait for approval before writing the page**. A mis-scoped
 Show, compactly:
 
 - resolved mode, slug, and diff scope (files, added/changed function count)
-- the numbered slide list: one line each, `Slide N — <function or tight group> (Lxx-yy in <file>)`
-- ordering by **reading dependency** (types/profile → parsers/helpers → callers), not file order
+- the numbered slide list, starting with **Implementation vocabulary** and its proposed terms; for subsequent slides use `Slide N — <function or tight group> (Lxx-yy in <file>)`
+- after vocabulary, ordering by **reading dependency** (types/profile → parsers/helpers → callers), not file order
 - what is deliberately excluded (every test/story/debug symbol, and any trivial rename)
 
 Then ask for approval or adjustments; re-show if the shape changes.
@@ -66,6 +66,7 @@ Every rule below is fixed. Do not re-litigate them per run.
 
 - **Slides, one feature per slide.** A feature is one new/changed function, or one tightly coupled group (a parser and its private helper). Never two unrelated features on a slide.
 - **Two-column slide:** code left (sticky), notes/demo right. Collapse to one column on narrow viewports (about 860px).
+- **Vocabulary is the opening exception:** use a readable glossary layout rather than one function and a code panel. Split across consecutive opening slides if needed; do not omit important terms to fit.
 - **No outline, no navigation sidebar, no contents rail.** Slides plus keyboard navigation are the only navigation. This is deliberate — a rail reads as distracting here.
 - **Use the full viewport width;** do not cap the deck at reading width.
 - **Self-contained and portable:** inline all CSS and JS. Load libraries only from the runtime's permitted CDN (pinned exact version) — a syntax highlighter such as highlight.js is the expected one. The page must render identically as a local file and as a published artifact, and keep working offline after first load.
@@ -73,10 +74,11 @@ Every rule below is fixed. Do not re-litigate them per run.
 
 **Content**
 
+- **Open with Implementation vocabulary.** Explain all important or ambiguous terms used in the implementation: domain language, concepts, variables, and naming verbs. Use plain language grounded in the actual code, distinguish easily confused terms, and show representative identifiers. For function names, explain the key verb (such as *interpret*, *analyze*, *commit*, or *publish*), not merely a paraphrase of the full name; define its meaning here, not a generic dictionary meaning.
 - **Explain every new/changed core function in full** — the Step 2 list, nothing skipped, no "and so on".
 - One function per slide by default; combine only genuinely coupled functions.
-- Each slide answers three things: what the function does, why it exists (the constraint), and the one non-obvious decision inside it. Never fabricate behaviour or outputs.
-- Tie every prose claim to exact line ranges with a `.ref` chip (e.g. `L51-53`, en-dash between numbers); those chips drive the linking, so the numbers must match the code shown in that slide's block.
+- Each function slide answers three things: what the function does, why it exists (the constraint), and the one non-obvious decision inside it. Never fabricate behaviour or outputs.
+- Vocabulary entries cite representative identifiers and their source locations; they do not require code blocks or hover-link chips. On function slides, tie every prose claim to exact line ranges with a `.ref` chip (e.g. `L51-53`, en-dash between numbers); those chips drive the linking, so the numbers must match the code shown in that slide's block.
 
 **Interaction**
 
