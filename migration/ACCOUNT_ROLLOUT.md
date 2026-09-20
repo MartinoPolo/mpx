@@ -5,7 +5,8 @@ Native account credentials, settings unrelated to MPX, and transcripts remain in
 
 ## Protected transactions
 
-Ignored canonical `.local/` pointers identify machine-local recovery artifacts:
+Private recovery pointers now live under
+`${MPX_APPS}/_backups/mpx-cleanup-retained/local-evidence/`, moved intact from canonical `.local/`:
 
 - `native-name-cutover-pointer.json`: configuration and native registration naming migration.
 - `location-cutover-pointer.json`: canonical checkout routing switch.
@@ -13,15 +14,17 @@ Ignored canonical `.local/` pointers identify machine-local recovery artifacts:
 - `legacy-archive-pointer.json`: archived installations.
 - `legacy-preservation-pointer.json`: Git bundles and full Git snapshots, including stashes and reflogs.
 
-These pointers and their private artifacts must not be published. Original backup directory names
-and contents remain unchanged. Historical account evidence stays with the retained source checkout;
-current acceptance evidence is under canonical `.local/`.
+These pointers and their private artifacts must not be published. Referenced backup directory names
+and contents remain unchanged. The retained evidence has a sibling `local-evidence.sha256.json`
+inventory. Historical account evidence also remains with the retained source checkout. See
+[the cleanup checklist](../CLEANUP.md) before retiring either copy.
 
 ## Recovery order
 
 1. Stop affected agents and preserve newer configuration changes.
-2. Review the naming transaction first, then the location transaction. Their standalone recovery
-   scripts default to preview; mutation requires explicit `--apply`.
+2. Review the naming transaction first, then the location transaction. Evidence was relocated;
+   inspect any embedded original paths before using the retained scripts. Their recovery defaults to
+   preview; mutation requires explicit `--apply`.
 3. Coordinate source-version rollback with configuration and registration rollback. Current code
    expects `$APPDATA/mpx/config.json`, Pi `extensions/mpx.ts`, and Claude `rules/mpx`; restoring only
    old names does not make current code compatible with them.

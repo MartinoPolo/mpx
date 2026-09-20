@@ -58,8 +58,11 @@ credential paths, or fabricate authentication routing. Preserve launch-provided 
 ## Relationships, labels, and privacy
 
 Use ordinary body links and reciprocal link sections for parent and child relationships; do not
-depend on native hierarchy. Inspect existing labels before use. Create a label only when the
-selected guide supports it and the workflow explicitly authorizes it.
+depend on native hierarchy.
+
+Inspect existing labels and milestones first. Use exact native provider values. Create a label or
+milestone only when supported and explicitly authorized. A missing or rejected required value is a
+decision point, not permission to continue silently.
 
 Send only necessary content. Never publish secrets, machine paths, private account data, raw
 environment values, or unrelated logs. Prefer reviewed body files for multiline content.
@@ -67,5 +70,12 @@ environment values, or unrelated logs. Prefer reviewed body files for multiline 
 ## Interface boundary
 
 - Use only the selected native guide's documented commands.
-- Unsupported behavior becomes a bounded manual handoff, not an invented command, provider switch,
-  or authentication change.
+
+Stop only the affected branch and return a manual handoff containing:
+
+- selected role, provider, and explicit target ID;
+- requested operation and exact unsupported, configuration, or tooling condition;
+- safe remaining steps and the decision needed.
+
+Never switch providers, copy tokens, silently omit fields, reinterpret an unsupported operation, or
+repeat an uncertain mutation.

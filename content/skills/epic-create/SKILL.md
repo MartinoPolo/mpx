@@ -19,10 +19,8 @@ Create one Epic whose body is the durable specification. Optional argument: mile
 
 ## Content and provider discovery
 
-Read [Issue tracker policy]({{MPX_SHARED_INSTRUCTIONS}}/ISSUE_TRACKER.md) and
-[provider routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md). Read the nearest valid `mpxconfig.json`
-before provider work. Resolve `issues.provider` independently from `repository.provider`; this
-workflow uses only `issues.provider`. Follow the selected provider guide and its documented native
+Read [Provider Routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md) before provider work.
+This workflow uses only `issues.provider`. Follow the selected provider guide and its documented native
 commands. Do not invent an MPX facade action.
 
 Provider limits and target binding are defined by the selected guide. Stop only an affected

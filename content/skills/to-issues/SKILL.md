@@ -20,9 +20,8 @@ Argument: explicit Epic Issue number or URL. Use [the Issue template](ISSUE_TEMP
 
 ## Content and provider discovery
 
-Read [Issue tracker policy]({{MPX_SHARED_INSTRUCTIONS}}/ISSUE_TRACKER.md) and
-[provider routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md). Read nearest valid `mpxconfig.json`; resolve
-`issues.provider` independently from `repository.provider`. This skill uses the Issue provider only.
+Read [Provider Routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md) before provider work.
+This workflow uses only `issues.provider`.
 Read its selected shared provider guide and use its target-bound native commands; do not invent MPX
 facade actions or switch providers.
 

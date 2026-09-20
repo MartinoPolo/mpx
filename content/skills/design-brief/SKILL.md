@@ -37,7 +37,7 @@ Before writing anything:
 
 1. **Issue tracker** — search the project's tracker for related issues/tasks, then read the hits in
    full. Comments carrying human decisions rank highest. Resolve which tracker CLI and how to run
-   each verb via [ISSUE_TRACKER.md]({{MPX_SHARED_INSTRUCTIONS}}/ISSUE_TRACKER.md).
+   each verb via [Provider Routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md).
 2. **Project docs** — context, decisions, and epic specs, wherever the project keeps them.
 3. **Existing implementation** — read any code for this feature. Current state vs. desired state.
 4. **Related briefs** — other folders under `designs/`.
@@ -85,7 +85,7 @@ snake-case filename — following [BRIEF_TEMPLATE.md](BRIEF_TEMPLATE.md).
 ## Step 6: Gate dependent issues
 
 Implementation issues/tasks that cannot proceed without this design get the `Design needed` gate.
-Resolve the tracker and explicit target using [ISSUE_TRACKER.md]({{MPX_SHARED_INSTRUCTIONS}}/ISSUE_TRACKER.md), verify
+Resolve the tracker and explicit target using [Provider Routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md), verify
 that target before mutation, then inspect existing labels/columns with the selected provider
 reference.
 

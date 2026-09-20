@@ -18,7 +18,7 @@ metadata:
 Apply refinement requirements to a chosen variant. Produces `refined.html` and `SUMMARY.md`, updates
 the design brief, and clears the design gate on dependent issues/tasks in the project's tracker.
 Resolve which tracker CLI and how to run each verb via
-[ISSUE_TRACKER.md]({{MPX_SHARED_INSTRUCTIONS}}/ISSUE_TRACKER.md).
+[Provider Routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md).
 
 Use supplied machine roots for external resources; do not guess external paths.
 
@@ -135,7 +135,7 @@ when present.
 ## Step 8: Comment on the tracker issue/task
 
 Ask for the design issue/task number if unknown, resolve and verify the explicit target using
-[ISSUE_TRACKER.md]({{MPX_SHARED_INSTRUCTIONS}}/ISSUE_TRACKER.md), then comment with the selected provider reference's
+[Provider Routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md), then comment with the selected provider reference's
 exact documented operation and this body:
 
 ```markdown
