@@ -1,0 +1,11 @@
+import { DefaultResourceLoader, SettingsManager, createEventBus } from '@earendil-works/pi-coding-agent';
+const options = JSON.parse(process.argv[2]!) as { cwd: string; account: string; probe: string };
+const events = createEventBus();
+let agents: unknown;
+events.on('mpx2:agent-definitions', value => { agents = value; });
+const settings = SettingsManager.inMemory();
+settings.setProjectTrusted(true);
+const loader = new DefaultResourceLoader({ cwd: options.cwd, agentDir: options.account, settingsManager: settings, eventBus: events, noExtensions: true, additionalExtensionPaths: [options.probe], noSkills: true, noContextFiles: true, noPromptTemplates: true, noThemes: true });
+await loader.reload();
+if (loader.getExtensions().errors.length) throw new Error(JSON.stringify(loader.getExtensions().errors));
+console.log(JSON.stringify(agents));

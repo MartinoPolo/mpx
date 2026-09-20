@@ -1,10 +1,10 @@
 ---
 name: commit-push
-description: 'Stages, commits, and pushes changes without opening a PR.'
+description: 'Stages, commits, and pushes explicit intended changes without opening a PR.'
 argument-hint: '[commit hint]'
 metadata:
   author: MartinoPolo
-  version: '0.6'
+  version: '0.8'
   category: git-workflow
   mpx:
     schemaVersion: 1
@@ -14,21 +14,19 @@ metadata:
 
 # Commit and Push
 
-Stage, commit, and push changes. Do not create a PR. `the invocation input`
+Prepare a substantive summary of the intended change before delivery. Invoke `mpx-shipper` with
+endpoint `push`, the explicit intended paths, the summary and `the invocation input`, and all
+required repository, branch, configured remote, provider, Issue, and existing immutable identities.
+Preserve native authentication.
 
-## Workflow
+The parent owns **three total shipping attempts: the initial attempt plus two retries across all
+stages and any continuation**. Never reset this budget or replace identities established by an
+earlier attempt. On failure, evaluate the bounded evidence,
+dispatch a fresh `mpx-executor` for each accepted repair with the requirements, precise repair
+objective, file pointers, acceptance criteria, and verification commands. Tell it to inspect the
+current diff and relevant files. Verify the repair before invoking the shipper again. The shipper
+never repairs.
 
-1. Read [Git Commit Workflow](../shared/GIT_COMMIT_WORKFLOW.md), resolving the Markdown link relative to this compiled
-   skill. If a tool requires a literal absolute content path, follow [Content Paths](../shared/CONTENT_PATHS.md): use
-   the validated `MPX_ACTIVE_CONTENT_ROOT` and projection-relative path; do not search fallback roots or guess a
-   checkout.
-2. Run **Phase A** through `mpx-git-committer` with `push: true` and `commit_hint: the invocation input`, preserving its
-   structured result handling and bounded escalation. Only Phase A applies; it covers commit and push.
-3. Preserve the immutable launch identity and account-bound native CLI environment used when MPX launched. Do not
-   substitute credentials or accounts during push troubleshooting.
-
-## Output
-
-- Commit hash and message, when committed
-- Push status
-- “Nothing to commit — already up-to-date”, when applicable
+Completion requires the verified commit and selected-remote push state. Do not create a PR. Report
+actual results after delivery, including completed stage, commit/branch/repository identities, push
+state, excluded artifacts, retries, remaining work, and blockers.

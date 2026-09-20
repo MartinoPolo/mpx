@@ -1,0 +1,138 @@
+diff --git a/orca-agent-status.ts b/orca-agent-status.ts
+index 5e2e144..a6aafb8 100644
+--- a/orca-agent-status.ts
++++ b/orca-agent-status.ts
+@@ -37,14 +37,14 @@ function getPostSessionMetadata(ompRuntime: boolean): Record<string, unknown> {
+   return ompRuntime ? runtimeOmpSessionMetadata : sessionMetadata
+ }
+ 
+-function getPersistedSessionMetadata(): Record<string, unknown> {
+-  const sessionFile = sessionMetadata.session_file
++function getPersistedSessionMetadata(metadata = sessionMetadata): Record<string, unknown> {
++  const sessionFile = metadata.session_file
+   if (typeof sessionFile !== 'string' || !sessionFile) return {}
+   try {
+     const fs = require('fs')
+     // Why: Pi publishes its planned path before creating the transcript;
+     // recheck on every post so the first completed turn becomes resumable.
+-    return fs.existsSync(sessionFile) ? sessionMetadata : {}
++    return fs.existsSync(sessionFile) ? metadata : {}
+   } catch {
+     return {}
+   }
+@@ -136,11 +136,58 @@ function resolveHookPath(ompRuntime: boolean): string {
+   return CONFIGURED_HOOK_PATH
+ }
+ 
++
++// Checkout-local candidate: aggregate authority stays in MPX2; this Orca hook is the only sender.
++// DEPLOYMENT GATE: the current Pi receiver drops interrupted. Cancellation requires its companion fix.
++type MpxActivity = {
++  sessionId: string; activityId: string; revision: number;
++  state: 'idle' | 'working' | 'human-needed' | 'done' | 'cancelled';
++  mainActive: boolean; activeChildren: number; backgroundWork: number; pendingFollowUps: number;
++  humanNeeded: boolean; settling: boolean;
++}
++let mpxActivity: MpxActivity | null = null
++let mpxActivityId = ''
++let mpxRevision = -1
++let mpxAnnouncedState = ''
++
++function acceptMpxActivity(value: unknown): value is MpxActivity {
++  if (isOmpRuntime() || !value || typeof value !== 'object') return false
++  const a = value as MpxActivity
++  if (typeof a.sessionId !== 'string' || a.sessionId !== sessionMetadata.session_id ||
++      typeof a.activityId !== 'string' || !a.activityId ||
++      !Number.isSafeInteger(a.revision) || a.revision < 0 ||
++      !['idle', 'working', 'human-needed', 'done', 'cancelled'].includes(a.state)) return false
++  if (![a.activeChildren, a.backgroundWork, a.pendingFollowUps].every(n => Number.isSafeInteger(n) && n >= 0) ||
++      ![a.mainActive, a.humanNeeded, a.settling].every(v => typeof v === 'boolean')) return false
++  if ((a.state === 'done' || a.state === 'cancelled') &&
++      (a.mainActive || a.activeChildren || a.backgroundWork || a.pendingFollowUps || a.humanNeeded || a.settling)) return false
++  return true
++}
++
++function aggregatePost(event: string, extra: Record<string, unknown>): [string, Record<string, unknown>] | null {
++  const a = mpxActivity
++  if (!a || isOmpRuntime() || event === 'session_start' || event === 'before_agent_start') return [event, extra]
++  const synthetic = event === 'mpx_activity'
++  if (a.state === 'idle') return null
++  if (a.state === 'done' || a.state === 'cancelled') {
++    if (!synthetic || mpxAnnouncedState === a.state) return null
++    mpxAnnouncedState = a.state
++    return ['agent_end', { ...extra, interrupted: a.state === 'cancelled', mpx_activity: a }]
++  }
++  if (synthetic && mpxAnnouncedState === a.state) return null
++  mpxAnnouncedState = a.state
++  const next = synthetic || event === 'agent_end' || event === 'ui_prompt_end' ? 'tool_execution_end' : event
++  return [next, { ...extra, ui_prompt_active: a.state === 'human-needed', is_idle: false, mpx_activity: a }]
++}
++
+ function post(hookEventName: string, extra: Record<string, unknown> = {}): void {
++  const projected = aggregatePost(hookEventName, extra)
++  if (!projected) return
++  ;[hookEventName, extra] = projected
+   const ompRuntime = isOmpRuntime()
+   pendingPost = {
+     hookEventName,
+-    extra: { ...extra, ...(!ompRuntime && piUiPromptDepth > 0 ? { ui_prompt_active: true } : {}) },
++    extra: { ...extra, ...(!ompRuntime && !mpxActivity && piUiPromptDepth > 0 ? { ui_prompt_active: true } : {}) },
+     metadata: getPostSessionMetadata(ompRuntime),
+     ompRuntime,
+   }
+@@ -177,7 +224,7 @@ async function postOnce(
+     worktreeId: process.env.ORCA_WORKTREE_ID || '',
+     env: coords.env,
+     version: coords.version,
+-    payload: { hook_event_name: hookEventName, ...(ompRuntime ? metadata : getPersistedSessionMetadata()), ...extra },
++    payload: { hook_event_name: hookEventName, ...(ompRuntime ? metadata : getPersistedSessionMetadata(metadata)), ...extra },
+   })
+   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null
+   let timeout: ReturnType<typeof setTimeout> | undefined
+@@ -322,9 +369,26 @@ export default function (pi): void {
+   const selfPid = String(process.pid)
+   if (ownerPid && ownerPid !== selfPid) return
+   process.env.ORCA_PI_STATUS_OWNED = selfPid
++  let requestingActivity = false
++  const unsubscribeActivity = pi.events?.on('mpx2:pi-ui:activity', (value: unknown) => {
++    if (!acceptMpxActivity(value)) return
++    if (mpxActivityId && value.activityId !== mpxActivityId && !requestingActivity) return
++    if (value.activityId === mpxActivityId && value.revision <= mpxRevision) return
++    mpxActivityId = value.activityId
++    mpxRevision = value.revision
++    mpxActivity = value
++    clearPendingAgentEndCheck()
++    post('mpx_activity')
++  })
+   pi.on('session_start', (event, ctx) => {
+     updateSessionMetadata(ctx)
+     piUiPromptDepth = 0
++    mpxActivity = null
++    mpxActivityId = ''
++    mpxRevision = -1
++    mpxAnnouncedState = ''
++    requestingActivity = true
++    try { pi.events?.emit('mpx2:pi-ui:activity:request', {}) } finally { requestingActivity = false }
+     // Why: /reload re-registers the active session, but it is not a
+     // turn boundary and must not clear the visible status or unread state.
+     if (event.reason === 'reload') return
+@@ -418,6 +482,10 @@ export default function (pi): void {
+     // would stick forever. Reset without posting: shutdown is not a turn boundary, and
+     // the session_start that follows republishes the corrected state.
+     piUiPromptDepth = 0
++    unsubscribeActivity?.()
++    clearPendingAgentEndCheck()
++    pendingPost = null
++    mpxActivity = null
+   })
+ 
+   // Why: capture the assistant's final text on each completed message
+@@ -453,6 +521,8 @@ export default function (pi): void {
+   // Why: isIdle flips before agent_settled handlers run, so both paths
+   // share a per-run guard instead of racing duplicate completion posts.
+   function postAgentEndOnce(): void {
++    piTurnInFlight = false
++    if (mpxActivity) return // Only aggregate completion can finish a managed session.
+     if (agentEndReported) return
+     agentEndReported = true
+     piTurnInFlight = false

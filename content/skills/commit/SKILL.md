@@ -1,9 +1,10 @@
 ---
 name: commit
-description: 'Stages and commits changes in conventional commit format.'
+description: 'Stages and commits explicit intended changes in conventional commit format.'
+argument-hint: '[commit hint]'
 metadata:
   author: MartinoPolo
-  version: '0.7'
+  version: '0.8'
   category: git-workflow
   mpx:
     schemaVersion: 1
@@ -13,16 +14,19 @@ metadata:
 
 # Commit Changes
 
-Stage and commit the working changes as one conventional commit, inline in the main agent (no delegation).
-`the invocation input`
+Prepare a substantive summary of the intended change before delivery. Invoke `mpx-shipper` with
+endpoint `commit`, the explicit intended paths, the summary and `the invocation input`, and the
+repository and branch identities. A local commit does not require a configured hosted provider,
+remote, or repository target.
 
-## Workflow
+The parent owns **three total shipping attempts: the initial attempt plus two retries across all
+stages and any continuation**. Never reset this budget or replace identities established by an
+earlier attempt. On failure, evaluate the bounded evidence,
+dispatch a fresh `mpx-executor` for each accepted repair with the requirements, precise repair
+objective, file pointers, acceptance criteria, and verification commands. Tell it to inspect the
+current diff and relevant files. Verify the repair before invoking the shipper again. The shipper
+never repairs.
 
-1. Read [Git Commit Workflow](../shared/GIT_COMMIT_WORKFLOW.md), resolving the Markdown link relative to this compiled
-   skill.
-2. If a tool requires a literal absolute content path, follow [Content Paths](../shared/CONTENT_PATHS.md): read and
-   validate `MPX_ACTIVE_CONTENT_ROOT`, resolve the projection-relative path beneath it, verify containment and
-   existence, and stop if that fails. Do not search fallback roots or guess an installation checkout.
-3. Follow **Commit Conventions** directly: inspect, stage explicit paths, choose the type from the diff, write the
-   message to a temporary file, run `git commit -F`, and verify. Treat `the invocation input` as the commit hint; there
-   is no Issue reference unless the caller supplies one. Do not push or publish a PR.
+Completion requires a verified commit or a verified nothing-to-commit state. Do not push or create a
+PR. Report actual results after delivery, including completed stage, commit/branch/repository
+identities, excluded artifacts, retries, remaining work, and blockers.

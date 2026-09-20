@@ -1,17 +1,7 @@
 {
-  "$schema": "https://mpx.dev/schemas/mpxconfig.schema.json",
-  "schemaVersion": 1,
-  "project": {
-    "id": "MartinoPolo/mpx"
-  },
+  "projectId": "mpx",
   "repository": {
     "provider": "github",
     "remote": "origin"
-  },
-  "issues": {
-    "provider": "github"
-  },
-  "tooling": {
-    "packageManager": "pnpm"
   }
 }

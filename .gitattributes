@@ -1,29 +1,4 @@
-# Repository-controlled text defaults; Windows command scripts remain native.
 * text=auto eol=lf
-*.bat text eol=crlf
-*.cmd text eol=crlf
-
-# Common binary formats must never be line-ending normalized.
-*.dll -text !eol
-*.exe -text !eol
-*.gif -text !eol
-*.gz -text !eol
-*.ico -text !eol
-*.jpg -text !eol
-*.jpeg -text !eol
-*.pdf -text !eol
-*.png -text !eol
-*.webp -text !eol
-*.woff -text !eol
-*.woff2 -text !eol
-*.zip -text !eol
-
-# Provenance-managed canonical text must have checkout-stable bytes.
-/content/** text=auto eol=lf
-/docs/history/*.md text eol=lf
-/docs/history/*.json text eol=lf
-
-# Validators and generated text projections must observe the same bytes.
-/scripts/validate-generated.mjs text eol=lf
-/tests/integration/scripts/validate-generated.test.mjs text eol=lf
-/runtimes/pi/runtime-pi/projection/** text=auto eol=lf
+*.png binary
+*.jpg binary
+*.wav binary

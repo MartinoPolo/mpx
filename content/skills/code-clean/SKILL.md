@@ -13,8 +13,8 @@ metadata:
 
 # Code Clean
 
-Run focused code-quality cleanup and apply easy wins immediately. Target duplication, repetition, and dead/unused code.
-Use the invocation input as the requested scope.
+Run focused code-quality cleanup and apply easy wins immediately. Target duplication, repetition,
+and dead/unused code. Use the invocation input as the requested scope.
 
 ## Objectives
 
@@ -41,8 +41,8 @@ Rules:
 
 ### Step 2: Spawn Review Subagents per Group
 
-For each file group, spawn the named `mpx-reviewer-code-quality` agent using its declared review model policy (finding
-duplication and judging risk needs judgment).
+For each file group, spawn the named `mpx-reviewer-code-quality` agent using its declared review
+model policy (finding duplication and judging risk needs judgment).
 
 Use this exact review prompt shape:
 
@@ -52,7 +52,7 @@ You are reviewing one module group for immediate code cleanup.
 Goal:
 - Find DRY violations, duplication/repetition, and dead/unused code.
 - Propose low-risk cleanups that preserve behavior.
-- Code line number reduction is the best win here.
+- Optimize for understandable behavior. Prefer direct control flow, cohesive responsibilities, and explicit data flow.
 
 Input:
 - Module group: <folder/files list>
@@ -72,15 +72,18 @@ Required output:
 
 ### Step 3: Spawn Fix Subagents per Group
 
-For each reviewed group, spawn the named `mpx-executor` agent with approved findings. The prompt must carry the full
-pre-analyzed plan with exact files and concrete changes, leaving only mechanical application — `mpx-executor` applies,
-it does not decide. If a finding still needs judgment (unclear plan, cross-module tradeoffs), return it to
-`mpx-reviewer-code-quality` for a concrete decision and plan before dispatching `mpx-executor`.
+For each reviewed group, spawn named `mpx-executor` agent with approved findings. The prompt
+must carry the full pre-analyzed plan with exact files and concrete changes, relevant requirements,
+known failures, observable acceptance criteria, a precise cleanup objective, and file pointers.
+Instruct it to inspect the current `git diff` and relevant files itself. If a finding still needs
+judgment (unclear plan, cross-module tradeoffs), return it to `mpx-reviewer-code-quality` for a
+concrete decision and plan before dispatching `mpx-executor`.
 
 Use this exact fix prompt shape:
 
 ```text
-You are applying approved cleanup changes for one module group.
+You are a fresh executor applying approved cleanup changes for one module group. Inspect the current
+git diff and relevant files before editing.
 
 Goal:
 - Execute the approved deduplication and dead-code-removal plan.
@@ -89,13 +92,19 @@ Goal:
 Input:
 - Module group: <folder/files list>
 - Approved findings/plan: <review output>
+- Requirements and known failures: <relevant requirements/failures or none>
+- Acceptance criteria: <observable criteria>
+- Repair objective: <precise cleanup outcome>
+- File pointers: <files and direct dependencies>
 
 Required actions:
 1) Apply deduplication and repetition removal.
 2) Remove dead/unused code safely.
 3) Keep public contracts stable unless plan explicitly allows change.
 4) Keep edits narrow and scoped to the approved plan.
-5) Run targeted checks/tests for touched files when available.
+5) Preserve existing meaningful coverage and add or update tests only when they proportionally
+   verify changed behavior, important failure modes, or a known regression.
+6) Run targeted checks/tests for touched files when available.
 
 Required output:
 - Applied edits by file

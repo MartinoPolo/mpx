@@ -1,6 +1,0 @@
-{
-  "schemaVersion": 1,
-  "project": { "id": "acme/github" },
-  "repository": { "provider": "github", "remote": "origin" },
-  "issues": { "provider": "github" }
-}

@@ -1,9 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "noEmit": true,
-    "allowImportingTsExtensions": true
-  },
-  "include": ["vitest.shared.ts", "vitest.*.config.ts", "tests/**/*.ts"],
-  "exclude": ["apps", "packages", "runtimes", "content", "node_modules", "dist"]
-}

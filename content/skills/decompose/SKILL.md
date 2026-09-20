@@ -1,6 +1,7 @@
 ---
 name: decompose
-description: 'Splits large files or folders into logical modules while preserving behavior and public APIs.'
+description:
+  'Splits large files or folders into logical modules while preserving behavior and public APIs.'
 argument-hint: '[file or folder ...]'
 triggers: decompose large file; split oversized module; reorganize folder without behavior changes
 metadata:
@@ -9,25 +10,21 @@ metadata:
   category: refactor
   mpx:
     schemaVersion: 1
-    contentVersion: 1
     skillPacks: [development]
     defaultExposure: name-only
-    capabilities: [delegate, read, search, shell, write]
 ---
 
 # Decompose Large Files
 
-Split oversized files into logical modules. Keep functionality unchanged, enforce DRY, and improve organization. Use
-`the invocation input` as the requested scope.
-
-Resolve bundled skill assets relative to this loaded skill. For literal absolute reads, follow
-[Content Paths](../shared/CONTENT_PATHS.md).
+Split oversized files into logical modules. Keep functionality unchanged, enforce DRY, and improve
+organization. Use `the invocation input` as the requested scope.
 
 ## Goals
 
 - Preserve runtime behavior and public API.
 - Reduce file size and responsibility overlap.
-- Organize by role: constants, utilities, types, hooks, context, components, and services as applicable.
+- Organize by role: constants, utilities, types, hooks, context, components, and services as
+  applicable.
 - Keep each requested large file as an independently verifiable decomposition unit.
 
 ## Workflow
@@ -38,22 +35,25 @@ Parse `the invocation input` into explicit file or folder targets.
 
 - Ask for scope when none was supplied.
 - Preserve each supplied file as a separate decomposition unit.
-- For a folder, inventory candidate source files deterministically, identify the large files, and prioritize the
-  highest-impact units using size, responsibility overlap, and dependency centrality. Report the resulting units before
-  editing.
+- For a folder, inventory candidate source files deterministically, identify the large files, and
+  prioritize the highest-impact units using size, responsibility overlap, and dependency centrality.
+  Report the resulting units before editing.
 
 ### Step 2: Dispatch decomposition units
 
-Spawn one `general-purpose` sub-agent per unit. Resolve the canonical `advanced` class to a concrete model using the
-existing active runtime profile, and pass that structured model selection with medium effort; do not use a prose class
-name as model selection or add new model-resolution machinery. Use fresh bounded context for each unit and dispatch
-multiple units in parallel. Each prompt must name the target, allowed related paths, project conventions, and exact
-verification commands when known.
+Spawn one native subagent per unit using the Agent capability available in {{MPX_HARNESS}}. Select
+the canonical `advanced` class with medium effort through structured runtime options when the native
+agent has no declared policy; do not embed a vendor model ID or add model-resolution machinery. Use
+fresh bounded context for each unit and dispatch disjoint units in parallel. Each prompt must name the target, allowed related paths and file pointers, relevant requirements and
+known failures, observable acceptance criteria, the precise decomposition objective, project
+conventions, and exact verification commands when known. Instruct the fresh executor to inspect the
+current `git diff` and relevant files itself.
 
 Use this prompt contract for every unit:
 
 ```text
-You are decomposing one large file into multiple files/modules.
+You are the fresh executor for one bounded decomposition unit. Inspect the current git diff and
+relevant files before editing.
 
 Goal:
 - Split the target file into logical modules (constants, utilities, types, hooks,
@@ -64,6 +64,9 @@ Goal:
 Input:
 - Target unit: <file path>
 - Allowed scope: <related module paths>
+- Requirements and known failures: <relevant requirements/failures or none>
+- Acceptance criteria: <observable criteria>
+- File pointers: <target and relevant dependency paths>
 - Constraints: no feature changes and no behavior changes.
 
 Required actions:
@@ -73,9 +76,10 @@ Required actions:
 4) Move code into clearly named modules.
 5) Update imports, exports, and every reference in the allowed scope.
 6) Remove dead code discovered during extraction.
-7) Run the supplied targeted checks/tests; when none were supplied, perform static
-   verification of imports, exports, and call paths and say that final command verification
-   remains with the parent.
+7) Preserve existing meaningful coverage and add or update tests only when they proportionally
+   verify changed behavior, important failure modes, or a known regression.
+8) Run the supplied targeted checks/tests; when none were supplied, perform static verification of
+   imports, exports, and call paths and say that final command verification remains with the parent.
 
 Required output:
 - New file tree for this unit.
@@ -85,15 +89,15 @@ Required output:
 - Residual risks.
 ```
 
-Require the sub-agent to stop and return the concrete blocker when a safe multi-module split is not possible. A blocked
-unit must not cause independent units to be abandoned.
+Require the sub-agent to stop and return the concrete blocker when a safe multi-module split is not
+possible. A blocked unit must not cause independent units to be abandoned.
 
 ### Step 3: Validate preservation
 
-Reconcile each unit's edits and evidence exactly once. Run the project-native targeted checks supplied by the caller or
-discovered in directly relevant project configuration. Do not invent commands. When executable checks are unavailable,
-statically validate imports, exports, public entry points, and call paths, and label that evidence as static rather than
-test evidence.
+Reconcile each unit's edits and evidence exactly once. Run the project-native targeted checks
+supplied by the caller or discovered in directly relevant project configuration. Do not invent
+commands. When executable checks are unavailable, statically validate imports, exports, public entry
+points, and call paths, and label that evidence as static rather than test evidence.
 
 Confirm for every unit that:
 

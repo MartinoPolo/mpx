@@ -1,40 +1,45 @@
-# MPX project instructions
+# Repository guidance
 
-MPX is a private-first TypeScript monorepo that provides one CLI and shared contracts for Claude Code, Pi, providers,
-ports, worktrees, sessions, and installation.
+## Commands
 
-## Architecture
+Use pnpm. Run `pnpm run typecheck` before a commit and keep repository hooks enabled. The normal full
+gate is:
 
-- Treat MPX as a skills-first local control plane: `content/skills` owns canonical payloads, `packages/skills` owns
-  skill platform contracts, runtimes translate verified neutral plans, and the CLI composes public application
-  operations.
-- Keep domain logic in workspace packages and runtime adapters thin.
-- Treat `mpxconfig.json` as the only committed project integration manifest.
-- Keep generated machine state outside Git.
-- Route Issue, Review, and CI operations through the shipped native-provider references.
-- Emit stable versioned JSON envelopes from automation-capable CLI commands.
-- Fail closed on unknown schema versions, stale artifacts, ambiguous identities, and untrusted automation.
-- Do not add permanent readers for legacy MPX configuration.
+```bash
+pnpm run typecheck
+pnpm build
+pnpm test
+```
 
-## Implementation
+## Source map
 
-- Use portable TypeScript and Node ESM by default.
-- Use focused PowerShell only for Windows-native operations and return structured JSON.
-- Keep packages private unless publication is explicitly designed and validated.
-- Resolve cross-package behavior through public workspace APIs, never absolute repository imports.
-- Keep package unit tests in `<workspace>/test/unit` and fixtures in `<workspace>/test/fixtures`, outside production
-  `src`.
-- Reserve root `tests/contract`, `tests/integration`, and `tests/e2e` for cross-boundary suites; keep payload tests in a
-  skill only when they ship with or validate that payload.
-- Unify test taxonomy, configuration, and scripts without centralizing ownership or emitting tests from package builds.
-- Add narrow tests for domain behavior and malicious inputs.
-- Separate independent top-level constants, types, functions, and test scenarios with one blank line; tightly coupled
-  declarations may remain grouped.
-- Preserve existing installations and user data; mutate only explicitly verified, owned resources.
+- `content/` is the authored skill, specialist, rule, and shared-instruction source.
+- `dist/` is ignored, reproducible build output. Edit canonical content under `content/`, then run
+  `pnpm build` from the repository root before launching a harness or running content checks.
+  Never hand-edit or force-add generated projections.
+- `src/` contains the compiler, configuration, launch, resume, safeguard, and runtime implementation.
+- `extensions/` contains thin native Pi adapters.
+- `bin/` contains Git Bash entrypoints.
+- `migration/` contains current acceptance and recovery tooling, not normal runtime APIs.
+- `patches/` contains reviewed checkout-local dependency and undeployed compatibility candidates.
 
-## Runtime content
+User configuration is `$APPDATA/mpx2/config.json`; repository configuration is `mpxconfig.json`.
+Resolve machine locations from the documented `MPX_*` variables rather than hardcoding user paths.
+Native account roots contain credentials, settings, and transcripts: do not inspect, copy, or replace
+them broadly.
 
-- Canonical skills use bare identities under `content/skills`.
-- The public runtime namespace is `/mpx:<skill>`.
-- Skill bodies remain lazy and are projected from one resolved manifest.
-- Canonical content must not contain runtime-specific placeholders or absolute machine paths.
+## Ownership boundaries
+
+Pi and Claude Code own native authentication and session data. Orca owns worktrees, terminals, server
+visibility, status, and desktop notifications. Do not add an MPX daemon, session registry, port
+registry, or second attention writer.
+
+Preserve unrelated native and project-authored resources. Project skills can override global skills;
+never delete or rename one solely because its name collides. Establish provenance and compare behavior
+first. Never write through legacy directory links.
+
+## Content authoring
+
+Before restructuring instructions, review their direct, transitive, and runtime consumers and agree
+the disposition with the user. Keep essential agent behavior self-contained. Keep instructions concise and
+complete, using at most one short example when useful.

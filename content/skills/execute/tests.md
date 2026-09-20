@@ -1,76 +1,18 @@
-# Good vs Bad Tests
+# Testing Guidance
 
-## Good Tests
+- Understand the requirements and design reasonable test coverage from the agreed behavior, important failure modes, and known regressions. Coverage should be useful and proportional to the change and its risk.
+- Prefer existing coverage. Add or update tests where they meaningfully verify the behavioral change.
+- Test through public interfaces and derive expected results from the requirements.
+- Use assertions that remain valid when implementation details change while behavior stays the same. Asserting a specific CSS value is usually discouraged. Significant exception can occur.
+- Use meaningful end-to-end tests for user-facing behavior. Prefer Playwright for browser verification.
+- When an automated test would add little value, report the alternative verification performed.
+- In TDD mode, confirm that the test fails because the required behavior is missing, then implement the behavior and confirm it passes.
+- Prioritize the new acceptance criteria when requirements change. Update or retire conflicting tests and report material changes to existing coverage.
 
-- **Test observable behavior** through public APIs — not internal wiring
-- **Describe WHAT**, not HOW — test name reads as a requirement
-- **Survive internal refactors** — if behavior stays the same, tests stay green
-- **One logical assertion per test** — clear failure message, obvious what broke
-- **Integration-style by default** — exercise the real path users/callers take
+Do not create tests merely to satisfy a process label. Avoid source-text or CSS-presence assertions
+and expected values that duplicate implementation logic. Existing tests are evidence, not immutable
+specification.
 
-## Bad Tests
-
-- Mock internal collaborators you control
-- Test private methods directly
-- Assert on call counts, call order, or implementation shape
-- Break when refactoring without behavior change
-- Test name describes HOW the code works instead of WHAT it does
-
-## Example
-
-### Good: Test via public interface
-
-```typescript
-// tests/user-service.test.ts
-import { createUserService } from '../src/user-service';
-import { createTestDatabase } from './helpers/test-database';
-
-test('created user can be retrieved by email', async () => {
-  const database = createTestDatabase();
-  const service = createUserService({ database });
-
-  await service.createUser({ name: 'Ada', email: 'ada@example.com' });
-  const found = await service.getUserByEmail('ada@example.com');
-
-  expect(found).toEqual(expect.objectContaining({ name: 'Ada', email: 'ada@example.com' }));
-});
-```
-
-Why this works: tests the real contract (create then retrieve), uses a real database helper, survives any internal
-refactor that preserves the behavior.
-
-### Bad: Mock internals, bypass interface
-
-```typescript
-// tests/user-service.test.ts
-import { createUserService } from '../src/user-service';
-
-test('createUser calls database.insert with correct args', async () => {
-  const mockDatabase = {
-    insert: vi.fn().mockResolvedValue({ id: 1 }),
-    query: vi.fn(),
-  };
-  const service = createUserService({ database: mockDatabase });
-
-  await service.createUser({ name: 'Ada', email: 'ada@example.com' });
-
-  expect(mockDatabase.insert).toHaveBeenCalledWith('users', {
-    name: 'Ada',
-    email: 'ada@example.com',
-  });
-  expect(mockDatabase.insert).toHaveBeenCalledTimes(1);
-});
-```
-
-Why this fails you: asserts on HOW (`.insert` called with specific args, exactly once). Rename the internal method or
-batch inserts differently — test breaks despite identical behavior. Tests nothing a caller cares about.
-
-## Decision Checklist
-
-Before writing a test, ask:
-
-1. Am I testing a behavior a caller/user can observe?
-2. Would a pure refactor (same behavior, different internals) leave this test green?
-3. Does the test name finish the sentence "It should..."?
-
-If any answer is no, rethink the test.
+`--no-tdd` excludes creating tests during implementation, not running existing tests during
+verification. Required updates or retirement of obsolete existing tests follow the acceptance
+criteria and must be reported.

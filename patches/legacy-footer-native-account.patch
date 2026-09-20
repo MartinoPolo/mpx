@@ -1,0 +1,28 @@
+diff --git a/extensions/footer.ts b/extensions/footer.ts
+index 57092df..139a31f 100644
+--- a/extensions/footer.ts
++++ b/extensions/footer.ts
+@@ -30,13 +30,12 @@
+ import { execFile } from "node:child_process";
+ import { readFileSync, statSync } from "node:fs";
+ import { connect } from "node:net";
+-import { homedir } from "node:os";
+ import path from "node:path";
+ import { connect as connectTls } from "node:tls";
+ import { promisify } from "node:util";
+ 
+ import type { AssistantMessage } from "@earendil-works/pi-ai";
+-import { CustomEditor, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
++import { CustomEditor, type ExtensionAPI, type ExtensionContext, getAgentDir } from "@earendil-works/pi-coding-agent";
+ import { hyperlink as osc8Hyperlink, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+ 
+ import {
+@@ -1815,7 +1814,7 @@ const QUOTA_REFRESH_INTERVAL_MS = 60_000;
+ const QUOTA_FETCH_TIMEOUT_MS = 5_000;
+ 
+ function agentDirectory(): string {
+-    return path.join(homedir(), ".pi", "agent");
++    return getAgentDir();
+ }
+ 
+ function nowSeconds(): number {

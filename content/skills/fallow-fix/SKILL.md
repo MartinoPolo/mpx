@@ -1,6 +1,8 @@
 ---
 name: fallow-fix
-description: 'Diagnoses and fixes fallow dead-code audit failures, suppressing or baselining findings when justified.'
+description:
+  'Diagnoses and fixes fallow dead-code audit failures, suppressing or baselining findings when
+  justified.'
 metadata:
   author: MartinoPolo
   version: '0.3'
@@ -17,11 +19,15 @@ Diagnose and resolve fallow code-quality failures. Use the invocation input as d
 
 ## Step 1: Identify the Failure
 
-Run the appropriate diagnostic command based on what failed:
+Confirm the repository is opted into Fallow through recognized repository configuration. Read its
+`package.json` and use only the project-owned package-manager scripts or local dependency; never a
+global executable, automatic download, or guessed script. Then select the appropriate diagnostic:
 
-- **Dead-code regression** (`check:fallow` failed): output already shows all issues with file:line and rule explanations
-- **Audit failure** (fallow-gate hook blocked commit/push): `pnpm fallow:audit` for JSON details
-- **Need more detail**: re-run `pnpm check:fallow` — `--explain` includes rule descriptions and docs URLs
+- **Dead-code regression**: the failed project script output already shows issues with file:line and
+  rule explanations
+- **Audit failure**: run the configured audit script through `<pm> run <audit-script>` for JSON
+  details
+- **Need more detail**: re-run the configured project check script with its documented explain flag
 
 Parse the JSON output. Each issue has `path`, `line`, `name`, `severity`, and `actions`.
 
@@ -66,31 +72,36 @@ For each issue, determine the correct action:
 
 ### Available suppression kinds
 
-`unused-export`, `unused-type`, `unused-class-member`, `unused-enum-member`, `unresolved-import`, `unlisted-dependency`,
-`duplicate-export`, `circular-dependency`, `complexity`, `code-duplication`, `coverage-gaps`
+`unused-export`, `unused-type`, `unused-class-member`, `unused-enum-member`, `unresolved-import`,
+`unlisted-dependency`, `duplicate-export`, `circular-dependency`, `complexity`, `code-duplication`,
+`coverage-gaps`
 
 ## Step 3: Apply Fixes
 
+Pre-analyze accepted fixes, then dispatch a fresh `mpx-executor` with the relevant Fallow output,
+requirements, known failures, observable acceptance criteria, precise repair objective, and file
+pointers. Instruct it to inspect the current `git diff` and relevant files itself.
+
 1. Fix or suppress each issue.
-2. After each fix, use the narrowest available form of the original diagnostic as incremental feedback. Do not treat
-   this per-fix rerun as final verification.
-3. If dead-code count legitimately changed (new public API, refactored exports), update the baseline:
+2. Preserve existing meaningful coverage and add or update tests only when they proportionally
+   verify changed behavior, important failure modes, or a known regression.
+3. After each fix, use the narrowest available form of the original diagnostic as incremental
+   feedback. Do not treat this per-fix rerun as final verification.
+4. If dead-code count legitimately changed (new public API, refactored exports), update the
+   baseline:
 
 ```bash
-pnpm fallow:baseline
+<pm> run <configured-baseline-script>
 ```
 
 Commit the updated `fallow-baselines/regression.json` alongside your code changes.
 
 ## Step 4: Final Verification
 
-After all fixes and any baseline update, run the original failing check once as final verification:
-
-- `pnpm check:fallow` — must exit 0
-- `pnpm fallow:audit` — verdict must be `pass` or `warn`
-
-If both commands were part of the original failure path, run each once. Do not rerun a command solely to duplicate
-successful final evidence.
+After all fixes and any baseline update, run the original project-owned failing command once as
+final verification. A dead-code check must exit 0; an audit verdict must be `pass` or `warn`.
+If both configured commands were part of the original failure path, run each once. Do not rerun a command
+solely to duplicate successful final evidence.
 
 ## Rules
 

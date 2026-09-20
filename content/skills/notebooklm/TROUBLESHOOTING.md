@@ -1,6 +1,7 @@
 # NotebookLM troubleshooting
 
-Use this reference after a failed or long-running operation. Resolve each failure or report it explicitly.
+Use this reference after a failed or long-running operation. Resolve each failure or report it
+explicitly.
 
 ## Error Handling
 
@@ -20,7 +21,8 @@ Use this reference after a failed or long-running operation. Resolve each failur
 #### Error: "No notebook context"
 
 - **Cause:** Context not set
-- **Action:** Use `-n <id>` or `--notebook <id>` flag (parallel), or `notebooklm use <id>` (single-agent)
+- **Action:** Use `-n <id>` or `--notebook <id>` flag (parallel), or `notebooklm use <id>`
+  (single-agent)
 
 #### Error: "No result found for RPC ID"
 
@@ -49,21 +51,23 @@ Use this reference after a failed or long-running operation. Resolve each failur
 
 ## Exit Codes
 
-Exit codes must be interpreted with stderr and the corresponding status command; observed CLI versions have not used one
-timeout code consistently.
+Exit codes must be interpreted with stderr and the corresponding status command; observed CLI
+versions have not used one timeout code consistently.
 
 | Code | Meaning                                     | Action                                                         |
 | ---- | ------------------------------------------- | -------------------------------------------------------------- |
 | 0    | Success                                     | Continue                                                       |
 | 1+   | Timeout or real error, depending on command | Preserve stderr, then inspect the exact source/artifact status |
 
-For a nonzero wait, use `source list`, `artifact list`, or `research status` with the retained full IDs. Retry only when
-the object still reports a processing state. A missing/failed object, rate limit, authentication failure, or other
-stderr remains a real CLI error; do not convert every nonzero result into a timeout.
+For a nonzero wait, use `source list`, `artifact list`, or `research status` with the retained full
+IDs. Retry only when the object still reports a processing state. A missing/failed object, rate
+limit, authentication failure, or other stderr remains a real CLI error; do not convert every
+nonzero result into a timeout.
 
 ## Long Prompts
 
-When a prompt or query exceeds shell command-line length limits, use `--prompt-file` to read it from a file:
+When a prompt or query exceeds shell command-line length limits, use `--prompt-file` to read it from
+a file:
 
 ```bash
 notebooklm ask --prompt-file ./long_question.txt
@@ -71,16 +75,17 @@ notebooklm generate report --prompt-file ./custom_report_prompt.txt
 notebooklm source add-research --prompt-file ./research_query.txt --mode deep
 ```
 
-`--prompt-file` is mutually exclusive with the positional text argument. The file is read as UTF-8 with trailing
-whitespace stripped. Supported on: `ask`, all `generate` subcommands (except `mind-map`), and `source add-research`.
+`--prompt-file` is mutually exclusive with the positional text argument. The file is read as UTF-8
+with trailing whitespace stripped. Supported on: `ask`, all `generate` subcommands (except
+`mind-map`), and `source add-research`.
 
-> **Note:** `--prompt-file` reads a _prompt/query text file_, not a source document. To upload a file as a notebook
-> source, use `source add ./file.pdf`.
+> **Note:** `--prompt-file` reads a _prompt/query text file_, not a source document. To upload a
+> file as a notebook source, use `source add ./file.pdf`.
 
 ## Known Limitations
 
-**Rate limiting:** Audio, video, quiz, flashcards, infographic, and slide deck generation may fail due to Google's rate
-limits. This is an API limitation, not a bug.
+**Rate limiting:** Audio, video, quiz, flashcards, infographic, and slide deck generation may fail
+due to Google's rate limits. This is an API limitation, not a bug.
 
 **Reliable operations:** These always work:
 
@@ -116,7 +121,8 @@ limits. This is an API limitation, not a bug.
 | Audio generation   | 10 - 20 min    | 1200s             |
 | Video generation   | 15 - 45 min    | 2700s             |
 
-**Polling intervals:** When checking status manually, poll every 15-30 seconds to avoid excessive API calls.
+**Polling intervals:** When checking status manually, poll every 15-30 seconds to avoid excessive
+API calls.
 
 ## Troubleshooting
 
@@ -132,6 +138,6 @@ notebooklm download --help     # Download content
 notebooklm language --help     # Language settings
 ```
 
-**Diagnose auth:** `notebooklm auth check` - shows cookie domains, storage path, validation status **Re-authenticate:**
-`notebooklm login` **Check version:** `notebooklm --version` **Refresh a CLI-managed install:**
-`notebooklm skill install`
+**Diagnose auth:** `notebooklm auth check` - shows cookie domains, storage path, validation status
+**Re-authenticate:** `notebooklm login` **Check version:** `notebooklm --version` **Refresh a
+CLI-managed install:** `notebooklm skill install`

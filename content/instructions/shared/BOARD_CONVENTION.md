@@ -1,6 +1,8 @@
 # Board Convention
 
-Shared convention for MPX's plain-markdown Obsidian board workflow. The board preserves visual requirements that provider APIs may not round-trip and can later create Issues through the selected native guide.
+Shared convention for MPX's plain-markdown Obsidian board workflow. The board preserves visual
+requirements that provider APIs may not round-trip and can later create Issues through the selected
+native guide.
 
 ## Link layout
 
@@ -9,9 +11,10 @@ Shared convention for MPX's plain-markdown Obsidian board workflow. The board pr
 | `.mpx/BOARD.md`     | file symlink   | `Boards/<project>.md`             |
 | `.mpx/board-files/` | directory link | `Files/`                          |
 
-Both links are per-machine and gitignored. If an editor refuses to write through the file symlink, resolve its real
-target and edit that file. A wikilink such as `![[Pasted image.png|639]]` contains a filename, not a path; read the
-image through `.mpx/board-files/Pasted image.png` and ignore the optional display width.
+Both links are per-machine and gitignored. If an editor refuses to write through the file symlink,
+resolve its real target and edit that file. A wikilink such as `![[Pasted image.png|639]]` contains
+a filename, not a path; read the image through `.mpx/board-files/Pasted image.png` and ignore the
+optional display width.
 
 ## Four-lane pipeline
 
@@ -32,8 +35,9 @@ image through `.mpx/board-files/Pasted image.png` and ignore the optional displa
 | `Manual testing`     | implemented, awaiting human verification | batch execution workflow |
 | `Archive`            | manually verified                        | user                     |
 
-Every new note starts under `To Process`. Workflows move the original note; they do not delete or retype it. Only
-unchecked top-level items in `To Process` are intake candidates. Other lanes are never reprocessed.
+Every new note starts under `To Process`. Workflows move the original note; they do not delete or
+retype it. Only unchecked top-level items in `To Process` are intake candidates. Other lanes are
+never reprocessed.
 
 ## Item and issue reference format
 
@@ -41,9 +45,10 @@ unchecked top-level items in `To Process` are intake candidates. Other lanes are
 - [ ] The edit-name control should align with the name ![[Pasted image.png]]
 ```
 
-An item may have continuation lines and multiple images. Conversion may combine related items into one issue. Classify
-type from content: a defect is `bug`, a chore/audit/refactor is `task`, and a new capability or improvement is
-`enhancement`. Resolve the selected native guide, inspect available provider labels, and use only an exact supported label.
+An item may have continuation lines and multiple images. Conversion may combine related items into
+one issue. Classify type from content: a defect is `bug`, a chore/audit/refactor is `task`, and a
+new capability or improvement is `enhancement`. Resolve the selected native guide, inspect available
+provider labels, and use only an exact supported label.
 
 After issue creation, append the returned provider Issue reference and move the item:
 
@@ -53,9 +58,11 @@ After issue creation, append the returned provider Issue reference and move the 
 - [ ] The edit-name control should align with the name ![[Pasted image.png]] → issue:142
 ```
 
-Use `issue:<id>` as the canonical annotation. Batch execution matches the item by this annotation, or by stable text identity in board-direct mode.
+Use `issue:<id>` as the canonical annotation. Batch execution matches the item by this annotation,
+or by stable text identity in board-direct mode.
 
 ## State is the lane, not the checkbox
 
-Agents never change `- [ ]` to another marker. The checkbox belongs to the user and means manual verification only.
-Implementation moves an unchanged item to `Manual testing`; the user checks it and moves it to `Archive` after testing.
+Agents never change `- [ ]` to another marker. The checkbox belongs to the user and means manual
+verification only. Implementation moves an unchanged item to `Manual testing`; the user checks it
+and moves it to `Archive` after testing.

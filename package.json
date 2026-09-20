@@ -1,55 +1,31 @@
 {
-  "name": "mpx-workspace",
+  "name": "mpx2",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.15.1",
   "engines": {
-    "node": ">=22.18.0"
+    "node": ">=22.20.0"
   },
   "scripts": {
-    "build": "pnpm -r build",
-    "setup": "pnpm run bundle:cli && powershell.exe -NoProfile -File scripts/setup.ps1",
-    "check": "pnpm run check:quality && pnpm run validate:generated && pnpm run validate:structure && pnpm -r check",
-    "check:quality": "pnpm run format:check && pnpm run lint && pnpm run check:fallow",
-    "check:fallow": "fallow --regression-baseline fallow-baselines/regression.json --fail-on-regression --format json --quiet --output-file .fallow/check.json",
-    "fallow:audit": "fallow audit --base main --gate new-only",
-    "fallow:baseline": "fallow --save-regression-baseline fallow-baselines/regression.json --format json --quiet --output-file .fallow/baseline.json",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "lint": "oxlint . --deny-warnings --report-unused-disable-directives",
-    "lint:fix": "oxlint . --fix --report-unused-disable-directives && prettier --write .",
-    "test": "pnpm run test:unit && pnpm run test:payload && pnpm run test:contract && pnpm run test:integration && pnpm run test:e2e",
-    "test:unit": "pnpm run build && pnpm run bundle:cli && vitest run --config vitest.unit.config.ts",
-    "test:payload": "vitest run --config vitest.payload.config.ts",
-    "test:contract": "pnpm --filter @mpx/runtime-contracts... build && vitest run --config vitest.contract.config.ts",
-    "test:integration": "pnpm --filter mpx... build && vitest run --config vitest.integration.config.ts",
-    "test:e2e": "pnpm --filter mpx... build && vitest run --config vitest.e2e.config.ts",
-    "typecheck": "pnpm -r build && tsc -p tsconfig.test.json && pnpm -r typecheck",
-    "bundle:cli": "pnpm --filter @mpx/pi-extensions run build:release && pnpm --filter @mpx/pi-extensions run verify:release && node scripts/bundle-cli.mjs",
-    "bundle:generate": "pnpm run bundle:cli",
-    "cli-docs:generate": "node scripts/generate-cli-docs.mjs",
-    "cli-docs:check": "node scripts/generate-cli-docs.mjs --check",
-    "prevalidate:generated": "pnpm run bundle:cli",
-    "validate:generated": "node scripts/validate-generated.mjs",
-    "validate:structure": "node scripts/validate-structure.mjs"
+    "build": "tsx src/cli.ts build",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test --test-concurrency=4 test/*.test.ts",
+    "status": "tsx src/cli.ts status",
+    "sync": "tsx src/cli.ts sync",
+    "setup-project": "tsx src/cli.ts project setup"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "0.85.1",
+    "@earendil-works/pi-tui": "0.85.1",
+    "@tintinweb/pi-subagents": "0.19.0",
+    "shiki": "^3.23.0",
+    "tsx": "4.20.6",
+    "yaml": "2.8.1"
   },
   "devDependencies": {
-    "@mpx/application": "workspace:*",
-    "@mpx/config": "workspace:*",
-    "@mpx/core": "workspace:*",
-    "@mpx/executors": "workspace:*",
-    "@mpx/installer": "workspace:*",
-    "@mpx/runtime-contracts": "workspace:*",
-    "@mpx/runtime-pi": "workspace:*",
-    "@mpx/sessions": "workspace:*",
-    "@mpx/windows": "workspace:*",
-    "@mpx/worktrees": "workspace:*",
-    "@types/node": "^22.15.0",
-    "esbuild": "0.25.12",
-    "fallow": "^3.20.0",
-    "oxlint": "^1.80.0",
-    "prettier": "^3.9.6",
-    "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "@earendil-works/pi-ai": "0.85.1",
+    "@types/node": "22.18.6",
+    "typescript": "5.9.3"
   }
 }

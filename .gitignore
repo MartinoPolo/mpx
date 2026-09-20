@@ -1,14 +1,6 @@
 node_modules/
-dist/
-coverage/
-.fallow/
-*.tsbuildinfo
-.worktree-ports.json
-.env
-.env.*
-!.env.example
 .local/
-artifacts/
-.worktree-install.log
-/bin/mpx.mjs
-/bin/claude-gateway.js
+coverage/
+*.tsbuildinfo
+# Generated content; rebuild with pnpm build.
+/dist/

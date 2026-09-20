@@ -1,7 +1,7 @@
 # Artifact generation and language options
 
-Consult this branch before generation so the requested artifact, format, prompt, and language options are all
-represented.
+Consult this branch before generation so the requested artifact, format, prompt, and language
+options are all represented.
 
 ## Generation Types
 
@@ -10,10 +10,11 @@ All generate commands support:
 - `-s, --source` to use specific source(s) instead of all sources
 - `--language` to set output language (defaults to configured language or 'en')
 - `--json` for machine-readable output (returns `task_id` and `status`)
-- `--retry N` to automatically retry on rate limits with exponential backoff (supported on all subcommands **except**
-  `mind-map`)
-- `--prompt-file PATH` to read description/query from a file (supported on `ask`, `generate` subcommands except
-  `mind-map`, and `source add-research`; mutually exclusive with positional argument; use for long prompts)
+- `--retry N` to automatically retry on rate limits with exponential backoff (supported on all
+  subcommands **except** `mind-map`)
+- `--prompt-file PATH` to read description/query from a file (supported on `ask`, `generate`
+  subcommands except `mind-map`, and `source add-research`; mutually exclusive with positional
+  argument; use for long prompts)
 
 #### Type: Podcast
 
@@ -43,20 +44,23 @@ All generate commands support:
 #### Type: Infographic
 
 - **Command:** `generate infographic`
-- **Options:** `--orientation [landscape|portrait|square]` , `--detail [concise|standard|detailed]` ,
+- **Options:** `--orientation [landscape|portrait|square]` , `--detail [concise|standard|detailed]`
+  ,
   `--style [auto|sketch-note|professional|bento-grid|editorial|instructional|bricks|clay|anime|kawaii|scientific]`
 - **Download:** .png
 
 #### Type: Report
 
 - **Command:** `generate report`
-- **Options:** `--format [briefing-doc|study-guide|blog-post|custom]` , `--append "extra instructions"` (¹)
+- **Options:** `--format [briefing-doc|study-guide|blog-post|custom]` ,
+  `--append "extra instructions"` (¹)
 - **Download:** .md
 
 #### Type: Mind Map
 
 - **Command:** `generate mind-map`
-- **Options:** `--kind [interactive|note-backed]` (³) _(default: note-backed; flips to interactive in v0.8.0)_
+- **Options:** `--kind [interactive|note-backed]` (³) _(default: note-backed; flips to interactive
+  in v0.8.0)_
 - **Download:** .json
 
 #### Type: Data Table
@@ -77,35 +81,38 @@ All generate commands support:
 - **Options:** `--difficulty [easy|medium|hard]` , `--quantity [fewer|standard|more]`
 - **Download:** .json/.md/.html
 
-¹ `--append` only customizes the built-in templates. With `--format custom`, pass the prompt as the positional
-`DESCRIPTION` argument (`notebooklm generate report "PROMPT" --format custom`); `--append` is silently ignored in that
-mode (the CLI prints a warning).
+¹ `--append` only customizes the built-in templates. With `--format custom`, pass the prompt as the
+positional `DESCRIPTION` argument (`notebooklm generate report "PROMPT" --format custom`);
+`--append` is silently ignored in that mode (the CLI prints a warning).
 
-³ **Two kinds of mind map (issue #1256).** `generate mind-map --kind note-backed` (today's default) creates the
-**note-backed** kind — a JSON node tree, generated synchronously. `generate mind-map --kind interactive` creates the
-newer **interactive** studio artifact (what the web app now makes); it is polled to completion. Both emit the same
-`{mind_map, note_id, kind}` JSON, list under `artifact list --type mind-map`, and export via `download mind-map`.
-`--instructions` applies only to the note-backed kind. **The default `--kind` switches to `interactive` in v0.8.0**;
+³ **Two kinds of mind map (issue #1256).** `generate mind-map --kind note-backed` (today's default)
+creates the **note-backed** kind — a JSON node tree, generated synchronously.
+`generate mind-map --kind interactive` creates the newer **interactive** studio artifact (what the
+web app now makes); it is polled to completion. Both emit the same `{mind_map, note_id, kind}` JSON,
+list under `artifact list --type mind-map`, and export via `download mind-map`. `--instructions`
+applies only to the note-backed kind. **The default `--kind` switches to `interactive` in v0.8.0**;
 omitting `--kind` prints a one-time stderr notice (silence with `NOTEBOOKLM_QUIET_DEPRECATIONS=1`).
 
-⁴ **Cinematic video (Veo 3).** `generate video --format cinematic` generates AI documentary footage via Veo 3; it
-**ignores `--style`**, takes ~30-40 min, and requires a Google AI Ultra subscription. Also exposed as the
-`generate cinematic-video` alias (which forces `--format cinematic` and a longer default timeout). Download with
-`download video` or the `download cinematic-video` alias.
+⁴ **Cinematic video (Veo 3).** `generate video --format cinematic` generates AI documentary footage
+via Veo 3; it **ignores `--style`**, takes ~30-40 min, and requires a Google AI Ultra subscription.
+Also exposed as the `generate cinematic-video` alias (which forces `--format cinematic` and a longer
+default timeout). Download with `download video` or the `download cinematic-video` alias.
 
-² **Portrait / vertical slide decks via prompt.** Slide-deck has no `--orientation` flag (unlike infographic). Treat
-portrait decks as skill-level prompt guidance, not a typed CLI/API contract: NotebookLM currently honors orientation
-cues written into the `DESCRIPTION` positional argument. Including phrases like `"9:16 portrait"`, `"vertical layout"`,
-`"portrait mobile format"`, or `"vertical 9:16 layout"` can make NotebookLM render each slide as a 9:16 portrait image.
+² **Portrait / vertical slide decks via prompt.** Slide-deck has no `--orientation` flag (unlike
+infographic). Treat portrait decks as skill-level prompt guidance, not a typed CLI/API contract:
+NotebookLM currently honors orientation cues written into the `DESCRIPTION` positional argument.
+Including phrases like `"9:16 portrait"`, `"vertical layout"`, `"portrait mobile format"`, or
+`"vertical 9:16 layout"` can make NotebookLM render each slide as a 9:16 portrait image.
 Empirically:
 
-- The `.pptx` canvas itself may stay 16:9, but each slide's embedded image can be rendered as 9:16 portrait — useful for
-  vertical/mobile video material extracted via `python-pptx`.
-- Orientation is steered once at generation time. `generate revise-slide` edits content within an existing slide but
-  does not change its orientation; if a slide falls back to landscape (occasional inconsistency), regenerate the whole
-  deck rather than revising the single page.
+- The `.pptx` canvas itself may stay 16:9, but each slide's embedded image can be rendered as 9:16
+  portrait — useful for vertical/mobile video material extracted via `python-pptx`.
+- Orientation is steered once at generation time. `generate revise-slide` edits content within an
+  existing slide but does not change its orientation; if a slide falls back to landscape (occasional
+  inconsistency), regenerate the whole deck rather than revising the single page.
 - Combine with an explicit page count in the prompt (e.g.
-  `"Create exactly 8 pages, using a vertical 9:16 portrait layout"`) for the most predictable output.
+  `"Create exactly 8 pages, using a vertical 9:16 portrait layout"`) for the most predictable
+  output.
 
 ```bash
 # Skill prompt hint: ask NotebookLM to render each slide as a 9:16 portrait image
@@ -149,7 +156,8 @@ These capabilities are available via CLI but not in NotebookLM's web interface:
 #### Feature: **Report template append**
 
 - **Command:** `generate report --format study-guide --append "..."`
-- **Description:** Append custom instructions to built-in format templates without losing the format type
+- **Description:** Append custom instructions to built-in format templates without losing the format
+  type
 
 #### Feature: **Source fulltext**
 

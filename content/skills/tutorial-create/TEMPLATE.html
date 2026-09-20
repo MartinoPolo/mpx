@@ -1,11 +1,11 @@
 <!doctype html>
-{{META_COMMENT}}
+{{tutorial_meta_comment}}
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
-    <title>{{TITLE}}</title>
+    <title>{{tutorial_title}}</title>
     <script>
       // No-flash theme init — runs before paint.
       (function () {
@@ -2824,7 +2824,7 @@
               <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
             </svg>
           </span>
-          <span>Learn{{BRAND_SMALL}}</span>
+          <span>Learn{{tutorial_brand_small}}</span>
         </div>
         <a class="nav-all" href="../index.html" title="Browse all tutorials">
           <span class="burger" aria-hidden="true">&#9776;</span
@@ -2911,14 +2911,14 @@
             </div>
             <div class="progress-meta">
               <div class="label">Your progress</div>
-              <div class="count"><b id="doneCount">0</b> of {{SECTION_COUNT}} sections</div>
+              <div class="count"><b id="doneCount">0</b> of {{tutorial_section_count}} sections</div>
             </div>
           </div>
 
           <nav class="toc-card" aria-label="Table of contents">
             <div class="toc-title">Contents</div>
             <ul class="toc-list" id="tocList">
-              {{TOC_ITEMS}}
+              {{tutorial_toc_items}}
             </ul>
           </nav>
         </div>
@@ -2939,10 +2939,10 @@
             >
               <path d="M12 3l1.9 5.8L20 10l-5.8 1.9L12 18l-1.9-5.8L4 10l6.1-1.2L12 3z" />
             </svg>
-            {{TYPE_LABEL}}
+            {{tutorial_type_label}}
           </span>
-          <h1>{{TITLE}}</h1>
-          <p class="subtitle">{{SUBTITLE}}</p>
+          <h1>{{tutorial_title}}</h1>
+          <p class="subtitle">{{tutorial_subtitle}}</p>
 
           <div class="meta-row">
             <span class="chip"
@@ -2956,7 +2956,7 @@
               >
                 <rect x="3" y="4" width="18" height="18" rx="2" />
                 <path d="M16 2v4M8 2v4M3 10h18" /></svg
-              >{{DATE}}</span
+              >{{tutorial_date}}</span
             >
             <span class="chip"
               ><svg
@@ -2969,7 +2969,7 @@
               >
                 <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
                 <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></svg
-              >{{TYPE_LABEL_LOWER}}</span
+              >{{tutorial_type_label_lower}}</span
             >
             <span class="chip"
               ><svg
@@ -2982,12 +2982,12 @@
               >
                 <circle cx="12" cy="12" r="9" />
                 <path d="M12 7v5l3 2" /></svg
-              >~{{READ_MIN}} min read</span
+              >~{{tutorial_read_min}} min read</span
             >
           </div>
-          {{VIDEOS}}
+          {{tutorial_videos}}
         </div>
-        {{SECTIONS}} {{REFERENCES}} {{QUIZ}}
+        {{tutorial_sections}} {{tutorial_references}} {{tutorial_quiz}}
         <div class="finale" id="finale">
           <div class="fico">
             <svg
@@ -3003,7 +3003,7 @@
               <path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3" />
             </svg>
           </div>
-          <h3>All {{SECTION_COUNT_WORD}} sections understood!</h3>
+          <h3>All {{tutorial_section_count_word}} sections understood!</h3>
           <p>You've completed this tutorial. Onward to the next topic.</p>
         </div>
       </main>
@@ -3011,12 +3011,12 @@
 
     <!-- Glossary definitions (shared by tooltip) -->
     <script type="application/json" id="glossaryData">
-      {{GLOSSARY_JSON}}
+      {{tutorial_glossary_json}}
     </script>
 
     <!-- Section slugs (progress keys) -->
     <script type="application/json" id="slugData">
-      {{SLUGS_JSON}}
+      {{tutorial_slugs_json}}
     </script>
 
     <!-- Keyboard shortcuts overlay -->
@@ -3061,7 +3061,7 @@
         'use strict';
 
         var STORAGE_THEME = 'tutorial-theme';
-        var PROGRESS_PREFIX = 'tutorial-progress:{{SLUG}}:';
+        var PROGRESS_PREFIX = 'tutorial-progress:{{tutorial_slug}}:';
         var SLUGS = [];
         try {
           SLUGS = JSON.parse(document.getElementById('slugData').textContent);
@@ -3621,7 +3621,7 @@
         });
 
         /* ---------- PLAYGROUND (Explore + challenge mode, per .pg-region) ---------- */
-        var CHALLENGE_STORE_KEY = 'tutorial-challenges:{{SLUG}}';
+        var CHALLENGE_STORE_KEY = 'tutorial-challenges:{{tutorial_slug}}';
         function loadChallengeStore() {
           try {
             return JSON.parse(localStorage.getItem(CHALLENGE_STORE_KEY)) || {};

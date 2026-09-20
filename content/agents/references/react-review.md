@@ -168,8 +168,8 @@ async function Page() {
 }
 ```
 
-Keep `'use client'` in the interactive leaf module rather than a shared layout; placing it high in the import tree
-expands the client boundary.
+Keep `'use client'` in the interactive leaf module rather than a shared layout; placing it high in
+the import tree expands the client boundary.
 
 ## React 19 Actions
 

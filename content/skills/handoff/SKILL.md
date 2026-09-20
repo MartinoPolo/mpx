@@ -1,6 +1,8 @@
 ---
 name: handoff
-description: 'Writes or updates HANDOFF.md with session progress and open threads. Use for a handoff or to save...'
+description:
+  'Writes or updates HANDOFF.md with session progress and open threads. Use for a handoff or to
+  save...'
 metadata:
   author: MartinoPolo
   version: '0.8'
@@ -17,8 +19,8 @@ Create or update `HANDOFF.md` in the project root — a general session summary 
 
 ## Purpose
 
-Capture accumulated knowledge, context, and insights that would be lost when starting a new conversation. `HANDOFF.md`
-persists in the project root and is updated at the end of each session.
+Capture accumulated knowledge, context, and insights that would be lost when starting a new
+conversation. `HANDOFF.md` persists in the project root and is updated at the end of each session.
 
 ## Workflow
 
@@ -35,13 +37,15 @@ Review the current conversation and durable work to extract:
 
 ### Step 2: Check task state
 
-Use the runtime task-state contract to inspect:
+Inspect task state already available through the native harness, the current conversation, and
+project-owned durable artifacts:
 
 - completed work;
 - in-progress work; and
 - pending work.
 
-If task-state access is unavailable, derive only what the conversation and durable artifacts support and say so in
+Do not require an MPX task-state service or enumerate other native sessions. If a native task list
+is unavailable, derive only what the conversation and durable artifacts support and say so in
 Working Memory; do not invent status.
 
 ### Step 3: Identify project context (optional)
@@ -54,13 +58,15 @@ Working Memory; do not invent status.
 ### Step 4: Create or update HANDOFF.md
 
 1. Check whether `HANDOFF.md` already exists in the project root.
-2. If it exists, read it and merge current context: preserve still-relevant items and update or replace stale ones.
+2. If it exists, read it and merge current context: preserve still-relevant items and update or
+   replace stale ones.
 3. Otherwise create it from scratch.
 
 Write only `HANDOFF.md` in the **project root**.
 
-**Target 20–200 lines. Be thorough — this is the only context the next agent gets.** Write as if briefing a developer
-with zero context. Every section must contain enough detail to continue without re-investigating.
+**Target 20–200 lines. Be thorough — this is the only context the next agent gets.** Write as if
+briefing a developer with zero context. Every section must contain enough detail to continue without
+re-investigating.
 
 ```markdown
 # Session Handoff
@@ -122,8 +128,10 @@ Show the user what was created:
 ## Notes
 
 - `HANDOFF.md` is updated each session, not deleted.
-- This skill writes only `HANDOFF.md`; use `mpx grill` or `mpx harvest-decisions` to persist settled decisions to
-  `.mpx/DECISIONS.md`.
+- This skill writes only `HANDOFF.md`. Decision persistence is a separate workflow:
+  `{{MPX_SKILL_COMMAND}}grill` or `{{MPX_SKILL_COMMAND}}harvest-decisions`, when available, can
+  persist confirmed decisions to `.mpx/DECISIONS.md`. If a companion skill is not installed, record
+  that follow-up in Next Steps instead of claiming it ran or writing extra files here.
 - Focus on why, not only what — reasoning is crucial.
 - Capture implicit knowledge not documented elsewhere.
 - Existing handoffs are merged, not blindly overwritten.

@@ -1,0 +1,1989 @@
+diff --git a/src/agent-manager.ts b/src/agent-manager.ts
+index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15bdb875b8 100644
+--- a/src/agent-manager.ts
++++ b/src/agent-manager.ts
+@@ -10,8 +10,8 @@
+  * Independent by design: a foreground agent blocks the parent anyway, so
+  * charging it to the background pool would let a saturated pool starve the main
+  * session of work it could have done itself. Excess agents in either pool are
+- * queued and auto-started as slots free up. Nested children take no slot in
+- * either — see `occupiesPoolSlot` / `occupiesForegroundSlot`.
++ * queued and auto-started as slots free up. Nested children use independent
++ * per-depth pools, so a waiting parent cannot consume its child's last slot.
+  */
+ 
+ import { randomUUID } from "node:crypto";
+@@ -19,9 +19,10 @@ import { statSync } from "node:fs";
+ import { isAbsolute } from "node:path";
+ import type { Model } from "@earendil-works/pi-ai";
+ import type { AgentSession, ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+-import { resumeAgent, runAgent, type ToolActivity } from "./agent-runner.js";
++import { narrowSessionToolCeiling, resumeAgent, runAgent, type ToolActivity } from "./agent-runner.js";
+ import { assignHandle, handleBase } from "./mention.js";
+ import { describeModel } from "./model-resolver.js";
++import { validateChildReference } from "./session-record.js";
+ import type { AgentInvocation, AgentRecord, AgentTombstone, IsolationMode, MentionResolution, SubagentType, ThinkingLevel } from "./types.js";
+ import { addUsage, type LifetimeUsage } from "./usage.js";
+ import type { CompiledSchema } from "./workflow/json-schema.js";
+@@ -100,9 +101,7 @@ function assertValidSpawnCwd(cwd: unknown): asserts cwd is string | undefined |
+  * Nested children don't: their parent already holds a slot, so counting (and
+  * therefore queueing) them would deadlock a parent that waits on its own child.
+  *
+- * Note this bounds nothing horizontally — the depth cap limits how DEEP nesting
+- * goes, not how WIDE. A parent's only limit on concurrent children is that each
+- * spawn costs it a turn, which is unbounded when max turns is unlimited.
++ * Nested width is bounded separately by poolFor's per-depth pools.
+  */
+ function occupiesPoolSlot(
+   record: Pick<AgentRecord, "isBackground" | "parentAgentId" | "workflowId">,
+@@ -156,7 +155,7 @@ function occupiesForegroundSlot(
+ }
+ 
+ /** Which concurrency pool a spawn is charged to, if any. */
+-type Pool = "background" | "foreground";
++type Pool = "background" | "foreground" | `depth:${number}`;
+ 
+ interface SpawnArgs {
+   pi: ExtensionAPI;
+@@ -166,8 +165,10 @@ interface SpawnArgs {
+   options: SpawnOptions;
+ }
+ 
+-interface SpawnOptions {
++export interface SpawnOptions {
+   description: string;
++  /** Effective parent tool ceiling; child grants must remain a subset. */
++  toolCeiling?: readonly string[];
+   /**
+    * Optional memorable name for this instance, becoming a second handle
+    * (`@auth-audit`) alongside the type-derived one. Slugged, not validated —
+@@ -303,7 +304,8 @@ interface SpawnOptions {
+   rootSessionId?: string;
+ }
+ 
+-interface ResumeOptions {
++export interface ResumeOptions {
++  toolCeiling?: readonly string[];
+   /**
+    * Run the resumed turn detached in the background: return immediately with
+    * the record still "running" (or "queued" at the concurrency limit) and
+@@ -362,8 +364,13 @@ async function shutdownChildSession(session: AgentSession | undefined): Promise<
+ 
+ export class AgentManager {
+   private agents = new Map<string, AgentRecord>();
++  private completions = new Map<string, { revision: number; settled?: AgentRecord; promise: Promise<AgentRecord>; resolve: (record: AgentRecord) => void }>();
+   private cleanupInterval: ReturnType<typeof setInterval>;
+   private onComplete?: OnAgentComplete;
++  private recordObserver?: OnAgentComplete;
++  private stopObserver?: () => void;
++  setStopObserver(observer: () => void): void { this.stopObserver = observer; }
++  setRecordObserver(observer: OnAgentComplete): void { this.recordObserver = observer; }
+   private onStart?: OnAgentStart;
+   private onCompact?: OnAgentCompact;
+   private onUsage?: OnAgentUsage;
+@@ -411,6 +418,13 @@ export class AgentManager {
+   private runningBackground = 0;
+   /** Number of currently running foreground (blocking) agents. */
+   private runningForeground = 0;
++  private runningNested = new Map<Pool, number>();
++
++  private chargePool(pool: Pool | undefined, delta: number): void {
++    if (pool === "background") this.runningBackground += delta;
++    else if (pool === "foreground") this.runningForeground += delta;
++    else if (pool) this.runningNested.set(pool, (this.runningNested.get(pool) ?? 0) + delta);
++  }
+ 
+   constructor(
+     onComplete?: OnAgentComplete,
+@@ -424,7 +438,7 @@ export class AgentManager {
+     this.onCompact = onCompact;
+     this.onUsage = onUsage;
+     this.maxConcurrent = maxConcurrent;
+-    // Cleanup completed agents after 10 minutes (but keep sessions for resume)
++    // Release idle child runtimes while retaining inspectable result metadata.
+     this.cleanupInterval = setInterval(() => this.cleanup(), 60_000);
+     this.cleanupInterval.unref();
+   }
+@@ -466,12 +480,14 @@ export class AgentManager {
+    * is pinned in `test/foreground-concurrency.test.ts`.
+    */
+   private poolFor(record: AgentRecord): Pool | undefined {
++    if (record.parentAgentId) return `depth:${record.depth ?? 2}`;
+     if (occupiesPoolSlot(record)) return "background";
+     if (this.maxConcurrentForeground > 0 && occupiesForegroundSlot(record)) return "foreground";
+     return undefined;
+   }
+ 
+   private poolHasRoom(pool: Pool): boolean {
++    if (pool.startsWith("depth:")) return (this.runningNested.get(pool) ?? 0) < this.maxConcurrent;
+     return pool === "background"
+       ? this.runningBackground < this.maxConcurrent
+       : this.maxConcurrentForeground === 0 || this.runningForeground < this.maxConcurrentForeground;
+@@ -497,6 +513,7 @@ export class AgentManager {
+     // call, not minutes later at drain. Throw (not warn): programmatic callers
+     // can fix and retry; the RPC layer converts throws into error envelopes.
+     assertValidSpawnCwd(options.cwd);
++    if (options.resumeSessionFile) validateChildReference({ sessionFile: options.resumeSessionFile }, ctx.sessionManager.getSessionFile());
+ 
+     const id = randomUUID().slice(0, 17);
+     const abortController = new AbortController();
+@@ -541,8 +558,14 @@ export class AgentManager {
+       workflowId: options.workflowId,
+       maxSubagentDepth: options.maxSubagentDepth,
+       rootSessionId: options.rootSessionId,
++      runRevision: 0,
++      parentSessionId: ctx.sessionManager.getSessionId(),
++      parentSessionFile: ctx.sessionManager.getSessionFile(),
++      parentBranchEntry: ctx.sessionManager.getLeafId(),
++      toolCeiling: options.toolCeiling,
+     };
+     this.agents.set(id, record);
++    this.createCompletion(record);
+     // After the insert, so `takenHandles()` already counts this record's own
+     // handle — a spawn named after its own type gets `explore-2`, not a
+     // duplicate `explore` that would make resolution ambiguous.
+@@ -550,6 +573,7 @@ export class AgentManager {
+       record.alias = assignHandle(handleBase(options.name), this.takenHandles());
+     }
+ 
++    this.recordObserver?.(record);
+     const args: SpawnArgs = { pi, ctx, type, prompt, options };
+ 
+     const pool = this.poolFor(record);
+@@ -599,6 +623,8 @@ export class AgentManager {
+       if (record) {
+         record.status = "stopped";
+         record.completedAt = Date.now();
++        this.settleCompletion(record);
++        this.onComplete?.(record);
+       }
+       return false;
+     }
+@@ -628,13 +654,18 @@ export class AgentManager {
+           // Mirrors settleRun: an inline caller gets this failure as a throw
+           // out of spawnAndWait, so an unconsumed record would ALSO nudge the
+           // session about it — the same failure reported twice.
+-          if (queuedPool === "foreground") record.resultConsumed = true;
++          record.resultConsumed = false;
+           record.status = "error";
+           record.error = err instanceof Error ? err.message : String(err);
+           record.completedAt = Date.now();
++          this.settleCompletion(record);
+           this.onComplete?.(record);
+         } else {
+-          this.agents.delete(id);
++          record.status = "error";
++          record.error = err instanceof Error ? err.message : String(err);
++          record.completedAt = Date.now();
++          this.settleCompletion(record);
++          this.onComplete?.(record);
+         }
+         // The agent never kept its slot (startAgent gives it back on failure),
+         // so anything queued behind it can go now.
+@@ -693,14 +724,12 @@ export class AgentManager {
+     // never reach `settleRun`, so they hand the slot back themselves.
+     const pool = this.poolFor(record);
+     const releaseSlot = () => {
+-      if (pool === "background") this.runningBackground--;
+-      else if (pool === "foreground") this.runningForeground--;
++      this.chargePool(pool, -1);
+     };
+     record.status = "running";
+     record.startedAt = Date.now();
+     record.startGate = undefined;
+-    if (pool === "background") this.runningBackground++;
+-    else if (pool === "foreground") this.runningForeground++;
++    this.chargePool(pool, 1);
+ 
+     // Worktree isolation: try to create a temporary git worktree. Strict —
+     // fail loud if not possible (no silent fallback to main tree). Done BEFORE
+@@ -736,6 +765,8 @@ export class AgentManager {
+       if (record.status !== "running") {
+         releaseSlot();
+         record.worktreeResult = await cleanupWorktree(pi, baseCwd, wt, options.description);
++        this.settleCompletion(record);
++        this.onComplete?.(record);
+         this.drainQueue();
+         return;
+       }
+@@ -780,6 +811,7 @@ export class AgentManager {
+       // copy came from, so the prompt can tell the agent not to work there.
+       worktreeBase: worktreeCwd ? baseCwd : undefined,
+       configCwd: options.configCwd ?? (customCwd !== undefined ? ctx.cwd : undefined),
++      toolCeiling: options.toolCeiling,
+       signal: record.abortController!.signal,
+       onToolActivity: (activity) => {
+         if (activity.type === "end") record.toolUses++;
+@@ -804,6 +836,10 @@ export class AgentManager {
+         maxSubagentDepth: record.maxSubagentDepth,
+       },
+       onSessionCreated: (session) => {
++        if (this.agents.get(id) !== record) {
++          void shutdownChildSession(session);
++          return;
++        }
+         record.session = session;
+         // Capture now, while the session object exists: after eviction this
+         // path is the only thing that can reopen the conversation, and an
+@@ -814,6 +850,7 @@ export class AgentManager {
+         // stubbed session must degrade to "not resumable" rather than throw
+         // and take the whole spawn down with it.
+         record.sessionFile = session.sessionManager?.getSessionFile?.();
++        record.toolCeiling = session.getActiveToolNames();
+         // Same reason, different field: the model and thinking level are only
+         // knowable once pi has resolved its defaults and clamped the level to
+         // what the model supports. Writing them back here makes the record
+@@ -843,6 +880,7 @@ export class AgentManager {
+           }
+           record.pendingSteers = undefined;
+         }
++        this.recordObserver?.(record);
+         options.onSessionCreated?.(session);
+       },
+     })
+@@ -955,9 +993,8 @@ export class AgentManager {
+    * only fires its controller and leaves the run to settle normally, so
+    * decrementing there too would double-free — permanently lifting the limit.
+    *
+-   * Foreground agents fire `onComplete` for lifecycle symmetry, with
+-   * `resultConsumed` set so the callback skips notifications the inline result
+-   * already delivered.
++   * Foreground agents stay blocking until native receipt reconciliation;
++   * settlement alone is not evidence that their tool result was persisted.
+    *
+    * @param guardCallback swallow a throwing `onComplete` (the success path does;
+    *   the error path historically did not, and keeps not doing so).
+@@ -966,9 +1003,8 @@ export class AgentManager {
+    *   the release disagree with the acquire.
+    */
+   private settleRun(record: AgentRecord, guardCallback: boolean, pool: Pool | undefined): void {
+-    if (!record.isBackground) record.resultConsumed = true;
+-    if (pool === "background") this.runningBackground--;
+-    else if (pool === "foreground") this.runningForeground--;
++    this.settleCompletion(record);
++    this.chargePool(pool, -1);
+ 
+     if (guardCallback) {
+       try { this.onComplete?.(record); } catch { /* ignore completion side-effect errors */ }
+@@ -1069,27 +1105,7 @@ export class AgentManager {
+       blocking: true,
+       onSpawned,
+     });
+-    const record = this.agents.get(id)!;
+-
+-    // Queued: nothing to await yet — the promise appears when the drain starts
+-    // it. The gate resolves (never rejects) on every path out of the queue,
+-    // start and abort alike, so a rejection can never escape into the caller's
+-    // tool `execute` and take down pi's whole Promise.all tool batch.
+-    if (record.status === "queued") await record.startGate;
+-
+-    // The run promise only exists once startup is past its awaited repo copy —
+-    // without this the call would return before the agent had started at all.
+-    // A startup failure (strict worktree isolation) rejects here, which is what
+-    // the immediate path owes its caller: pi only marks a tool result failed
+-    // when `execute` throws. A queued spawn's failure landed on the record
+-    // instead (nobody was awaiting `startups` at drain time) and is rethrown
+-    // below, so the contract is the same either way.
+-    await this.awaitStartup(id);
+-
+-    // undefined when it was aborted while queued, or stopped mid-copy, and so
+-    // never ran — the record is already terminal with a completedAt, which is
+-    // what the caller renders.
+-    if (record.promise) await record.promise;
++    const record = await this.waitForResult(id, options.signal);
+ 
+     // A record that ended "error" without ever getting a promise never ran: the
+     // same startup failure spawn() rethrows on the immediate path (#179). Keep
+@@ -1111,102 +1127,39 @@ export class AgentManager {
+     options?: ResumeOptions,
+   ): Promise<AgentRecord | undefined> {
+     const record = this.agents.get(id);
+-    if (!record?.session) return undefined;
+-
+-    // Background resume: settle asynchronously and notify on completion exactly
+-    // like a background spawn, returning immediately with the record still
+-    // "running" — or "queued" when at the concurrency limit. Previously
+-    // run_in_background was ignored on resume (the Agent tool's resume branch
+-    // returned before its background branch, and resume() only ever awaited
+-    // inline), so a resumed agent always blocked the caller until it finished.
+-    if (options?.isBackground) {
+-      // Never re-enter a run that is still in flight. Detaching means the caller
+-      // gets control back while the record stays "running", so nothing stops the
+-      // model from resuming the same agent again. Starting a second run would
+-      // overwrite record.abortController — orphaning the live run beyond the
+-      // reach of `/agents` stop and abortAll() — double-count the pool slot, and
+-      // then reject from session.prompt() with "Agent is already processing",
+-      // whose settle path would abort the LIVE run's children and report a
+-      // failure for a run that is still going. Refuse instead, leaving the
+-      // record untouched; the caller decides whether to wait or steer.
+-      if (record.status === "running" || record.status === "queued") return undefined;
+-
+-      record.isBackground = true;
+-      record.resultConsumed = false;
+-      record.result = undefined;
+-      record.error = undefined;
+-      record.completedAt = undefined;
+-      record.status = "queued";
+-
+-      const start = () => this.startResume(id, record, prompt, signal, options);
+-      if (occupiesPoolSlot(record) && !this.poolHasRoom("background")) {
+-        // At the concurrency limit — queue it, drains when a slot frees. A
+-        // detached resume has no inline caller, hence nothing to release. The
+-        // queue is shared with spawns, whose startup is async, so entries are
+-        // promise-shaped even though a resume starts synchronously; failures
+-        // land on the record here, since drainQueue no longer catches.
+-        this.queue.push({
+-          id,
+-          pool: "background",
+-          start: async () => {
+-            try {
+-              start();
+-            } catch (err) {
+-              record.status = "error";
+-              record.error = err instanceof Error ? err.message : String(err);
+-              record.completedAt = Date.now();
+-              this.onComplete?.(record);
+-            }
+-          },
+-          release: () => {},
+-        });
+-      } else {
+-        start();
+-      }
+-      return record;
++    if (!record?.session || !this.isSettled(id)) return undefined;
++    if (options?.toolCeiling) {
++      record.toolCeiling = record.toolCeiling
++        ? record.toolCeiling.filter(name => options.toolCeiling!.includes(name))
++        : [...options.toolCeiling];
++      narrowSessionToolCeiling(record.session, record.toolCeiling);
+     }
++    record.resultConsumed = false;
+ 
+-    // Foreground resume: run inline and return the settled record.
+-    record.status = "running";
+-    record.startedAt = Date.now();
+-    record.completedAt = undefined;
++    record.isBackground = options?.isBackground === true;
++    record.blocking = !record.isBackground;
++    record.runRevision++;
++    this.createCompletion(record);
+     record.result = undefined;
+     record.error = undefined;
+-
+-    try {
+-      const { text, failure } = await resumeAgent(record.session, prompt, {
+-        onToolActivity: (activity) => {
+-          if (activity.type === "end") record.toolUses++;
+-          options?.onToolActivity?.(activity);
+-        },
+-        onAssistantUsage: (usage) => {
+-          addUsage(record.lifetimeUsage, usage);
+-          this.onUsage?.(record, usage);
+-          options?.onAssistantUsage?.(usage);
+-        },
+-        onCompaction: (info) => {
+-          record.compactionCount++;
+-          this.onCompact?.(record, info);
+-          options?.onCompaction?.(info);
+-        },
+-        signal,
+-      });
+-      // Same contract as the spawn path (#144): a failed final turn is an
+-      // error, not a completion — but the resumed text stays available.
+-      record.status = failure ? "error" : "completed";
+-      if (failure) record.error = failure;
+-      record.result = text;
+-      record.completedAt = Date.now();
+-    } catch (err) {
+-      record.status = "error";
+-      record.error = err instanceof Error ? err.message : String(err);
+-      record.completedAt = Date.now();
+-    }
+-
+-    // Same contract as the spawn settle paths: children spawned during the
+-    // resumed turn must not outlive it — nothing else can see or reach them.
+-    this.abortOwnedChildren(id);
+-
++    record.completedAt = undefined;
++    record.status = "queued";
++    this.recordObserver?.(record);
++    if (!this.armQueuedAbort(id, signal)) return record;
++    const pool = this.poolFor(record);
++    const start = async () => {
++      try { this.startResume(id, record, prompt, signal, options ?? {}); }
++      catch (error) {
++        record.status = "error";
++        record.error = String(error);
++        record.completedAt = Date.now();
++        this.settleCompletion(record);
++        this.onComplete?.(record);
++      }
++    };
++    if (pool && !this.poolHasRoom(pool)) this.queue.push({ id, pool, start, release: () => {} });
++    else void start();
++    if (!record.isBackground) return this.waitForResult(id, signal);
+     return record;
+   }
+ 
+@@ -1228,7 +1181,8 @@ export class AgentManager {
+ 
+     record.status = "running";
+     record.startedAt = Date.now();
+-    if (occupiesPoolSlot(record)) this.runningBackground++;
++    const pool = this.poolFor(record);
++    this.chargePool(pool, 1);
+     this.onStart?.(record);
+ 
+     // Fresh abort controller so /agents stop and steering target THIS run rather
+@@ -1260,7 +1214,8 @@ export class AgentManager {
+       }
+       // Children spawned during the resumed turn must not outlive it.
+       this.abortOwnedChildren(id);
+-      if (occupiesPoolSlot(record)) this.runningBackground--;
++      this.chargePool(pool, -1);
++      this.settleCompletion(record);
+       try { this.onComplete?.(record); } catch { /* ignore completion side-effect errors */ }
+       this.drainQueue();
+     };
+@@ -1329,10 +1284,80 @@ export class AgentManager {
+     return true;
+   }
+ 
++  isSettled(id: string): boolean { return !!this.completions.get(id)?.settled; }
++
++  resetBranch(): void {
++    this.abortAll();
++    for (const [id, record] of this.agents) {
++      this.settleCompletion(record);
++      this.removeRecord(id, record);
++    }
++    this.tombstones.clear();
++  }
++
++  restore(record: AgentRecord): void {
++    if (this.agents.has(record.id)) return;
++    this.agents.set(record.id, record);
++    this.createCompletion(record);
++    this.settleCompletion(record);
++  }
++
+   getRecord(id: string): AgentRecord | undefined {
+     return this.agents.get(id);
+   }
+ 
++  private createCompletion(record: AgentRecord): void {
++    let resolve!: (record: AgentRecord) => void;
++    const promise = new Promise<AgentRecord>(done => { resolve = done; });
++    this.completions.set(record.id, { revision: record.runRevision, promise, resolve });
++  }
++
++  private settleCompletion(record: AgentRecord): void {
++    const completion = this.completions.get(record.id);
++    if (this.agents.get(record.id) === record && completion?.revision === record.runRevision && !completion.settled) {
++      completion.settled = Object.freeze({ ...record,
++        invocation: record.invocation && Object.freeze({ ...record.invocation }),
++        lifetimeUsage: { ...record.lifetimeUsage }, toolCeiling: record.toolCeiling && [...record.toolCeiling],
++      });
++      completion.resolve(completion.settled);
++    }
++  }
++
++  waitForResult(agentId: string, signal?: AbortSignal): Promise<AgentRecord> {
++    const record = this.agents.get(agentId);
++    if (!record) return Promise.reject(new Error(`Agent not found: "${agentId}"`));
++    const completion = this.completions.get(agentId);
++    if (!completion) return Promise.reject(new Error(`Agent has no completion owner: "${agentId}"`));
++    return this.withAbort(completion.promise, signal);
++  }
++
++  async waitForAny(agentIds: readonly string[], signal?: AbortSignal): Promise<AgentRecord[]> {
++    if (!agentIds.length) throw new Error("Select at least one agent");
++    const selected = agentIds.map(id => {
++      const completion = this.completions.get(id);
++      if (!completion) throw new Error(`Agent not found: "${id}"`);
++      return completion;
++    });
++    const ready = () => selected.flatMap(completion => completion.settled ? [completion.settled] : []);
++    const current = ready();
++    if (current.length > 0) return current;
++    await this.withAbort(Promise.race(selected.map(completion => completion.promise)), signal);
++    return ready();
++  }
++
++  private withAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
++    if (!signal) return promise;
++    if (signal.aborted) return Promise.reject(signal.reason ?? new Error("Operation aborted"));
++    return new Promise<T>((resolve, reject) => {
++      const abort = () => reject(signal.reason ?? new Error("Operation aborted"));
++      signal.addEventListener("abort", abort, { once: true });
++      void promise.then(
++        value => { signal.removeEventListener("abort", abort); resolve(value); },
++        error => { signal.removeEventListener("abort", abort); reject(error); },
++      );
++    });
++  }
++
+   /** Handles already in use, so a fresh spawn can pick an unclaimed one. */
+   private takenHandles(): Set<string> {
+     const taken = new Set<string>();
+@@ -1407,14 +1432,15 @@ export class AgentManager {
+   abort(id: string): boolean {
+     const record = this.agents.get(id);
+     if (!record) return false;
++    if (isTopLevelAgent(record)) this.stopObserver?.();
+ 
+-    // Remove from queue if queued. No decrement — the slot was never taken —
+-    // and no onComplete, matching what a queued background abort has always
+-    // done; a blocking caller learns of the stop from its own tool result.
++    // A queued cancellation owns no slot but must settle its deferred and outcome.
+     if (record.status === "queued") {
+       this.dequeue(q => q.id === id);
+       record.status = "stopped";
+       record.completedAt = Date.now();
++      this.settleCompletion(record);
++      this.onComplete?.(record);
+       return true;
+     }
+ 
+@@ -1433,6 +1459,7 @@ export class AgentManager {
+     // nothing can observe a session that is half torn down.
+     record.session = undefined;
+     this.agents.delete(id);
++    this.completions.delete(id);
+     // A failed startup keeps its (rejected) entry so a late awaitStartup still
+     // sees it; drop it with the record so the map can't grow unbounded.
+     this.startups.delete(id);
+@@ -1470,9 +1497,13 @@ export class AgentManager {
+   private cleanup() {
+     const cutoff = Date.now() - 10 * 60_000;
+     for (const [id, record] of this.agents) {
+-      if (record.status === "running" || record.status === "queued") continue;
++      if (!this.isSettled(id) || !record.resultConsumed) continue;
+       if ((record.completedAt ?? 0) >= cutoff) continue;
+-      this.removeRecord(id, record);
++      if (isTopLevelAgent(record)) {
++        const session = record.session;
++        record.session = undefined;
++        void shutdownChildSession(session);
++      } else this.removeRecord(id, record);
+     }
+   }
+ 
+@@ -1484,7 +1515,7 @@ export class AgentManager {
+    */
+   clearCompleted(skipUnconsumed = false): void {
+     for (const [id, record] of this.agents) {
+-      if (record.status === "running" || record.status === "queued") continue;
++      if (!this.isSettled(id)) continue;
+       if (skipUnconsumed && !record.resultConsumed) continue;
+       this.removeRecord(id, record);
+     }
+@@ -1506,6 +1537,7 @@ export class AgentManager {
+ 
+   /** Abort all running and queued agents immediately. */
+   abortAll(): number {
++    this.stopObserver?.();
+     let count = 0;
+     // Clear queued agents first
+     for (const queued of this.queue) {
+@@ -1513,6 +1545,8 @@ export class AgentManager {
+       if (record) {
+         record.status = "stopped";
+         record.completedAt = Date.now();
++        this.settleCompletion(record);
++        this.onComplete?.(record);
+         count++;
+       }
+     }
+@@ -1535,15 +1569,7 @@ export class AgentManager {
+     // agents finish they start queued ones, which need awaiting too.
+     while (true) {
+       this.drainQueue();
+-      const pending: Promise<unknown>[] = [];
+-      for (const record of this.agents.values()) {
+-        if (record.status !== "running" && record.status !== "queued") continue;
+-        // An agent whose worktree is still being created is "running" with no
+-        // `promise` yet — without its startup the wait would return too early.
+-        const startup = this.startups.get(record.id);
+-        if (startup) pending.push(startup);
+-        if (record.promise) pending.push(record.promise);
+-      }
++      const pending = [...this.completions.values()].filter(completion => !completion.settled).map(completion => completion.promise);
+       if (pending.length === 0) break;
+       await Promise.allSettled(pending);
+     }
+@@ -1558,9 +1584,12 @@ export class AgentManager {
+     clearInterval(this.cleanupInterval);
+     // Clear queue — via dequeue, so anyone blocked in spawnAndWait is woken
+     // rather than left awaiting a gate nothing will ever resolve.
++    this.abortAll();
++    for (const record of this.agents.values()) this.settleCompletion(record);
+     this.dequeue(() => true);
+     const sessions = [...this.agents.values()].map(record => record.session);
+     this.agents.clear();
++    this.completions.clear();
+     this.startups.clear();
+     if (pi) {
+       // Prune any orphaned git worktrees (crash recovery). Detached: dispose runs
+diff --git a/src/agent-runner.ts b/src/agent-runner.ts
+index 6752eca0269ce30853a5cf5a3afd0d4bd463614c..d51d64ba6358b3a57259209a8de6465e110ffca8 100644
+--- a/src/agent-runner.ts
++++ b/src/agent-runner.ts
+@@ -4,7 +4,7 @@
+ 
+ import { readFileSync } from "node:fs";
+ import { homedir } from "node:os";
+-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
++import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+ import type { Model } from "@earendil-works/pi-ai";
+ import type { ExtensionContext, LoadExtensionsResult } from "@earendil-works/pi-coding-agent";
+ import {
+@@ -46,6 +46,98 @@ export const SUBAGENT_TOOL_NAMES = {
+ 
+ /** Names of tools registered by this extension that subagents must NOT inherit. */
+ const EXCLUDED_TOOL_NAMES: string[] = Object.values(SUBAGENT_TOOL_NAMES);
++const sessionToolCeilings = new WeakMap<AgentSession, Set<string>>();
++
++export function narrowSessionToolCeiling(session: AgentSession, names: readonly string[]): void {
++  const previous = sessionToolCeilings.get(session);
++  sessionToolCeilings.set(session, new Set(names.filter(name => !previous || previous.has(name))));
++  const narrow = () => session.setActiveToolsByName(
++    session.getActiveToolNames().filter(name => sessionToolCeilings.get(session)?.has(name)),
++  );
++  if (!previous) {
++    const beforeToolCall = session.agent.beforeToolCall;
++    session.agent.beforeToolCall = async (context, signal) => {
++      if (!sessionToolCeilings.get(session)?.has(context.toolCall.name)) {
++        return { block: true, reason: `Tool "${context.toolCall.name}" exceeds the inherited tool ceiling.` };
++      }
++      return beforeToolCall?.(context, signal);
++    };
++    session.subscribe(event => { if (event.type === "turn_end") narrow(); });
++  }
++  narrow();
++}
++
++const PARENT_ONLY_EXTENSION_NAMES = new Set([
++  "orca-agent-status",
++  "orca-titlebar-spinner",
++  "orca-prefill",
++]);
++
++const PARENT_ONLY_EXTENSION_PATTERNS = [...PARENT_ONLY_EXTENSION_NAMES].flatMap(name => [
++  `!**/${name}.ts`,
++  `!**/${name}.js`,
++  `!**/${name}/index.ts`,
++  `!**/${name}/index.js`,
++  `-extensions/${name}.ts`,
++  `-extensions/${name}.js`,
++  `-extensions/${name}/index.ts`,
++  `-extensions/${name}/index.js`,
++]);
++
++/** Build a scoped, read-only child view without writing native settings. */
++export function createChildSettingsManager(settingsManager: SettingsManager): SettingsManager {
++  const scopedSettings = {
++    global: settingsManager.getGlobalSettings(),
++    project: settingsManager.getProjectSettings(),
++  };
++  for (const scope of ["global", "project"] as const) {
++    scopedSettings[scope].extensions = [
++      ...(scopedSettings[scope].extensions ?? []),
++      ...PARENT_ONLY_EXTENSION_PATTERNS,
++    ];
++  }
++  const storage = {
++    withLock(
++      scope: "global" | "project",
++      operation: (current: string | undefined) => string | undefined,
++    ): void {
++      operation(JSON.stringify(scopedSettings[scope]));
++    },
++  } satisfies Parameters<typeof SettingsManager.fromStorage>[0];
++  return SettingsManager.fromStorage(storage, {
++    projectTrusted: settingsManager.isProjectTrusted(),
++  });
++}
++
++function isParentOnlyExtensionPath(extensionPath: string): boolean {
++  return extensionCanonicalNames(extensionPath).some(name => PARENT_ONLY_EXTENSION_NAMES.has(name));
++}
++
++/**
++ * Recover the MPX pack roots already selected by the parent native loader.
++ *
++ * MPX launchers provide only stable account/content context. The effective pack
++ * selection remains local to each parent session, so use Pi's documented command
++ * provenance instead of introducing process-global per-session environment state.
++ */
++export function getSelectedMpxSkillPaths(pi: Pick<ExtensionAPI, "getCommands">): string[] {
++  const contentRoot = process.env.MPX_ACTIVE_CONTENT_ROOT?.trim();
++  const account = process.env.MPX_ACCOUNT;
++  if (!contentRoot || (account !== "personal" && account !== "work")) return [];
++
++  const packsRoot = resolve(contentRoot, "dist", "packs");
++  const selected = new Set<string>();
++  for (const command of pi.getCommands()) {
++    if (command.source !== "skill") continue;
++    const skillPath = resolve(command.sourceInfo.path);
++    const fromPacks = relative(packsRoot, skillPath);
++    if (!fromPacks || isAbsolute(fromPacks) || fromPacks === ".." || fromPacks.startsWith(`..${sep}`)) continue;
++    const [pack, harness, resourceType, skillEntry] = fromPacks.split(sep);
++    if (!pack || harness !== "pi" || resourceType !== "skills" || !skillEntry) continue;
++    selected.add(resolve(packsRoot, pack, harness, resourceType));
++  }
++  return [...selected];
++}
+ 
+ /**
+  * Canonical name of an extension for `extensions: [...]` allowlist matching.
+@@ -245,16 +337,18 @@ export function installExtensionToolScope(
+      * seeded from `toolNames`.
+      */
+     readmitToolNames: Set<string>;
++    toolCeiling?: Set<string>;
+   },
+ ): void {
+-  const { loader, toolNames, disallowedSet, extNames, narrowing, readmitToolNames } = ctx;
++  const { loader, toolNames, disallowedSet, extNames, narrowing, readmitToolNames, toolCeiling } = ctx;
+ 
+   // The names allowed right now. Mirrors the `ext:` opt-in flip: when any `ext:`
+   // selector is present, extension tools become an explicit allowlist — a loaded
+   // extension not named by a selector contributes nothing (its handlers still ran),
+   // and `ext:foo/bar` narrows `foo` to just `bar`.
+   const inScope = (): Set<string> => {
+-    const keep = new Set(toolNames.filter((t) => !disallowedSet?.has(t)));
++    const withinCeiling = (name: string) => toolCeiling === undefined || toolCeiling.has(name);
++    const keep = new Set(toolNames.filter((name) => !disallowedSet?.has(name) && withinCeiling(name)));
+     const optInActive = extNames.size > 0;
+     for (const extension of loader.getExtensions().extensions) {
+       const canons = extensionCanonicalNames(extension.path);
+@@ -264,7 +358,7 @@ export function installExtensionToolScope(
+       const narrowed = canons.map((c) => narrowing.get(c)).find(Boolean);
+       for (const name of extension.tools.keys()) {
+         if (narrowed && !narrowed.has(name)) continue;
+-        if (disallowedSet?.has(name)) continue;
++        if (disallowedSet?.has(name) || !withinCeiling(name)) continue;
+         keep.add(name);
+       }
+     }
+@@ -273,7 +367,9 @@ export function installExtensionToolScope(
+     // the renarrow keeps them in the active set and beforeToolCall doesn't
+     // block them. Already vetted against `disallowed_tools` by the caller,
+     // which is the only place that knows which kind may be taken back.
+-    for (const name of readmitToolNames) keep.add(name);
++    for (const name of readmitToolNames) {
++      if (withinCeiling(name)) keep.add(name);
++    }
+     return keep;
+   };
+ 
+@@ -308,6 +404,13 @@ export function installExtensionToolScope(
+   };
+ }
+ 
++/** Resolve the global nested grant while preserving explicit empty-list denial. */
++export function resolveNestedSubagentGrant(
++  configured: "all" | string[] | undefined,
++): "all" | string[] {
++  return configured ?? "all";
++}
++
+ /** Default max turns. undefined = unlimited (no turn limit). */
+ let defaultMaxTurns: number | undefined;
+ 
+@@ -323,16 +426,20 @@ export function getDefaultMaxTurns(): number | undefined { return defaultMaxTurn
+ export function setDefaultMaxTurns(n: number | undefined): void { defaultMaxTurns = normalizeMaxTurns(n); }
+ 
+ /**
+- * The turn limit a run of `type` will actually enforce: an explicit value if the
+- * caller supplied one, else the agent's own `max_turns`, else the project
+- * default. `undefined` = unlimited.
++ * The turn limit a run of `type` will actually enforce. The agent/profile or
++ * project default is the safety ceiling; a caller may only tighten it.
++ * `undefined` = unlimited.
+  *
+  * Exported because the widget's turn counter (`↻3≤20`) has to predict this
+  * before the run starts, and a second copy of the expression would drift from
+  * the one below that enforces it.
+  */
+ export function resolveEffectiveMaxTurns(type: string, explicit?: number): number | undefined {
+-  return normalizeMaxTurns(explicit ?? getAgentConfig(type)?.maxTurns ?? defaultMaxTurns);
++  const requested = normalizeMaxTurns(explicit);
++  const safetyCeiling = normalizeMaxTurns(getAgentConfig(type)?.maxTurns ?? defaultMaxTurns);
++  if (requested === undefined) return safetyCeiling;
++  if (safetyCeiling === undefined) return requested;
++  return Math.min(requested, safetyCeiling);
+ }
+ 
+ /**
+@@ -405,6 +512,8 @@ export interface RunOptions {
+   isolated?: boolean;
+   inheritContext?: boolean;
+   thinkingLevel?: ThinkingLevel;
++  /** Maximum tool authority inherited from the immediate owning parent. */
++  toolCeiling?: readonly string[];
+   /**
+    * Reopen this pi session file rather than starting an empty conversation.
+    * `createAgentSession` seeds itself from whatever its SessionManager holds,
+@@ -638,10 +747,11 @@ export async function runAgent(
+   // isolation is an intentional override, not a misconfiguration.
+   const excludeExtensions = options.isolated ? undefined : config.excludeExtensions;
+   const skills = options.isolated ? false : config.skills;
++  const selectedMpxSkillPaths = skills === false ? [] : getSelectedMpxSkillPaths(options.pi);
+ 
+   // Skill preloading: when skills is string[], preload their content into prompt
+   if (Array.isArray(skills)) {
+-    const loaded = preloadSkills(skills, configCwd);
++    const loaded = preloadSkills(skills, configCwd, selectedMpxSkillPaths);
+     if (loaded.length > 0) {
+       extras.skillBlocks = loaded;
+     }
+@@ -687,6 +797,7 @@ export async function runAgent(
+   const noSkills = skills === false || Array.isArray(skills);
+ 
+   const agentDir = getAgentDir();
++  const settingsManager = createChildSettingsManager(SettingsManager.create(configCwd, agentDir));
+ 
+   // Extension loading:
+   // - true  → all default-discovered extensions
+@@ -724,7 +835,8 @@ export async function runAgent(
+   // It's only needed when we're neither loading everything without excludes
+   // (`extensions: true` or a `"*"` wildcard) nor nothing (`noExtensions`).
+   const loadAll = extensions === true || extensionsSpec?.wildcard === true;
+-  const additionalExtensionPaths = extensionsSpec?.paths.length ? extensionsSpec.paths : undefined;
++  const additionalExtensionPaths = extensionsSpec?.paths
++    .filter(extensionPath => !isParentOnlyExtensionPath(extensionPath));
+   // Pre-filter discovered set, captured by the override — the exclude-typo warning
+   // must compare against this, not the surviving set (absence from survivors is
+   // an exclude *succeeding*).
+@@ -748,7 +860,9 @@ export async function runAgent(
+     cwd: configCwd,
+     agentDir,
+     noExtensions,
+-    additionalExtensionPaths,
++    additionalExtensionPaths: additionalExtensionPaths?.length ? additionalExtensionPaths : undefined,
++    additionalSkillPaths: selectedMpxSkillPaths,
++    settingsManager,
+     extensionsOverride,
+     noSkills,
+     noPromptTemplates: true,
+@@ -839,11 +953,12 @@ export async function runAgent(
+   const disallowedSet = agentConfig?.disallowedTools
+     ? new Set(agentConfig.disallowedTools)
+     : undefined;
++  const toolCeiling = options.toolCeiling ? new Set(options.toolCeiling) : undefined;
+ 
+-  // Nested delegation tools (opt-in, ownership-scoped). Empty unless the agent
+-  // set `allowed_subagents` and a nestedRuntime was provided — and never when
+-  // isolated. Their names collide with EXCLUDED_TOOL_NAMES by design, so the
+-  // scoping below re-admits them explicitly (registry deny + active-set narrow).
++  // Nested delegation tools are globally granted unless the agent explicitly
++  // denies them. The depth cap, isolation, denylist, and inherited tool ceiling
++  // remain stronger than that default. Their names collide with
++  // EXCLUDED_TOOL_NAMES by design, so scoping re-admits only the effective set.
+   const effectiveMaxDepth = options.nestedRuntime?.maxSubagentDepth ?? getMaxSubagentDepth();
+   // At (or past) the cap this agent can never spawn, so it can never own a child
+   // to fetch from or steer either — inject nothing rather than three tools whose
+@@ -852,16 +967,18 @@ export async function runAgent(
+   const nestedRuntime = options.nestedRuntime && options.nestedRuntime.depth < effectiveMaxDepth
+     ? options.nestedRuntime
+     : undefined;
+-  const nestedTools = agentConfig?.allowedSubagents && nestedRuntime && !options.isolated
++  const allowedSubagents = resolveNestedSubagentGrant(agentConfig?.allowedSubagents);
++  const nestedDelegationDenied = Array.isArray(allowedSubagents) && allowedSubagents.length === 0;
++  const nestedTools = !nestedDelegationDenied && nestedRuntime && !options.isolated
+     ? createNestedSubagentTools({
+         manager: nestedRuntime.manager,
+         pi: options.pi,
+         parentAgentId: nestedRuntime.parentAgentId,
+         depth: nestedRuntime.depth,
+         maxSubagentDepth: effectiveMaxDepth,
+-        allowedSubagents: agentConfig.allowedSubagents,
++        allowedSubagents,
+         configCwd,
+-      })
++      }).filter(tool => toolCeiling === undefined || toolCeiling.has(tool.name))
+     : [];
+   const nestedToolNames = new Set(nestedTools.map(tool => tool.name));
+ 
+@@ -872,6 +989,7 @@ export async function runAgent(
+   const structuredCapture = options.structuredOutput ? createStructuredCapture() : undefined;
+   const structuredTools = options.structuredOutput && structuredCapture
+     ? [createStructuredOutputTool(options.structuredOutput, structuredCapture)]
++        .filter(tool => toolCeiling === undefined || toolCeiling.has(tool.name))
+     : [];
+   const structuredToolNames = new Set(structuredTools.map(tool => tool.name));
+   // Re-admitted together at every gate below. Kept as one set so a new injected
+@@ -914,7 +1032,9 @@ export async function runAgent(
+   //
+   // `noExtensions`/`isolated` keeps the historical static allowlist: nothing
+   // async can appear there, and a hard registry gate is the correct boundary.
+-  const builtinToolNameSet = new Set(toolNames);
++  const builtinToolNameSet = new Set(
++    toolNames.filter(name => toolCeiling === undefined || toolCeiling.has(name)),
++  );
+ 
+   let sessionTools: string[] | undefined;
+   let sessionExcludeTools: string[] | undefined;
+@@ -923,7 +1043,9 @@ export async function runAgent(
+     // tools (whose names would otherwise be dropped as EXCLUDED_TOOL_NAMES).
+     sessionTools = [
+       ...toolNames.filter(
+-        (t) => !EXCLUDED_TOOL_NAMES.includes(t) && !disallowedSet?.has(t),
++        (name) => !EXCLUDED_TOOL_NAMES.includes(name)
++          && !disallowedSet?.has(name)
++          && (toolCeiling === undefined || toolCeiling.has(name)),
+       ),
+       ...[...nestedToolNames].filter((t) => !disallowedSet?.has(t)),
+       // Not filtered through `disallowedSet`, unlike the nested tools above:
+@@ -949,10 +1071,19 @@ export async function runAgent(
+         if (!structuredToolNames.has(name)) denyTools.add(name);
+       }
+     }
++    if (toolCeiling) {
++      for (const extension of loader.getExtensions().extensions) {
++        for (const name of extension.tools.keys()) {
++          if (!toolCeiling.has(name)) denyTools.add(name);
++        }
++      }
++      for (const name of [...nestedToolNames, ...structuredToolNames]) {
++        if (!toolCeiling.has(name)) denyTools.add(name);
++      }
++    }
+     sessionExcludeTools = [...denyTools];
+   }
+ 
+-  const settingsManager = SettingsManager.create(configCwd, agentDir);
+   const configuredSessionDir = resolveConfiguredSessionDir(agentConfig?.sessionDir, effectiveCwd);
+   const defaultSessionDir = process.env.PI_CODING_AGENT_SESSION_DIR ?? settingsManager.getSessionDir?.();
+   // Frontmatter wins when it says anything; otherwise the project default,
+@@ -1039,9 +1170,11 @@ export async function runAgent(
+       extNames,
+       narrowing,
+       readmitToolNames,
++      toolCeiling,
+     });
+   }
+ 
++  if (options.toolCeiling) narrowSessionToolCeiling(session, options.toolCeiling);
+   options.onSessionCreated?.(session);
+ 
+   // Track turns for graceful max_turns enforcement
+diff --git a/src/custom-agents.ts b/src/custom-agents.ts
+index aa84c1411be875eee9d8aa80c3ab2a46aa56da1e..a5d7537b27353e8b0f1e2b1c0f574a71b9de68c7 100644
+--- a/src/custom-agents.ts
++++ b/src/custom-agents.ts
+@@ -234,19 +234,21 @@ function parseCsvField(val: unknown): string[] | undefined {
+ }
+ 
+ /**
+- * Parse the nested-delegation allowlist. Single field, default-off:
+- * omitted/empty/"none"/`false` → undefined (no nested tools); "all"/"*"/`true`
+- * → "all" (any enabled agent); csv → only the listed types.
+- *
+- * Booleans are accepted because `extensions:`/`skills:` take them and users
+- * generalize: without this, YAML's `true` stringifies into an agent type
+- * literally named "true", so the tools appear and every spawn is refused.
++ * Parse the nested-delegation allowlist. Omission inherits the global grant;
++ * explicit false/empty/"none" is a durable denial represented by an empty list.
++ * "all"/"*"/`true` grants any enabled agent; CSV grants only listed types.
+  */
+-function parseAllowedSubagents(val: unknown): "all" | string[] | undefined {
+-  if (typeof val === "boolean") return val ? "all" : undefined;
++export function parseAllowedSubagents(val: unknown): "all" | string[] | undefined {
++  if (val === undefined || val === null) return undefined;
++  if (typeof val === "boolean") return val ? "all" : [];
++  if (Array.isArray(val)) {
++    const items = val.map(String).map(item => item.trim()).filter(Boolean);
++    if (items.length === 0) return [];
++    return items.some(item => item === "*" || item.toLowerCase() === "all") ? "all" : items;
++  }
+   const items = parseCsvField(val);
+-  if (!items) return undefined;
+-  return items.some(i => i === "*" || i.toLowerCase() === "all") ? "all" : items;
++  if (!items) return [];
++  return items.some(item => item === "*" || item.toLowerCase() === "all") ? "all" : items;
+ }
+ 
+ /**
+diff --git a/src/index.ts b/src/index.ts
+index 4989968c98e186b3c94194ae8c05c7651374fcb6..23e9bbb4e386a70c1538c0ad6fa8e920617c070c 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -24,7 +24,6 @@ import { BUILTIN_TOOL_NAMES, getAgentConfig, getAllTypes, getAvailableTypes, get
+ import { inChildSessionContext } from "./child-context.js";
+ import { type RpcHandle, registerRpcHandlers } from "./cross-extension-rpc.js";
+ import { loadCustomAgents } from "./custom-agents.js";
+-import { GroupJoinManager } from "./group-join.js";
+ import { isolationParam, resolveAgentInvocationConfig, resolveJoinMode } from "./invocation-config.js";
+ import { describeMention, handleBase, isReservedHandle, parseMention, resolveHandleToType, stripAgentPrefix } from "./mention.js";
+ import { runMentionClone } from "./mention-clone.js";
+@@ -70,6 +69,7 @@ import { extractMeta, type WorkflowMeta, workflowCallName } from "./workflow/met
+ import { elapsedMs } from "./workflow/progress.js";
+ import { runWorkflow } from "./workflow/runtime.js";
+ import { resolveWorkflowScript } from "./workflow/saved.js";
++import { QuietDelivery, validateChildReference, type ResultReceipt } from "./quiet-delivery.js";
+ import { completeWorkflowTask, createWorkflowTask, failWorkflowTask, formatWorkflowNotification, resolveResumeTarget, updateWorkflowProgressBatch, type WorkflowTask, workflowResultText, workflowRunId } from "./workflow/task.js";
+ import { fullWorkflowToolDescription } from "./workflow/tool-description.js";
+ import { isWorktreeIsolationEnabled, setWorktreeIsolationEnabled } from "./worktree.js";
+@@ -78,7 +78,7 @@ import { escapeXml } from "./xml.js";
+ // ---- Shared helpers ----
+ 
+ /** Tool execute return value for a text response. */
+-function textResult(msg: string, details?: AgentDetails) {
++function textResult(msg: string, details?: AgentDetails | { subagentReceipts: ResultReceipt[] }) {
+   return { content: [{ type: "text" as const, text: msg }], details: details as any };
+ }
+ 
+@@ -202,12 +202,13 @@ function formatTaskNotification(record: AgentRecord, resultMaxLen: number, showC
+ /** Build AgentDetails from a base + record-specific fields. */
+ function buildDetails(
+   base: Pick<AgentDetails, "displayName" | "description" | "subagentType" | "modelName" | "tags">,
+-  record: { toolUses: number; startedAt: number; completedAt?: number; status: string; error?: string; id?: string; session?: any; lifetimeUsage: LifetimeUsage },
++  record: { toolUses: number; startedAt: number; completedAt?: number; status: string; error?: string; id?: string; runRevision?: number; session?: any; lifetimeUsage: LifetimeUsage },
+   activity?: AgentActivity,
+   overrides?: Partial<AgentDetails>,
+-): AgentDetails {
++): AgentDetails & { runRevision?: number } {
+   return {
+     ...base,
++    runRevision: record.runRevision,
+     toolUses: record.toolUses,
+     tokens: formatLifetimeTokens(record),
+     // Raw, and unconditional: `tokens` is preformatted because it is one stat,
+@@ -444,87 +445,8 @@ export default function (pi: ExtensionAPI) {
+   }
+   const pendingUsage = new PendingUsagePool();
+ 
+-  // ---- Cancellable pending notifications ----
+-  // Holds notifications briefly so get_subagent_result can cancel them
+-  // before they reach pi.sendMessage (fire-and-forget).
+-  const pendingNudges = new Map<string, ReturnType<typeof setTimeout>>();
+-  const NUDGE_HOLD_MS = 200;
+-  // A queued result wait must observe completion before its held notification
+-  // can fire, so successful waits can still suppress that redundant nudge.
+-  const QUEUE_WAIT_POLL_MS = Math.floor(NUDGE_HOLD_MS / 4);
+-
+-  function scheduleNudge(key: string, send: () => void, delay = NUDGE_HOLD_MS) {
+-    cancelNudge(key);
+-    pendingNudges.set(key, setTimeout(() => {
+-      pendingNudges.delete(key);
+-      try { send(); } catch { /* ignore stale completion side-effect errors */ }
+-    }, delay));
+-  }
+-
+-  function cancelNudge(key: string) {
+-    const timer = pendingNudges.get(key);
+-    if (timer != null) {
+-      clearTimeout(timer);
+-      pendingNudges.delete(key);
+-    }
+-  }
+-
+-  // ---- Individual nudge helper (async join mode) ----
+-  function emitIndividualNudge(record: AgentRecord) {
+-    if (record.resultConsumed) return;  // re-check at send time
+-
+-    const notification = formatTaskNotification(record, 500, showCost);
+-    const footer = record.outputFile ? `\nFull transcript available at: ${record.outputFile}` : '';
+-
+-    pi.sendMessage<NotificationDetails>({
+-      customType: "subagent-notification",
+-      content: notification + footer,
+-      display: true,
+-      details: buildNotificationDetails(record, 500, agentActivity.get(record.id)),
+-    }, { deliverAs: "followUp", triggerTurn: true });
+-  }
+-
+-  function sendIndividualNudge(record: AgentRecord) {
+-    agentActivity.delete(record.id);
+-    widget.markFinished(record.id);
+-    fleet.onAgentFinished(record.id);
+-    scheduleNudge(record.id, () => emitIndividualNudge(record));
+-    widget.update();
+-  }
+-
+-  // ---- Group join manager ----
+-  const groupJoin = new GroupJoinManager(
+-    (records, partial) => {
+-      for (const r of records) { agentActivity.delete(r.id); widget.markFinished(r.id); fleet.onAgentFinished(r.id); }
+-
+-      const groupKey = `group:${records.map(r => r.id).join(",")}`;
+-      scheduleNudge(groupKey, () => {
+-        // Re-check at send time
+-        const unconsumed = records.filter(r => !r.resultConsumed);
+-        if (unconsumed.length === 0) { widget.update(); return; }
+-
+-        const notifications = unconsumed.map(r => formatTaskNotification(r, 300, showCost)).join('\n\n');
+-        const label = partial
+-          ? `${unconsumed.length} agent(s) finished (partial — others still running)`
+-          : `${unconsumed.length} agent(s) finished`;
+-
+-        const [first, ...rest] = unconsumed;
+-        const details = buildNotificationDetails(first, 300, agentActivity.get(first.id));
+-        if (rest.length > 0) {
+-          details.others = rest.map(r => buildNotificationDetails(r, 300, agentActivity.get(r.id)));
+-        }
+-
+-        pi.sendMessage<NotificationDetails>({
+-          customType: "subagent-notification",
+-          content: `Background agent group completed: ${label}\n\n${notifications}\n\nUse get_subagent_result for full output.`,
+-          display: true,
+-          details,
+-        }, { deliverAs: "followUp", triggerTurn: true });
+-      });
+-      widget.update();
+-    },
+-    30_000,
+-  );
++  // Detached workflow previews are disabled along with top-level completion notices.
++  function scheduleNudge(_key: string, _send: () => void): void {}
+ 
+   /** Helper: build event data for lifecycle events from an AgentRecord. */
+   function buildEventData(record: AgentRecord) {
+@@ -570,7 +492,7 @@ export default function (pi: ExtensionAPI) {
+     // owner: the parent's scoped tools, or the workflow's card, notification
+     // and dialog. Keep them out of top-level lifecycle, transcript,
+     // notification, and UI channels.
+-    if (!isTopLevelAgent(record)) return;
++    if (!isTopLevelAgent(record) || !delivery.owns(record)) return;
+ 
+     // Emit lifecycle event based on terminal status
+     const isError = record.status === "error" || record.status === "stopped" || record.status === "aborted";
+@@ -582,37 +504,17 @@ export default function (pi: ExtensionAPI) {
+     }
+ 
+     // Persist final record for cross-extension history reconstruction
+-    pi.appendEntry("subagents:record", {
+-      id: record.id, type: record.type, description: record.description,
+-      status: record.status, result: record.result, error: record.error,
+-      startedAt: record.startedAt, completedAt: record.completedAt,
+-    });
++    delivery.completed(record);
+ 
+-    // Skip notification if result was already consumed via get_subagent_result
+-    if (record.resultConsumed) {
+-      agentActivity.delete(record.id);
+-      widget.markFinished(record.id);
+-      fleet.onAgentFinished(record.id);
+-      widget.update();
+-      return;
+-    }
+-
+-    // If this agent is pending batch finalization (debounce window still open),
+-    // don't send an individual nudge — finalizeBatch will pick it up retroactively.
+-    if (currentBatchAgents.some(a => a.id === record.id)) {
+-      widget.update();
+-      return;
+-    }
+-
+-    const result = groupJoin.onAgentComplete(record);
+-    if (result === 'pass') {
+-      sendIndividualNudge(record);
+-    }
+-    // 'held' → do nothing, group will fire later
+-    // 'delivered' → group callback already fired
++    // Results remain outside model context until claimed by the result tool or
++    // the idle-recovery owner. Completion only updates existing viewer surfaces.
++    agentActivity.delete(record.id);
++    widget.markFinished(record.id);
++    fleet.onAgentFinished(record.id);
+     widget.update();
+   }, undefined, (record) => {
+     if (!isTopLevelAgent(record)) return;
++    delivery.track(record);
+     // Agent-tool spawns refresh these surfaces in their tool handler, but RPC
+     // and scheduler spawns enter through the manager directly.
+     if (currentCtx?.hasUI) {
+@@ -646,6 +548,20 @@ export default function (pi: ExtensionAPI) {
+     if (reportUsage) pendingUsage.add(usage);
+   });
+ 
++  const delivery = new QuietDelivery(pi, manager);
++  manager.setRecordObserver(record => delivery.track(record));
++  manager.setStopObserver(() => delivery.disarm());
++  pi.on("session_abort", () => { delivery.disarm(); });
++  pi.on("input", event => { if (event.source !== "extension") delivery.rearm(); });
++  pi.on("tool_call", (event, ctx) => { if (event.toolName === "Agent" && !ctx.signal?.aborted) delivery.rearm(); });
++  pi.on("agent_settled", (_event, ctx) => { delivery.reconcile(ctx.isIdle()); delivery.recover(); });
++  pi.on("context", () => { delivery.reconcile(false); });
++  pi.on("tool_result", event => ({ details: delivery.toolDetails(event.content, event.details) }));
++  pi.on("message_end", event => {
++    if (event.message.role === "custom" || event.message.role === "toolResult") delivery.reconcile(false);
++  });
++  pi.on("session_tree", (_event, ctx) => { delivery.activate(ctx); });
++
+   // Expose manager via Symbol.for() global registry for cross-package access.
+   // Standard Node.js pattern for cross-package singletons (used by OpenTelemetry, etc.).
+   // Documented for callers in docs/rpc.md ("The manager registry").
+@@ -696,6 +612,7 @@ export default function (pi: ExtensionAPI) {
+   };
+ 
+   const spawnTopLevel = (piRef: any, ctxRef: any, type: string, prompt: string, options: any) => {
++    delivery.rearm();
+     const safeOptions = { ...(options ?? {}) };
+     delete safeOptions.parentAgentId;
+     // Internal too: a forged value would hide an RPC-spawned agent inside
+@@ -792,7 +709,8 @@ export default function (pi: ExtensionAPI) {
+       widget.setUICtx(ctx.ui);
+       fleet.setUICtx(ctx.ui as any);
+     }
+-    manager.clearCompleted(true);
++    manager.clearCompleted();
++    delivery.activate(ctx);
+     // Guard mirrors the `!scheduler.isActive()` pattern below: session_start
+     // fires once per activation, but a double-bind must not leak listeners.
+     if (!rpcHandle) {
+@@ -807,7 +725,7 @@ export default function (pi: ExtensionAPI) {
+           // Unguarded on purpose: the stop handler now runs the top-level check
+           // itself off `getRecord`, and reports the refusal instead of the
+           // "Agent not found" a false from here used to be read as.
+-          abort: (id) => manager.abort(id),
++          abort: (id) => { delivery.disarm(); return manager.abort(id); },
+           consumeResult: (id) => {
+             const record = resolveAgentRef(id);
+             // Same guard as get_subagent_result: a running agent has no result
+@@ -815,9 +733,8 @@ export default function (pi: ExtensionAPI) {
+             // signal that it finished.
+             if (!record || record.parentAgentId) return false;
+             if (record.status === "running" || record.status === "queued") return false;
+-            record.resultConsumed = true;
+-            cancelNudge(record.id);
+-            return true;
++            if (!manager.isSettled(record.id)) return false;
++            return delivery.reserveRpc(record);
+           },
+         },
+       });
+@@ -1087,14 +1004,11 @@ export default function (pi: ExtensionAPI) {
+     return { action: "handled" };
+   });
+ 
+-  pi.on("session_before_switch", () => {
+-    manager.clearCompleted(true);
+-    scheduler.stop();
+-  });
+ 
+   // On shutdown, abort all agents immediately and clean up.
+   // If the session is going down, there's nothing left to consume agent results.
+   pi.on("session_shutdown", async () => {
++    delivery.shutdown();
+     rpcHandle?.unsubSpawn();
+     rpcHandle?.unsubStop();
+     rpcHandle?.unsubPing();
+@@ -1112,8 +1026,6 @@ export default function (pi: ExtensionAPI) {
+     for (const task of workflowTasks.values()) task.abortController.abort();
+     workflowTasks.clear();
+     manager.abortAll();
+-    for (const timer of pendingNudges.values()) clearTimeout(timer);
+-    pendingNudges.clear();
+     fleet.dispose();
+     // Awaited: it emits `session_shutdown` into every retained child session so
+     // extensions bound there can release what they armed in `session_start` (#242).
+@@ -1220,49 +1132,6 @@ export default function (pi: ExtensionAPI) {
+   function getToolDescriptionMode(): ToolDescriptionMode { return toolDescriptionMode; }
+   function setToolDescriptionMode(mode: ToolDescriptionMode): void { toolDescriptionMode = mode; }
+ 
+-  // ---- Batch tracking for smart join mode ----
+-  // Collects background agent IDs spawned in the current turn for smart grouping.
+-  // Uses a debounced timer: each new agent resets the 100ms window so that all
+-  // parallel tool calls (which may be dispatched across multiple microtasks by the
+-  // framework) are captured in the same batch.
+-  let currentBatchAgents: { id: string; joinMode: JoinMode }[] = [];
+-  let batchFinalizeTimer: ReturnType<typeof setTimeout> | undefined;
+-  let batchCounter = 0;
+-
+-  /** Finalize the current batch: if 2+ smart-mode agents, register as a group. */
+-  function finalizeBatch() {
+-    batchFinalizeTimer = undefined;
+-    const batchAgents = [...currentBatchAgents];
+-    currentBatchAgents = [];
+-
+-    const smartAgents = batchAgents.filter(a => a.joinMode === 'smart' || a.joinMode === 'group');
+-    if (smartAgents.length >= 2) {
+-      const groupId = `batch-${++batchCounter}`;
+-      const ids = smartAgents.map(a => a.id);
+-      groupJoin.registerGroup(groupId, ids);
+-      // Retroactively process agents that already completed during the debounce window.
+-      // Their onComplete fired but was deferred (agent was in currentBatchAgents),
+-      // so we feed them into the group now.
+-      for (const id of ids) {
+-        const record = manager.getRecord(id);
+-        if (!record) continue;
+-        record.groupId = groupId;
+-        if (record.completedAt != null && !record.resultConsumed) {
+-          groupJoin.onAgentComplete(record);
+-        }
+-      }
+-    } else {
+-      // No group formed — send individual nudges for any agents that completed
+-      // during the debounce window and had their notification deferred.
+-      for (const { id } of batchAgents) {
+-        const record = manager.getRecord(id);
+-        if (record?.completedAt != null && !record.resultConsumed) {
+-          sendIndividualNudge(record);
+-        }
+-      }
+-    }
+-  }
+-
+   /**
+    * Launch a detached resume of an existing agent and wire everything a
+    * re-running agent needs: transcript anchoring, activity tracking, join-mode
+@@ -1327,12 +1196,6 @@ export default function (pi: ExtensionAPI) {
+     });
+     if (!record) return undefined;
+ 
+-    if (joinMode != null && joinMode !== 'async') {
+-      currentBatchAgents.push({ id, joinMode });
+-      if (batchFinalizeTimer) clearTimeout(batchFinalizeTimer);
+-      batchFinalizeTimer = setTimeout(finalizeBatch, 100);
+-    }
+-
+     agentActivity.set(id, bgState);
+     // This agent already finished once, so the widget holds a finished-age
+     // for it that is past the linger limit — without clearing it, the
+@@ -1480,7 +1343,7 @@ Custom agents: .pi/agents/<name>.md (project) or ${getAgentDir()}/agents/<name>.
+ Notes:
+ - description: 3-5 words (shown in UI). Prompts must be self-contained — the agent has not seen this conversation.
+ - Parallel work: one message, multiple Agent calls — they run concurrently.
+-- Subagents run in the background by default; you'll be notified when one completes. Pass run_in_background: false only when your very next action depends on the result and nothing else could usefully happen while it runs. Never fabricate or predict a pending agent's results — if the user asks before the notification arrives, say it's still running.
++- Subagents run in the background by default. Continue independent work, then join required results with get_subagent_result(wait: true) before reporting completion. Pass run_in_background: false for an inline result. Never fabricate pending results.
+ - The result is not shown to the user — summarize it for them. Verify an agent's claimed code changes before reporting work done.
+ - resume continues a previous agent by ID; steer_subagent messages a running one.${isolationCompactGuideline}`;
+ 
+@@ -1503,9 +1366,9 @@ If the target is already known, use a direct tool — \`read\` for a known path,
+ - When you launch multiple agents for independent work, send them in a single message with multiple tool uses so they run concurrently. If the user specifies that they want you to run agents "in parallel", you MUST send a single message with multiple Agent tool use content blocks.
+ - When the agent is done, it returns a single message back to you. The result is not visible to the user — to show the user, send a text message with a concise summary.
+ - Trust but verify: an agent's summary describes what it intended to do, not necessarily what it did. When an agent writes or edits code, check the actual changes before reporting the work as done.
+-- Agents run in the background by default. When an agent runs in the background, you will be automatically notified when it completes — do NOT sleep, poll, or proactively check on its progress. Continue with other work or respond to the user instead.
++- Agents run in the background by default. Continue independent work, then use get_subagent_result with wait: true (or agent_ids and wait_for: any) to join before your final report. Waiting is event-driven; do not sleep or poll.
+ - **Foreground vs background**: Pass \`run_in_background: false\` only when your very next action depends on the agent's result and nothing else could usefully happen while it runs — e.g., a research agent whose finding gates the edit you're about to make. Otherwise let it run in the background (the default) — this includes fire-and-forget work, independent investigations, and anything where the user might hand you something else in the meantime. Wanting the result "next" is not enough on its own.
+-- **Don't race**: after launching a background agent, you know nothing about its results. Never fabricate or predict them in any format — not as prose, summary, or structured output. The completion notification arrives in a later turn; it is never something you write yourself. If the user asks before it lands, say the agent is still running — give status, not a guess.
++- Never fabricate pending results. Integrate actual child output before reporting the dependent work complete; no redundant acknowledgement is needed.
+ - Use resume with an agent ID to continue a previous agent's work. A new (non-resume) Agent call starts a fresh agent with no memory of prior runs, so the prompt must be self-contained.
+ - Use steer_subagent to send mid-run messages to a running background agent.
+ - Clearly tell the agent whether you expect it to write code or just to do research (search, file reads, etc.), since it is not aware of the user's intent.
+@@ -1586,7 +1449,7 @@ Terse command-style prompts produce shallow, generic work.
+     promptGuidelines: [
+       "Use Agent with specialized agents when the task matches an agent type's description. Subagents are valuable for parallelizing independent queries or for protecting the main context window from excessive results, but should not be used excessively when not needed. Importantly, avoid duplicating work that subagents are already doing — if you delegate research to a subagent, do not also perform the same searches yourself.",
+       "For broad codebase exploration or research, spawn Agent with an appropriate subagent_type (e.g. Explore). Otherwise use direct tools (read, grep, find) when the target is already known.",
+-      "When an agent runs in the background, you will be notified on completion — do not poll or sleep waiting for it. Continue with other work instead.",
++      "Continue independent work while Agent runs; when none remains, join with get_subagent_result wait: true before your final report. Do not sleep or poll.",
+       "Trust but verify: an agent's summary describes intent, not outcome. When an agent writes or edits code, check the actual changes before reporting work as done.",
+     ],
+     parameters: Type.Object({
+@@ -1624,7 +1487,7 @@ Terse command-style prompts produce shallow, generic work.
+       ),
+       run_in_background: Type.Optional(
+         Type.Boolean({
+-          description: "Defaults to true — the agent runs detached, returning its ID immediately, and you are notified on completion. Set false only when your very next action depends on the result; the call then blocks and returns the agent's full output inline.",
++          description: "Defaults to true: return an ID and continue independent work, then join using get_subagent_result wait: true. Set false to wait for output inline.",
+         }),
+       ),
+       resume: Type.Optional(
+@@ -1969,12 +1832,30 @@ Terse command-style prompts produce shallow, generic work.
+ 
+       // Resume existing agent
+       if (params.resume) {
+-        const existing = manager.getRecord(params.resume);
++        const existing = resolveAgentRef(params.resume);
+         if (!existing || !isTopLevelAgent(existing)) {
+           return textResult(`Agent not found: "${params.resume}". It may have been cleaned up.`);
+         }
+         if (!existing.session) {
+-          return textResult(`Agent "${params.resume}" has no active session to resume.`);
++          const resumeSessionFile = validateChildReference(existing, ctx.sessionManager.getSessionFile());
++          const modelId = existing.invocation?.modelId;
++          const separator = modelId?.indexOf("/") ?? -1;
++          const savedModel = modelId && separator > 0 ? ctx.modelRegistry.find(modelId.slice(0, separator), modelId.slice(separator + 1)) : undefined;
++          if (modelId && !savedModel) throw new Error(`Saved model unavailable: ${modelId}`);
++          const options = { description: existing.description, resumeSessionFile,
++            reclaim: { handle: existing.handle ?? existing.type, alias: existing.alias },
++            model: savedModel, invocation: existing.invocation, toolCeiling: existing.toolCeiling,
++            isolated: existing.invocation?.isolated, inheritContext: existing.invocation?.inheritContext,
++            maxTurns: existing.invocation?.maxTurns,
++            thinkingLevel: existing.invocation?.thinking === "off" ? undefined : existing.invocation?.thinking,
++            rootSessionId: ctx.sessionManager.getSessionId() };
++          if (runInBackground) {
++            const id = manager.spawn(pi, ctx, existing.type, params.prompt, { ...options, isBackground: true });
++            const reopened = manager.getRecord(id)!;
++            return textResult(`Saved context reopened. Agent ID: ${id}`, { ...buildDetails(detailBaseFor(reopened), reopened), status: "background" });
++          }
++          const { id, record } = await manager.spawnAndWait(pi, ctx, existing.type, params.prompt, { ...options, signal });
++          return textResult(`Agent ID: ${id}\n${record.error ?? record.result ?? "No output."}`, buildDetails(detailBaseFor(record), record));
+         }
+ 
+         // Background resume: detached run that notifies on completion, mirroring
+@@ -2011,13 +1892,13 @@ Terse command-style prompts produce shallow, generic work.
+             `Type: ${existing.type}\n` +
+             (record.outputFile ? `Output file: ${record.outputFile}\n` : "") +
+             (isQueued ? `Position: queued (max ${manager.getMaxConcurrent()} concurrent)\n` : "") +
+-            `\nYou will be notified when this agent completes.\n` +
++            `\nJoin with get_subagent_result wait: true when independent work ends.\n` +
+             `Use get_subagent_result to retrieve full results, or steer_subagent to send it messages.`,
+             { ...detailBaseFor(record), toolUses: record.toolUses, tokens: "", durationMs: 0, status: "background" as const, agentId: id },
+           );
+         }
+ 
+-        const record = await manager.resume(params.resume, params.prompt, signal);
++        const record = await manager.resume(existing.id, params.prompt, signal);
+         if (!record) {
+           return textResult(`Failed to resume agent "${params.resume}".`);
+         }
+@@ -2083,17 +1964,6 @@ Terse command-style prompts produce shallow, generic work.
+         // call instead of being reported as a subagent that ran (#179).
+         await manager.awaitStartup(id);
+ 
+-        if (joinMode == null || joinMode === 'async') {
+-          // Foreground/no join mode or explicit async — not part of any batch
+-        } else {
+-          // smart or group — add to current batch
+-          currentBatchAgents.push({ id, joinMode });
+-          // Debounce: reset timer on each new agent so parallel tool calls
+-          // dispatched across multiple event loop ticks are captured together
+-          if (batchFinalizeTimer) clearTimeout(batchFinalizeTimer);
+-          batchFinalizeTimer = setTimeout(finalizeBatch, 100);
+-        }
+-
+         agentActivity.set(id, bgState);
+         widget.ensureTimer();
+         widget.update();
+@@ -2116,7 +1986,7 @@ Terse command-style prompts produce shallow, generic work.
+           `Description: ${params.description}\n` +
+           (record?.outputFile ? `Output file: ${record.outputFile}\n` : "") +
+           (isQueued ? `Position: queued (max ${manager.getMaxConcurrent()} concurrent)\n` : "") +
+-          `\nYou will be notified when this agent completes.\n` +
++          `\nJoin with get_subagent_result wait: true when independent work ends.\n` +
+           `Use get_subagent_result to retrieve full results, or steer_subagent to send it messages.\n` +
+           `Do not duplicate this agent's work.`,
+           { ...detailBaseFor(record), toolUses: 0, tokens: "", durationMs: 0, status: "background" as const, agentId: id },
+@@ -2286,6 +2156,10 @@ Terse command-style prompts produce shallow, generic work.
+       ...tool,
+       execute: async (toolCallId: string | undefined, ...rest: any[]) => {
+         const result = await tool.execute(toolCallId, ...rest);
++        const record = result.details?.agentId && manager.getRecord(result.details.agentId);
++        if (record && result.details.runRevision === record.runRevision && result.details.status !== "background" && manager.isSettled(record.id)) {
++          result.details = { ...result.details, subagentReceipts: delivery.reserve([record]) };
++        }
+         if (!reportUsage || !toolCallId) return result;
+         const usage = pendingUsage.drain();
+         return usage ? { ...result, usage } : result;
+@@ -2733,12 +2607,19 @@ Terse command-style prompts produce shallow, generic work.
+     name: SUBAGENT_TOOL_NAMES.GET_RESULT,
+     label: "Get Agent Result",
+     description:
+-      "Check status and retrieve a background agent's full result — its completion notification carries only a preview. Use the agent ID returned by Agent.",
+-    promptSnippet: "Check status and retrieve results from a background agent",
++      "Retrieve completed background-agent results, or wait event-first for one selected agent to finish. Use one agent_id, or agent_ids with wait_for: 'any'.",
++    promptSnippet: "Join background agents and retrieve their results",
+     parameters: Type.Object({
+-      agent_id: Type.String({
+-        description: "The agent ID to check. The agent's handle also works — its `name` if you gave it one, otherwise its type (`explore`, `explore-2`).",
+-      }),
++      agent_id: Type.Optional(Type.String({
++        description: "One agent ID or handle to retrieve.",
++      })),
++      agent_ids: Type.Optional(Type.Array(Type.String(), {
++        description: "Agent IDs or handles to join. Mutually exclusive with agent_id.",
++        minItems: 1,
++      })),
++      wait_for: Type.Optional(Type.Literal("any", {
++        description: "With agent_ids, wait until any selected agent completes and return all selected outcomes currently ready.",
++      })),
+       wait: Type.Optional(
+         Type.Boolean({
+           description: "If true, wait for the agent to complete before returning. Default: false.",
+@@ -2751,7 +2632,29 @@ Terse command-style prompts produce shallow, generic work.
+       ),
+     }),
+     execute: async (_toolCallId, params, signal, _onUpdate, _ctx) => {
+-      const record = resolveAgentRef(params.agent_id);
++      if ((params.agent_id === undefined) === (params.agent_ids === undefined)) {
++        return textResult("Provide exactly one of agent_id or agent_ids.");
++      }
++      if (params.agent_id !== undefined && params.wait_for !== undefined || params.agent_ids !== undefined && params.wait !== undefined) {
++        throw new Error("Use agent_id with wait, or agent_ids with wait_for: any");
++      }
++      const waitSignal = signal ? AbortSignal.any([signal, delivery.signal]) : delivery.signal;
++      if (params.agent_ids !== undefined) {
++        if (params.wait_for !== "any") return textResult("agent_ids requires wait_for: 'any'.");
++        const records = params.agent_ids.map(resolveAgentRef);
++        if (records.some(record => !record || !isTopLevelAgent(record))) {
++          return textResult("One or more selected agents were not found.");
++        }
++        const ready = await manager.waitForAny(records.map(record => record!.id), waitSignal);
++        const budget = Math.floor(48000 / Math.max(1, ready.length));
++        const output = ready.map(record => {
++          const text = `Agent: ${record.id}\nStatus: ${record.status}\n\n${record.error ? `Error: ${record.error}${partialOutputSuffix(record)}` : record.result?.trim() || "No output."}`;
++          return text.length > budget ? text.slice(0, budget) + "\n[Truncated; inspect this agent separately.]" : text;
++        }).join("\n\n---\n\n");
++        return textResult(output, { subagentReceipts: delivery.reserve(ready) });
++      }
++
++      let record = resolveAgentRef(params.agent_id!);
+       if (!record || !isTopLevelAgent(record)) {
+         return textResult(`Agent not found: "${params.agent_id}". It may have been cleaned up.`);
+       }
+@@ -2759,17 +2662,7 @@ Terse command-style prompts produce shallow, generic work.
+       // Wait for completion if requested. Cancellation stops only this tool
+       // call; the background agent keeps running and remains unconsumed so its
+       // completion notification can still be delivered.
+-      // Queued agents have no promise yet (it's created when the queue starts
+-      // them), so poll until they leave the queue, then await like a running one.
+-      if (params.wait && (record.status === "running" || record.status === "queued")) {
+-        while (record.status === "queued") {
+-          await abortable(
+-            new Promise<void>((resolve) => setTimeout(resolve, QUEUE_WAIT_POLL_MS)),
+-            signal,
+-          );
+-        }
+-        if (record.promise) await abortable(record.promise, signal);
+-      }
++      if (params.wait) record = await manager.waitForResult(record.id, waitSignal);
+ 
+       const displayName = getDisplayName(record.type);
+       const duration = formatDuration(record.startedAt, record.completedAt);
+@@ -2790,19 +2683,15 @@ Terse command-style prompts produce shallow, generic work.
+         `Type: ${displayName} | Status: ${record.status}${getStatusNote(record.status)} | ${statsParts.join(" | ")}\n` +
+         `Description: ${record.description}\n\n`;
+ 
+-      if (record.status === "running") {
+-        output += "Agent is still running. Use wait: true or check back later.";
++      if (!params.wait && !manager.isSettled(record.id)) {
++        output += "Agent is still running or settling. Use wait: true to join its final output.";
+       } else if (record.status === "error") {
+         output += `Error: ${record.error}${partialOutputSuffix(record)}`;
+       } else {
+         output += record.result?.trim() || "No output.";
+       }
+ 
+-      // Mark result as consumed — suppresses the completion notification
+-      if (record.status !== "running" && record.status !== "queued") {
+-        record.resultConsumed = true;
+-        cancelNudge(params.agent_id);
+-      }
++      const receipts = manager.isSettled(record.id) ? delivery.reserve([record]) : [];
+ 
+       // Verbose: include full conversation
+       if (params.verbose && record.session) {
+@@ -2812,7 +2701,7 @@ Terse command-style prompts produce shallow, generic work.
+         }
+       }
+ 
+-      return textResult(output);
++      return textResult(output.length > 48000 ? output.slice(0, 48000) + `\n[Truncated; saved child session: ${record.sessionFile ?? "unavailable"}]` : output, { subagentReceipts: receipts });
+     },
+   }));
+ 
+diff --git a/src/invocation-config.ts b/src/invocation-config.ts
+index 09344ce287e151ebf35e8facffb06232cfea8d74..0b42cc894064d5afdb39ebfafa0f4a3304931cae 100644
+--- a/src/invocation-config.ts
++++ b/src/invocation-config.ts
+@@ -106,15 +106,7 @@ export function resolveAgentInvocationConfig(
+   runInBackground: boolean;
+   isolated: boolean;
+   isolation?: IsolationMode;
+-  /**
+-   * Caller parameters an agent file's frontmatter outranked, so the surfaces can
+-   * say "(asked X)" instead of presenting the effective value as the requested
+-   * one (#182). Populated only where both sides named something and they
+-   * disagree — a caller who asked for what they got was still honored.
+-   *
+-   * `max_turns` is deliberately absent: no surface renders a requested-vs-
+-   * effective turn limit, so recording one would be dead data.
+-   */
++  /** Retained for invocation-record compatibility; explicit choices are honored. */
+   overridden?: { thinking?: ThinkingLevel; model?: string };
+ } {
+   // Precedence first, collapse second — reversing these loses the veto, since
+@@ -123,30 +115,23 @@ export function resolveAgentInvocationConfig(
+   const requested = agentConfig?.isolation ?? params.isolation;
+   const isolation = requested === "worktree" && opts?.worktreeAllowed !== false ? "worktree" : undefined;
+ 
+-  const overriddenThinking = agentConfig?.thinking != null && params.thinking != null
+-    && agentConfig.thinking !== params.thinking
+-    ? params.thinking as ThinkingLevel
+-    : undefined;
+-  const overriddenModel = agentConfig?.model != null && params.model != null
+-    && agentConfig.model !== params.model
+-    ? params.model
+-    : undefined;
++  const profileMaxTurns = agentConfig?.maxTurns === 0 ? undefined : agentConfig?.maxTurns;
++  const requestedMaxTurns = params.max_turns === 0 ? undefined : params.max_turns;
++  const maxTurns = profileMaxTurns === undefined
++    ? requestedMaxTurns
++    : requestedMaxTurns === undefined
++      ? profileMaxTurns
++      : Math.min(profileMaxTurns, requestedMaxTurns);
+ 
+   return {
+-    modelInput: agentConfig?.model ?? params.model,
+-    modelFromParams: agentConfig?.model == null && params.model != null,
+-    thinking: (agentConfig?.thinking ?? params.thinking) as ThinkingLevel | undefined,
+-    maxTurns: agentConfig?.maxTurns ?? params.max_turns,
++    modelInput: params.model ?? agentConfig?.model,
++    modelFromParams: params.model != null,
++    thinking: (params.thinking ?? agentConfig?.thinking) as ThinkingLevel | undefined,
++    maxTurns,
+     inheritContext: agentConfig?.inheritContext ?? params.inherit_context ?? false,
+     runInBackground: agentConfig?.runInBackground ?? params.run_in_background ?? opts?.defaultRunInBackground ?? false,
+     isolated: agentConfig?.isolated ?? params.isolated ?? false,
+     isolation,
+-    // Undefined rather than an empty object when nothing was overridden: callers
+-    // spread this into the invocation snapshot, and an always-present key would
+-    // put `requestedThinking: undefined` on every record.
+-    overridden: overriddenThinking || overriddenModel
+-      ? { thinking: overriddenThinking, model: overriddenModel }
+-      : undefined,
+   };
+ }
+ 
+diff --git a/src/nested-tools.ts b/src/nested-tools.ts
+index ce568e8018011cc37b0df289f24d5cf8ea9c8845..2caad09539146da06bc34ee27b5a026f04050c8a 100644
+--- a/src/nested-tools.ts
++++ b/src/nested-tools.ts
+@@ -7,7 +7,6 @@ import {
+   type ToolDefinition,
+ } from "@earendil-works/pi-coding-agent";
+ import { Type } from "@sinclair/typebox";
+-import { abortable } from "./abortable.js";
+ import {
+   buildAgentRegistry,
+   getAgentConfigIn,
+@@ -67,6 +66,8 @@ interface NestedSpawnOptions {
+   maxSubagentDepth: number;
+   configCwd?: string;
+   rootSessionId?: string;
++  /** Active tools owned by the immediate parent; descendants cannot exceed it. */
++  toolCeiling?: readonly string[];
+ }
+ 
+ export interface NestedAgentManager {
+@@ -89,7 +90,14 @@ export interface NestedAgentManager {
+     onSpawned?: (id: string) => void,
+   ): Promise<{ id: string; record: AgentRecord }>;
+   getRecord(id: string): AgentRecord | undefined;
+-  resume(id: string, prompt: string, signal?: AbortSignal): Promise<AgentRecord | undefined>;
++  resume(
++    id: string,
++    prompt: string,
++    signal?: AbortSignal,
++    options?: { toolCeiling?: readonly string[] },
++  ): Promise<AgentRecord | undefined>;
++  waitForResult(agentId: string, signal?: AbortSignal): Promise<AgentRecord>;
++  waitForAny(agentIds: readonly string[], signal?: AbortSignal): Promise<AgentRecord[]>;
+ }
+ 
+ export interface NestedToolContext {
+@@ -181,12 +189,18 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
+       ...isolationParam(isWorktreeIsolationEnabled()),
+     }),
+     execute: async (_toolCallId, params, signal, _onUpdate, ctx) => {
++      const parentSession = context.manager.getRecord(context.parentAgentId)?.session;
++      if (!parentSession) {
++        return textResult("Nested subagent call blocked because the owning parent session is not ready.", true);
++      }
++      const toolCeiling = parentSession.getActiveToolNames();
++
+       if (params.resume) {
+         const existing = context.manager.getRecord(params.resume);
+         if (!ownsRecord(existing, context.parentAgentId)) {
+           return textResult(`Nested agent not found or not owned by this parent: "${params.resume}".`, true);
+         }
+-        const resumed = await context.manager.resume(params.resume, params.prompt, signal);
++        const resumed = await context.manager.resume(params.resume, params.prompt, signal, { toolCeiling });
+         return resumed
+           ? textResult(formatRecord(resumed, "inline"), resumed.status === "error")
+           : textResult(`Failed to resume nested agent "${params.resume}".`, true);
+@@ -293,6 +307,7 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
+         maxSubagentDepth: context.maxSubagentDepth,
+         configCwd: context.configCwd,
+         rootSessionId,
++        toolCeiling,
+       };
+ 
+       // Transcript wiring, same gate as the top-level path: the child's
+@@ -375,17 +390,12 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
+       if (!ownsRecord(record, context.parentAgentId)) {
+         return textResult(`Nested agent not found or not owned by this parent: "${params.agent_id}".`, true);
+       }
+-      // Wait for completion if requested. Cancellation (e.g. the parent's tool
+-      // call is aborted) stops only this wait; the nested child keeps running and
+-      // stays unconsumed. Queued records have no promise until the manager starts
+-      // them, so poll — abortably — until they leave the queue, then await.
+-      if (params.wait && (record.status === "queued" || record.status === "running")) {
+-        while (record.status === "queued") {
+-          await abortable(new Promise<void>(resolve => setTimeout(resolve, 250)), signal);
+-        }
+-        if (record.promise) await abortable(record.promise, signal);
+-      }
+-      return textResult(formatRecord(record, "fetched"), record.status === "error");
++      // The manager owns completion signaling for queued and running records.
++      // Cancelling this wait leaves the child and its saved result intact.
++      const resolved = params.wait
++        ? await context.manager.waitForResult(record.id, signal)
++        : record;
++      return textResult(formatRecord(resolved, "fetched"), resolved.status === "error");
+     },
+   });
+ 
+diff --git a/src/quiet-delivery.ts b/src/quiet-delivery.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..7000e9efd54f66a4087e47d413aaa1455e3c80d4
+--- /dev/null
++++ b/src/quiet-delivery.ts
+@@ -0,0 +1,173 @@
++import { randomUUID } from "node:crypto";
++import { savedRecord } from "./session-record.js";
++export { validateChildReference } from "./session-record.js";
++import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
++import { AgentManager, isTopLevelAgent } from "./agent-manager.js";
++import type { AgentRecord } from "./types.js";
++
++export interface ResultReceipt { id: string; runRevision: number; transaction: string }
++const key = (record: Pick<AgentRecord, "id" | "runRevision">) => `${record.id}:${record.runRevision}`;
++const object = (value: unknown): value is Record<string, any> => !!value && typeof value === "object";
++export function resultReceipts(details: unknown): ResultReceipt[] {
++  if (!object(details) || !Array.isArray(details.subagentReceipts)) return [];
++  return details.subagentReceipts.filter((item: unknown): item is ResultReceipt => object(item) &&
++    typeof item.id === "string" && Number.isInteger(item.runRevision) && typeof item.transaction === "string");
++}
++
++/** Native branch entries are the durable authority; reservations only exclude competing live delivery. */
++export class QuietDelivery {
++  private context?: ExtensionContext;
++  private generation = 0;
++  private armed = false;
++  private origins = new WeakMap<AgentRecord, number>();
++  private claims = new Map<string, ResultReceipt>();
++  private attempted = new Set<string>();
++  private rpcClaims = new Map<string, AgentRecord>();
++  private waits = new AbortController();
++  constructor(private pi: ExtensionAPI, private manager: AgentManager) {}
++
++  get signal(): AbortSignal { return this.waits.signal; }
++  activate(context: ExtensionContext): void {
++    this.disarm();
++    this.generation++;
++    this.context = undefined;
++    this.manager.resetBranch();
++    this.context = context;
++    this.attempted.clear();
++    const saved = new Map<string, AgentRecord>();
++    for (const entry of context.sessionManager.getBranch()) {
++      if (entry.type !== "custom" || entry.customType !== "subagents:record" || !object(entry.data)) continue;
++      const data = entry.data;
++      if (typeof data.id !== "string" || typeof data.type !== "string" || typeof data.description !== "string") continue;
++      const record: AgentRecord = {
++        ...data, id: data.id, type: data.type, description: data.description,
++        session: undefined, promise: undefined, abortController: undefined, startGate: undefined,
++        outputCleanup: undefined, pendingSteers: undefined,
++        status: data.status === "running" || data.status === "queued" ? "stopped" : data.status,
++        runRevision: Number.isInteger(data.runRevision) ? data.runRevision : 0,
++        toolUses: data.toolUses ?? 0, startedAt: data.startedAt ?? 0,
++        lifetimeUsage: data.lifetimeUsage ?? { input: 0, output: 0, cacheWrite: 0, cost: 0 },
++        compactionCount: data.compactionCount ?? 0,
++      };
++      saved.set(record.id, record);
++    }
++    for (const record of saved.values()) {
++      this.manager.restore(record);
++      this.origins.set(record, this.generation);
++    }
++    this.reconcile(false);
++  }
++  rearm(): void { this.armed = true; if (this.waits.signal.aborted) this.waits = new AbortController(); }
++  disarm(): void {
++    this.armed = false;
++    this.waits.abort(new Error("Parent session stopped"));
++    this.reconcile(false);
++    this.claims.clear();
++    this.rpcClaims.clear();
++  }
++  shutdown(): void {
++    this.disarm();
++    for (const record of this.manager.listAgents()) {
++      if (!this.owns(record)) continue;
++      this.writeRecord({ ...savedRecord(record),
++        status: this.manager.isSettled(record.id) ? record.status : "stopped" });
++    }
++    this.generation++;
++    this.context = undefined;
++  }
++  reserveRpc(record: AgentRecord): boolean {
++    const receipts = this.reserve([record]);
++    if (!receipts.length) return false;
++    this.rpcClaims.set(key(record), { ...record });
++    return true;
++  }
++  toolDetails(content: readonly { type: string; text?: string }[], details: unknown): unknown {
++    const text = content.flatMap(block => block.type === "text" ? [block.text ?? ""] : []).join("\n");
++    const receipts = resultReceipts(details);
++    for (const [identity, record] of this.rpcClaims) {
++      const output = record.result || record.error;
++      const identifiesRecord = text.includes(record.id) || object(details) && (details.agentId === record.id || details.id === record.id);
++      if (!output || !identifiesRecord || !text.includes(output)) continue;
++      const receipt = this.claims.get(identity);
++      if (receipt) receipts.push(receipt);
++      this.rpcClaims.delete(identity);
++    }
++    return receipts.length ? { ...(object(details) ? details : {}), subagentReceipts: receipts } : details;
++  }
++  track(record: AgentRecord): void {
++    if (!this.context || record.parentSessionId !== this.context.sessionManager.getSessionId()) return;
++    if (!this.origins.has(record)) this.origins.set(record, this.generation);
++    this.persist(record);
++  }
++  owns(record: AgentRecord): boolean {
++    return !!this.context && isTopLevelAgent(record) && this.origins.get(record) === this.generation &&
++      record.parentSessionId === this.context.sessionManager.getSessionId();
++  }
++  private writeRecord(data: ReturnType<typeof savedRecord>): void {
++    try { this.pi.appendEntry("subagents:record", data); }
++    catch (error) { console.warn("[pi-subagents] Outcome persistence failed:", String(error).slice(0, 240)); }
++  }
++  persist(record: AgentRecord): void {
++    if (this.owns(record)) this.writeRecord(savedRecord(record));
++  }
++  completed(record: AgentRecord): void {
++    if (!this.owns(record)) return;
++    this.persist(record);
++    this.recover();
++  }
++  reserve(records: readonly AgentRecord[]): ResultReceipt[] {
++    const receipts: ResultReceipt[] = [];
++    for (const record of records) {
++      const live = this.manager.getRecord(record.id);
++      if (!live || !this.owns(live) || live.runRevision !== record.runRevision || !this.manager.isSettled(record.id)) continue;
++      const existing = this.claims.get(key(record));
++      if (existing) { receipts.push(existing); continue; }
++      const receipt = { id: record.id, runRevision: record.runRevision, transaction: randomUUID() };
++      this.claims.set(key(record), receipt);
++      receipts.push(receipt);
++    }
++    return receipts;
++  }
++  reconcile(release = true): void {
++    if (!this.context) return;
++    const accepted = new Set<string>();
++    for (const entry of this.context.sessionManager.getBranch()) {
++      const details = entry.type === "custom_message" ? entry.details :
++        entry.type === "message" && entry.message.role === "toolResult" ? entry.message.details : undefined;
++      for (const receipt of resultReceipts(details)) {
++        accepted.add(key(receipt));
++        const record = this.manager.getRecord(receipt.id);
++        if (!record || record.runRevision !== receipt.runRevision || record.resultConsumed) continue;
++        record.resultConsumed = true;
++        this.claims.delete(key(receipt));
++        this.pi.events.emit("subagents:result-delivered", { id: receipt.id, runRevision: receipt.runRevision });
++      }
++    }
++    if (release) {
++      for (const identity of this.claims.keys()) if (!accepted.has(identity)) this.claims.delete(identity);
++      for (const record of this.manager.listAgents()) if (this.manager.isSettled(record.id)) record.blocking = false;
++    }
++  }
++  recover(): void {
++    const context = this.context;
++    if (!context || !this.armed || !context.isIdle()) return;
++    const records = this.manager.listAgents().filter(record => this.owns(record) &&
++      this.manager.isSettled(record.id) && !record.resultConsumed && !record.blocking &&
++      !this.claims.has(key(record)) && !this.attempted.has(key(record))).slice(0, 3);
++    if (!records.length) return;
++    const receipts = this.reserve(records);
++    for (const record of records) this.attempted.add(key(record));
++    const content = records.map(record => {
++      const output = (record.error ? `Error: ${record.error}\n` : "") + (record.result || "No output.");
++      return `Agent ${record.id} (${record.status}), run ${record.runRevision}\n${output.slice(0, 15000)}` +
++        (output.length > 15000 ? "\n[Truncated; use get_subagent_result for inspection.]" : "");
++    }).join("\n\n---\n\n");
++    try {
++      this.pi.sendMessage({ customType: "subagents:results", content, display: false,
++        details: { subagentReceipts: receipts } }, { triggerTurn: true });
++    } catch (error) {
++      for (const receipt of receipts) this.claims.delete(key(receipt));
++      console.warn("[pi-subagents] Result delivery failed:", String(error).slice(0, 240));
++    }
++  }
++}
+diff --git a/src/session-record.ts b/src/session-record.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..07952a5568e86e64f73c4df91ccca1f362d3e252
+--- /dev/null
++++ b/src/session-record.ts
+@@ -0,0 +1,24 @@
++import { closeSync, openSync, readSync, realpathSync } from "node:fs";
++import type { AgentRecord } from "./types.js";
++
++export function savedRecord(record: AgentRecord) {
++  const { session, promise, startGate, abortController, outputCleanup, pendingSteers, ...data } = record;
++  return { ...data, schema: 1 };
++}
++
++export function validateChildReference(record: Pick<AgentRecord, "sessionFile">, parentFile: string | undefined): string {
++  if (!record.sessionFile || !parentFile) throw new Error("Saved child context is unavailable");
++  const descriptor = openSync(record.sessionFile, "r");
++  let firstLine: string;
++  try {
++    const buffer = Buffer.alloc(65536);
++    const length = readSync(descriptor, buffer, 0, buffer.length, 0);
++    firstLine = buffer.subarray(0, length).toString("utf8").split(/\r?\n/, 1)[0];
++  } finally { closeSync(descriptor); }
++  const header = JSON.parse(firstLine);
++  if (header.type !== "session" || typeof header.parentSession !== "string" ||
++      realpathSync(header.parentSession) !== realpathSync(parentFile)) {
++    throw new Error("Saved child parentSession does not match the current parent");
++  }
++  return record.sessionFile;
++}
+diff --git a/src/skill-loader.ts b/src/skill-loader.ts
+index 643589eeec082f2bc0d458bfe20823c92bb87312..6ac89e6654369d364f93cf731ed3df682f8ca50d 100644
+--- a/src/skill-loader.ts
++++ b/src/skill-loader.ts
+@@ -30,11 +30,11 @@ export interface PreloadedSkill {
+   content: string;
+ }
+ 
+-export function preloadSkills(skillNames: string[], cwd: string): PreloadedSkill[] {
+-  return skillNames.map((name) => ({ name, content: loadSkillContent(name, cwd) }));
++export function preloadSkills(skillNames: string[], cwd: string, additionalSkillPaths: string[] = []): PreloadedSkill[] {
++  return skillNames.map((name) => ({ name, content: loadSkillContent(name, cwd, additionalSkillPaths) }));
+ }
+ 
+-function loadSkillContent(name: string, cwd: string): string {
++function loadSkillContent(name: string, cwd: string, additionalSkillPaths: string[]): string {
+   if (isUnsafeName(name)) {
+     return `(Skill "${name}" skipped: name contains path traversal characters)`;
+   }
+@@ -44,6 +44,7 @@ function loadSkillContent(name: string, cwd: string): string {
+     join(getAgentDir(), "skills"), // user — Pi standard
+     join(homedir(), ".agents", "skills"), // user — Agent Skills spec
+     join(homedir(), ".pi", "skills"), // legacy global, pre-Pi
++    ...additionalSkillPaths,
+   ];
+   for (const root of roots) {
+     const content = findInRoot(root, name);
+diff --git a/src/types.ts b/src/types.ts
+index 3b7f262bdfc154d8454c1b0be67bcd14587029de..ce3763ba15be829ca617d01c92d1aec0965ac385 100644
+--- a/src/types.ts
++++ b/src/types.ts
+@@ -198,8 +198,15 @@ export interface AgentRecord {
+   startGate?: Promise<void>;
+   groupId?: string;
+   joinMode?: JoinMode;
+-  /** Set when result was already consumed via get_subagent_result — suppresses completion notification. */
++  /** Set after a result has been accepted by a parent result-delivery path. */
+   resultConsumed?: boolean;
++  /** Monotonic generation for this agent handle; incremented for every resume. */
++  runRevision: number;
++  parentSessionId?: string;
++  parentSessionFile?: string;
++  parentBranchEntry?: string | null;
++  /** Effective tool ceiling inherited from the parent invocation. */
++  toolCeiling?: readonly string[];
+   /** Steering messages queued before the session was ready. */
+   pendingSteers?: string[];
+   /** Worktree info if the agent is running in an isolated worktree. */

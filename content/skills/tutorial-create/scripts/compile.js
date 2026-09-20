@@ -1477,30 +1477,30 @@ async function main() {
 
   let html = readFileSync(TEMPLATE_PATH, 'utf8');
   const replacements = {
-    '{{META_COMMENT}}': metaComment,
-    '{{TITLE}}': escapeHtml(meta.title),
-    '{{SUBTITLE}}': renderInline(meta.subtitle || ''),
-    '{{BRAND_SMALL}}': meta.track ? ` <small>· ${escapeHtml(meta.track)}</small>` : '',
-    '{{TYPE_LABEL}}': typeLabel,
-    '{{TYPE_LABEL_LOWER}}': typeLabel.toLowerCase(),
-    '{{DATE}}': escapeHtml(String(meta.date)),
-    '{{READ_MIN}}': String(readMin),
-    '{{SECTION_COUNT}}': String(sections.length),
-    '{{SECTION_COUNT_WORD}}': countWord,
-    '{{SLUG}}': meta.slug,
-    '{{TOC_ITEMS}}': renderTocItems(sections),
-    '{{VIDEOS}}': renderVideos(meta.videos),
-    '{{SECTIONS}}': sectionHtml.join('\n'),
-    '{{REFERENCES}}': renderReferences(meta.references),
-    '{{QUIZ}}': meta.type === 'topic' ? renderQuiz(quiz) : '',
-    '{{GLOSSARY_JSON}}': JSON.stringify(glossary, null, 2),
-    '{{SLUGS_JSON}}': JSON.stringify(sections.map((s) => s.slug)),
+    '{{tutorial_meta_comment}}': metaComment,
+    '{{tutorial_title}}': escapeHtml(meta.title),
+    '{{tutorial_subtitle}}': renderInline(meta.subtitle || ''),
+    '{{tutorial_brand_small}}': meta.track ? ` <small>· ${escapeHtml(meta.track)}</small>` : '',
+    '{{tutorial_type_label}}': typeLabel,
+    '{{tutorial_type_label_lower}}': typeLabel.toLowerCase(),
+    '{{tutorial_date}}': escapeHtml(String(meta.date)),
+    '{{tutorial_read_min}}': String(readMin),
+    '{{tutorial_section_count}}': String(sections.length),
+    '{{tutorial_section_count_word}}': countWord,
+    '{{tutorial_slug}}': meta.slug,
+    '{{tutorial_toc_items}}': renderTocItems(sections),
+    '{{tutorial_videos}}': renderVideos(meta.videos),
+    '{{tutorial_sections}}': sectionHtml.join('\n'),
+    '{{tutorial_references}}': renderReferences(meta.references),
+    '{{tutorial_quiz}}': meta.type === 'topic' ? renderQuiz(quiz) : '',
+    '{{tutorial_glossary_json}}': JSON.stringify(glossary, null, 2),
+    '{{tutorial_slugs_json}}': JSON.stringify(sections.map((s) => s.slug)),
   };
   for (const [key, value] of Object.entries(replacements)) {
     html = html.split(key).join(value);
   }
 
-  const leftover = html.match(/\{\{[A-Z_]+\}\}/);
+  const leftover = html.match(/\{\{(?:tutorial_[a-z_]+|[A-Z_]+)\}\}/);
   if (leftover) {
     fail(`unfilled template placeholder: ${leftover[0]}`);
   }

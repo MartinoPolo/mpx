@@ -1,6 +1,7 @@
 ---
 name: agent-create
-description: 'Creates or restructures a portable custom agent when a user needs a delegated role, distinct...'
+description:
+  'Creates or restructures a portable custom agent when a user needs a delegated role, distinct...'
 argument-hint: '[agent name or description]'
 triggers: create custom agent; restructure agent; design delegated role or agent workflow
 metadata:
@@ -9,34 +10,31 @@ metadata:
   category: utility
   mpx:
     schemaVersion: 1
-    contentVersion: 1
     skillPacks: [development]
     defaultExposure: explicit-only
-    capabilities: [delegate, read, search, write]
 ---
 
 # Agent Create
 
-Create a focused custom agent following the target repository's canonical conventions. Use `the invocation input` for
-known requirements.
+Create a focused custom agent following the target repository's canonical conventions. Use
+`the invocation input` for known requirements.
 
-Before starting, read [Authoring Conventions](../shared/AUTHORING.md),
-[Writing for Agents](../shared/WRITING_FOR_AGENTS.md), and [Sub-Agent Protocol](../shared/SUBAGENT_PROTOCOL.md)
-completely. They are the authoritative sources for writing, identity, tools, model classes, lifecycle, and permissions.
-
-Resolve assets relative to this loaded skill; follow [Content Paths](../shared/CONTENT_PATHS.md) when a tool requires an
-absolute path.
+Before starting, read [Writing for Agents]({{MPX_SHARED_INSTRUCTIONS}}/WRITING_FOR_AGENTS.md)
+completely. Use the target repository's schema and runtime configuration for identity, capabilities,
+model classes, and lifecycle mechanics.
 
 ## Workflow
 
-1. **Fetch current mechanics.** For runtime or library documentation available through Context7, spawn the existing
-   `mpx-context7-docs-fetcher` and ask for the active runtime's current custom-agent frontmatter, packaging, delegation,
-   tool, model, permission, and reload mechanics with runtime-source citations. For installed-runtime mechanics that
-   Context7 does not cover, return a bounded handoff asking the parent to read the installed runtime documentation and
-   provide the cited findings. Treat only cited runtime facts as platform mechanics, and keep general writing guidance
-   in the shared references rather than copying it into the draft.
+1. **Fetch current mechanics.** For runtime or library documentation available through Context7,
+   spawn the existing `mpx-context7-docs-fetcher` and ask for the active runtime's current
+   custom-agent frontmatter, packaging, delegation, tool, model, permission, and reload mechanics
+   with runtime-source citations. For installed-runtime mechanics that Context7 does not cover,
+   return a bounded handoff asking the parent to read the installed runtime documentation and
+   provide the cited findings. Treat only cited runtime facts as platform mechanics, and keep
+   writing guidance separate from platform mechanics.
 
-2. **Gather requirements.** In one numbered request, ask for every item not already answered by `the invocation input`:
+2. **Gather requirements.** In one numbered request, ask for every item not already answered by
+   `the invocation input`:
    1. purpose and agent name;
    2. distinct delegation branches and the phrases that route to each;
    3. inputs and outputs for every branch;
@@ -49,43 +47,45 @@ absolute path.
    10. color when supported by the target profile;
    11. parent-facing output shape.
 
-   Require every field to be answered or marked not applicable. Clarify contradictions before drafting.
+   Require every field to be answered or marked not applicable. Clarify contradictions before
+   drafting.
 
-3. **Design the hierarchy.** Assign every requirement exactly one authoritative location. Keep universal ordered actions
-   in the workflow, co-locate each branch's rules, and disclose branch-only references through precise one-level
-   pointers. Keep one responsibility and a body near 100 lines. Split only when a real branch or sequence boundary
-   justifies the context hop.
+3. **Design the hierarchy.** Map requirements to the agent workflow and any branch-specific
+   references using Writing for Agents. Keep the agent focused on one responsibility.
 
-4. **Draft the agent.** Determine the target repository's configured canonical agent root from manifests and existing
-   artifacts; in this repository it is `content/agents/`. Draft `<agent-root>/<agent-name>.md` using lowercase
-   hyphenated identity, except for an exact documented built-in override. Use:
-   - a one-line description under 250 characters that front-loads every distinct delegation branch;
+4. **Draft the agent.** Determine the target repository's configured canonical agent root from
+   repository configuration, compiler contracts, and existing artifacts; in this repository it is `content/agents/`. Draft
+   `<agent-root>/<agent-name>.md` using lowercase hyphenated identity, except for an exact
+   documented built-in override. Use:
+   - a concise description covering every distinct delegation branch;
    - canonical capability classes rather than vendor tool names;
-   - a structured model class and effort policy, translated by runtime profiles to concrete model IDs;
+   - a structured model class and effort policy, translated by runtime profiles to concrete model
+     IDs;
    - color only where canonical schema supports it or in the runtime projection that owns it;
    - a focused role, numbered workflow, stop conditions, and parseable output contract.
 
-   Follow Sub-Agent Protocol for MCP, overrides, model parameters, nesting, and grants. Align filename and identity.
-   Grant every used capability and no unused capability. Account for all requested branches in behavior and output.
-   Write imperative steps with semantic endpoints; integrate relevant validation and stop conditions into those actions.
-   Add a standalone gate only for an ambiguous or risky transition allowed by shared policy.
+   Align filename and identity. Grant every used capability and no unused capability. Verify
+   critical capabilities through safe operations; declarations alone do not prove runtime access.
+   Account for all requested branches in behavior and output. Use supplied `MPX_*` roots for external
+   machine resources and stop the affected branch if a required root is unavailable.
 
-5. **Validate and prune.** Compare the draft against the fetched mechanics and all three shared references. Check every
-   gathered requirement, filename/identity alignment, branch coverage, capability use, model configuration, output
-   parseability, and reference resolution. Apply the single-source, environment-cache, relevance, positive-target,
-   no-op, hierarchy, and semantic-completion tests. Keep uncertain no-ops as manual behavioral findings; record unmet
-   applicable rules with exact reasons. Reread the complete edited artifact.
+5. **Validate and prune.** Apply Writing for Agents and the fetched mechanics. Check every gathered
+   requirement, filename/identity alignment, branch coverage, capability use, model configuration,
+   output parseability, and reference resolution. Run the target repository's compiler validation
+   and relevant checks; record unmet rules and uncertain behavioral findings with reasons. Reread
+   the complete edited artifact.
 
-6. **Review with the user.** Present the full file or a precise path plus complete diff, delegation branches, hierarchy,
-   runtime-profile model/tool translation, guideline-driven edits, validation results, and unresolved findings. Apply
-   requested revisions and repeat validation until the user approves and every finding is resolved or explicitly
-   accepted.
+6. **Review with the user.** Present the full file or a precise path plus complete diff, delegation
+   branches, hierarchy, runtime-profile model/tool translation, guideline-driven edits, validation
+   results, and unresolved findings. Apply requested revisions and repeat validation until the user
+   approves and every finding is resolved or explicitly accepted.
 
 ## Final report
 
 ```markdown
-Created/Changed: [path] Branches: [branch -> trigger -> expected result] Model Policy: [class/effort -> runtime-profile
-translation] Capabilities: [canonical grants -> runtime tool translation] Validation: [check results] Manual No-op
-Tests: [none or findings] Requirement Accounting: [each gathered requirement -> owning location] Artifacts: [every
-changed path] Approval: [approved or pending]
+Created/Changed: [path] Branches: [branch -> trigger -> expected result] Model Policy: [class/effort
+-> runtime-profile translation] Capabilities: [canonical grants -> runtime tool translation]
+Validation: [check results] Manual No-op Tests: [none or findings] Requirement Accounting: [each
+gathered requirement -> owning location] Artifacts: [every changed path] Approval: [approved or
+pending]
 ```
