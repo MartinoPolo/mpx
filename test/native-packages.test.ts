@@ -41,7 +41,7 @@ const versions = (web: string) => ({
 });
 
 test('read-only native package status resolves configured manifest load targets and reports cross-account version conflict', async () => {
-  const fixture = await mkdtemp(join(tmpdir(), 'mpx2-native-packages-'));
+  const fixture = await mkdtemp(join(tmpdir(), 'mpx-native-packages-'));
   try {
     const personal = resolve(fixture, 'personal');
     const work = resolve(fixture, 'work');
@@ -72,7 +72,7 @@ test('read-only native package status resolves configured manifest load targets 
 });
 
 test('object settings with disabled or filtered extensions are configured but not reported ready', async () => {
-  const fixture = await mkdtemp(join(tmpdir(), 'mpx2-native-packages-filtered-'));
+  const fixture = await mkdtemp(join(tmpdir(), 'mpx-native-packages-filtered-'));
   try {
     const disabled = resolve(fixture, 'disabled');
     const filtered = resolve(fixture, 'filtered');
@@ -108,7 +108,7 @@ test('object settings with disabled or filtered extensions are configured but no
 });
 
 test('invalid null and oversized settings are handled as bounded read failures', async () => {
-  const fixture = await mkdtemp(join(tmpdir(), 'mpx2-native-packages-settings-'));
+  const fixture = await mkdtemp(join(tmpdir(), 'mpx-native-packages-settings-'));
   try {
     const account = resolve(fixture, 'account');
     await makeAccount(account, versions('0.28.0'));
@@ -128,7 +128,7 @@ test('invalid null and oversized settings are handled as bounded read failures',
 });
 
 test('native package status is portable for absent artifacts and requires explicit absolute roots', async () => {
-  const fixture = await mkdtemp(join(tmpdir(), 'mpx2-native-packages-missing-'));
+  const fixture = await mkdtemp(join(tmpdir(), 'mpx-native-packages-missing-'));
   try {
     const account = resolve(fixture, 'account');
     await makeAccount(account, versions('0.28.0'), 'pi-mcp-adapter');
@@ -145,7 +145,7 @@ test('native package status is portable for absent artifacts and requires explic
 });
 
 test('status load target supports Pi 0.85.1 explicit package-directory extension loading', async () => {
-  const fixture = await mkdtemp(join(tmpdir(), 'mpx2-native-package-loader-'));
+  const fixture = await mkdtemp(join(tmpdir(), 'mpx-native-package-loader-'));
   try {
     const account = resolve(fixture, 'agent');
     const cwd = resolve(fixture, 'repo');

@@ -10,7 +10,7 @@ const exec = promisify(execFile);
 const packageRoot = fileURLToPath(new URL('../', import.meta.url));
 
 test('native Pi loader/session delivers roots and style without repeated prompt injection', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'mpx2-native-context-'));
+  const root = await mkdtemp(join(tmpdir(), 'mpx-native-context-'));
   try {
     const account = join(root, 'account');
     const cwd = join(root, 'project');

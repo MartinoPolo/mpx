@@ -96,7 +96,7 @@ export async function createLaunchSpec(options: {
   else for (const path of selection.paths) injected.push(harness === 'pi' ? '--skill' : '--add-dir', path);
   return {
     executable, args: [...injected, ...args], cwd, env,
-    label: native ? 'Native Pi · extension discovery-disabled · explicit extensions may load; see native startup list' : `MPX2 · ${account.toUpperCase()} · ${harness === 'pi' ? 'Pi' : 'Claude'}`,
+    label: native ? 'Native Pi · extension discovery-disabled · explicit extensions may load; see native startup list' : `MPX · ${account.toUpperCase()} · ${harness === 'pi' ? 'Pi' : 'Claude'}`,
     warnings: normalizedWarnings,
     requiresConfirmation: normalizedWarnings.length > 0,
   };
@@ -197,7 +197,7 @@ function windowsArgument(value: string): string {
 export async function runLaunch(spec: LaunchSpec, capture?: (chunk: string) => void): Promise<number> {
   const needsBash = process.platform === 'win32' && !/\.(exe|com)$/i.test(spec.executable);
   const command = needsBash ? 'bash' : spec.executable;
-  const args = needsBash ? ['--noprofile', '--norc', '-c', 'exec "$@"', 'mpx2-launch', spec.executable, ...spec.args] : spec.args;
+  const args = needsBash ? ['--noprofile', '--norc', '-c', 'exec "$@"', 'mpx-launch', spec.executable, ...spec.args] : spec.args;
   return new Promise<number>((accept, reject) => {
     const child = spawn(command, needsBash ? args.map(windowsArgument) : args, {
       cwd: spec.cwd, env: spec.env, shell: false, windowsVerbatimArguments: needsBash,

@@ -77,7 +77,7 @@ when resolved main-checkout configuration or machine-local overrides must be sup
 resolved `config` object, not the surrounding `mpx project config` result. Detector `cwd` values are
 relative to the checkout passed to it.
 
-User configuration lives at `$APPDATA/mpx2/config.json` and maps personal/work Pi and Claude roots,
+User configuration lives at `$APPDATA/mpx/config.json` and maps personal/work Pi and Claude roots,
 recursive domain roots, optional default packs, executable overrides, and local project overrides.
 Domain ownership and project configuration are independent: a personal folder can still have missing
 or invalid project metadata. MPX never copies credentials or conversation history between profiles. Claude's explicitly configured native permission mode,

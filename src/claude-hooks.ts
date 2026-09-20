@@ -21,11 +21,11 @@ export async function handleClaudeHook(event: ClaudeHookInput, contentRoot = roo
   } else if (event.hook_event_name === 'SessionStart') {
     const roots = machineRootContext(env);
     try { result.stdout = await readFile(path.join(contentRoot, 'dist/claude/instructions/shared/AGENTS.md'), 'utf8'); }
-    catch { result.stderr = 'MPX2 canonical instructions unavailable; native context retained.\n'; }
+    catch { result.stderr = 'MPX canonical instructions unavailable; native context retained.\n'; }
     try {
       const compact = await readFile(path.join(contentRoot, 'dist/claude/instructions/shared/COMPACT.md'), 'utf8');
       result.stdout += `\n\n## Conversation compaction only\nWhen native manual or automatic compaction occurs, apply the following guidance. User-supplied compaction instructions take precedence; preserve native summary behavior. These instructions do not request a summary during ordinary work.\n\n${compact}`;
-    } catch { result.stderr += 'MPX2 compaction guidance unavailable; continuing with native compaction.\n'; }
+    } catch { result.stderr += 'MPX compaction guidance unavailable; continuing with native compaction.\n'; }
     if (roots) result.stdout += `\n\n${roots}`;
   } else if (event.hook_event_name === 'PreToolUse') {
     const policy = await evaluateTool({ name: event.tool_name ?? '', input: event.tool_input ?? {}, cwd }, { isTrusted });
@@ -64,7 +64,7 @@ async function main(): Promise<void> {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main().catch(() => {
     // Native event supplied separately by the owned registration, so malformed shell input fails closed.
-    if (process.argv[2] === 'PreToolUse') { process.stderr.write('MPX2 safeguard infrastructure failed; affected tool invocation blocked.\n'); process.exitCode = 2; }
-    else { process.stderr.write('MPX2 hook unavailable; native operation continues.\n'); process.exitCode = 0; }
+    if (process.argv[2] === 'PreToolUse') { process.stderr.write('MPX safeguard infrastructure failed; affected tool invocation blocked.\n'); process.exitCode = 2; }
+    else { process.stderr.write('MPX hook unavailable; native operation continues.\n'); process.exitCode = 0; }
   });
 }

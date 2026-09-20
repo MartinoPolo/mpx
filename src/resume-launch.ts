@@ -90,7 +90,7 @@ function spawnNative(executable: string, args: string[], cwd: string, env: NodeJ
   const needsBash = process.platform === 'win32' && !/\.(exe|com)$/i.test(executable);
   const command = needsBash ? 'bash' : executable;
   const commandArgs = needsBash
-    ? ['--noprofile', '--norc', '-c', 'exec "$@"', 'mpx2-resume-preflight', executable, ...args]
+    ? ['--noprofile', '--norc', '-c', 'exec "$@"', 'mpx-resume-preflight', executable, ...args]
     : args;
   return spawn(command, needsBash ? commandArgs.map(windowsArgument) : commandArgs, {
     cwd, env, shell: false, windowsHide: true, windowsVerbatimArguments: needsBash,

@@ -9,10 +9,10 @@ import type { FooterRepository } from './pi-footer-data.js';
 import type { FooterAgent } from './pi-footer.js';
 import { LIVE_AGENT_WIDGET, renderLiveAgents, savedFinishedAgents, type LiveAgent } from './pi-agent-display.js';
 
-export const PI_ACTIVITY_EVENT = 'mpx2:pi-ui:activity';
-export const PI_ACTIVITY_REQUEST_EVENT = 'mpx2:pi-ui:activity:request';
-export const PI_BACKGROUND_ACTIVITY_EVENT = 'mpx2:pi-ui:background';
-export const PI_FOLLOW_UP_ACTIVITY_EVENT = 'mpx2:pi-ui:follow-up';
+export const PI_ACTIVITY_EVENT = 'mpx:pi-ui:activity';
+export const PI_ACTIVITY_REQUEST_EVENT = 'mpx:pi-ui:activity:request';
+export const PI_BACKGROUND_ACTIVITY_EVENT = 'mpx:pi-ui:background';
+export const PI_FOLLOW_UP_ACTIVITY_EVENT = 'mpx:pi-ui:follow-up';
 
 export type PiActivityState = 'idle' | 'working' | 'human-needed' | 'done' | 'cancelled';
 
@@ -518,7 +518,7 @@ export function applyThreeLineFullscreenWheel(tui: unknown): boolean {
   return true;
 }
 
-const PROCESS_OWNER = Symbol.for('mpx2:pi-ui:process-owner');
+const PROCESS_OWNER = Symbol.for('mpx:pi-ui:process-owner');
 const SUBAGENT_MANAGER = Symbol.for('pi-subagents:manager');
 
 type GlobalWithOwner = typeof globalThis & {
@@ -807,7 +807,7 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
     if (ctx.mode !== 'tui') return;
 
     if (shouldUseThreeLineWheel(options.environment)) {
-      ctx.ui.setWidget('mpx2-fullscreen-wheel', (tui) => ({
+      ctx.ui.setWidget('mpx-fullscreen-wheel', (tui) => ({
         render: () => {
           applyThreeLineFullscreenWheel(tui);
           return [];

@@ -7,7 +7,7 @@ import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 const exec = promisify(execFile);
 
-test('projected tutorial helper uses MPX2 dependencies and validates its adapted placeholders', async () => {
+test('projected tutorial helper uses MPX dependencies and validates its adapted placeholders', async () => {
   const root = await mkdtemp(join(tmpdir(), 'mpx-tutorial-'));
   try {
     const directory = join(root, '_TUTORIALS/fixture'); await mkdir(directory, { recursive: true });

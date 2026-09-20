@@ -5,8 +5,16 @@ import { pathToFileURL } from 'node:url';
 import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { claudeHookEntries, claudeStatusLineEntries, syncRuntime, syncRuntimeScope, validateRuntimeScope } from '../src/runtime-install.js';
+import { claudeHookEntries, claudeStatusLineEntries, piRuntimeBootstrap, syncRuntime, syncRuntimeScope, validateRuntimeScope } from '../src/runtime-install.js';
 import type { UserConfig } from '../src/contracts.js';
+
+test('Pi runtime registration uses the canonical MPX ownership marker', () => {
+  const root = resolve('fixture-root');
+  assert.equal(
+    piRuntimeBootstrap(root),
+    `// MPX-owned Pi runtime registration.\nexport { default } from ${JSON.stringify(join(root, 'extensions/pi-runtime.ts').replaceAll('\\', '/'))};\n`,
+  );
+});
 
 test('runtime scope rejects coercible values rather than widening or guessing selection', () => {
   for (const scope of [null, {}, { account: ['personal'], harness: 'pi' }, { account: 'personal', harness: ['pi'] }, { account: 'personal', harness: 'pi', extra: true }]) {
@@ -49,7 +57,7 @@ test('scoped runtime preflights every selected destination before writing any of
     assert.equal(result.ok, false);
     assert.equal(await readFile(join(selected, 'settings.json'), 'utf8'), '{"keep":true}\n');
     await assert.rejects(readFile(join(selected, 'subagents.json')));
-    await assert.rejects(readFile(join(selected, 'extensions/mpx2.ts')));
+    await assert.rejects(readFile(join(selected, 'extensions/mpx.ts')));
   } finally { await rm(scratch, { recursive: true, force: true }); }
 });
 
@@ -178,8 +186,8 @@ test('broad runtime installation preserves native settings/packages and converge
       const claude = JSON.parse(await readFile(join(account.claude, 'settings.json'), 'utf8'));
       assert.equal(claude.hooks.Stop[0].hooks[0].command, 'keep'); assert.equal(claude.hooks.PreToolUse.length, 1);
     }
-    await rm(join(config.accounts.work.pi, 'extensions/mpx2.ts')); await writeFile(join(config.accounts.work.pi, 'extensions/mpx2.ts'), 'unrelated');
+    await rm(join(config.accounts.work.pi, 'extensions/mpx.ts')); await writeFile(join(config.accounts.work.pi, 'extensions/mpx.ts'), 'unrelated');
     const conflict = await syncRuntime(resolve('.'), config, false);
-    assert.equal(conflict.ok, false); assert.equal(await readFile(join(config.accounts.work.pi, 'extensions/mpx2.ts'), 'utf8'), 'unrelated');
+    assert.equal(conflict.ok, false); assert.equal(await readFile(join(config.accounts.work.pi, 'extensions/mpx.ts'), 'utf8'), 'unrelated');
   } finally { await rm(scratch, { recursive: true, force: true }); }
 });

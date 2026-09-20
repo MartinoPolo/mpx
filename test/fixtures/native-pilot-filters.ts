@@ -44,7 +44,7 @@ assert.equal(legacy.getExtensions().extensions.length, 1);
 assert.equal(path.basename(legacy.getExtensions().extensions[0]!.path), 'index.ts');
 assert.deepEqual(legacy.getSkills().skills.map(skill => skill.name).sort(), ['old-global', 'project-local', 'unrelated']);
 const runtimeRoot = fileURLToPath(new URL('../../', import.meta.url));
-await writeFile(path.join(account, 'extensions/mpx2.ts'), piRuntimeBootstrap(runtimeRoot));
+await writeFile(path.join(account, 'extensions/mpx.ts'), piRuntimeBootstrap(runtimeRoot));
 process.env.MPX_ACCOUNT = 'personal';
 process.env.MPX_ACTIVE_CONTENT_ROOT = runtimeRoot;
 const composed = new DefaultResourceLoader({ ...common, settingsManager: SettingsManager.inMemory(settings) });

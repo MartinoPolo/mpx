@@ -138,7 +138,7 @@ export async function expectedSkills(paths: string[]): Promise<ExpectedSkill[]> 
   }
   for (const root of roots) await walk(root, root);
   const duplicate = output.find((skill, index) => output.findIndex(other => other.name === skill.name) !== index);
-  if (duplicate) throw new Error(`Duplicate expected MPX2 skill name: ${duplicate.name}`);
+  if (duplicate) throw new Error(`Duplicate expected MPX skill name: ${duplicate.name}`);
   return output;
 }
 
@@ -146,10 +146,10 @@ export function validateCatalog(meta: StreamMeta, expected: ExpectedSkill[]): vo
   const expectedNames = new Set(expected.map(skill => skill.name));
   for (const catalog of [meta.skills, meta.slashCommands]) {
     const duplicate = catalog.find((name, index) => name.startsWith('mpx-') && catalog.indexOf(name) !== index);
-    if (duplicate) throw new Error(`duplicate MPX2 catalog name: ${duplicate}`);
+    if (duplicate) throw new Error(`duplicate MPX catalog name: ${duplicate}`);
   }
   const unexpected = [...meta.skills, ...meta.slashCommands].find(name => name.startsWith('mpx-') && !expectedNames.has(name));
-  if (unexpected) throw new Error(`unexpected out-of-selection MPX2 skill: ${unexpected}`);
+  if (unexpected) throw new Error(`unexpected out-of-selection MPX skill: ${unexpected}`);
   for (const skill of expected) {
     if (skill.explicitOnly && !meta.slashCommands.includes(skill.name)) throw new Error(`missing explicit-only catalog skill: ${skill.name}`);
     if (!skill.explicitOnly && !meta.skills.includes(skill.name) && !meta.slashCommands.includes(skill.name)) throw new Error(`missing catalog skill: ${skill.name}`);
@@ -217,9 +217,9 @@ export async function main(argv = process.argv.slice(2), runner: CommandRunner =
   if (!(await stat(physicalParent)).isDirectory() || dirname(options.artifacts) !== physicalParent) throw new Error('--artifacts parent must be an existing physical path');
   if (await stat(options.artifacts).catch(() => undefined)) throw new Error('--artifacts must be a new owned directory');
   const project = await resolveProject(physicalCwd);
-  if (!project.config) throw new Error('--cwd must be a registered MPX2 project');
+  if (!project.config) throw new Error('--cwd must be a registered MPX project');
   if (!process.env.APPDATA) throw new Error('APPDATA is unset');
-  const config = await readUserConfig(join(process.env.APPDATA, 'mpx2', 'config.json'));
+  const config = await readUserConfig(join(process.env.APPDATA, 'mpx', 'config.json'));
   if (options.executable) {
     if (!(await stat(await realpath(options.executable)).catch(() => undefined))?.isFile()) throw new Error('--executable is not a physical file');
     config.executables = { ...config.executables, claude: await realpath(options.executable) };

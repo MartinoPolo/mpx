@@ -4,7 +4,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { colorAgentModel, thinkingGauge, type FooterAgent } from './pi-footer.js';
 
-export const LIVE_AGENT_WIDGET = 'mpx2-live-agents';
+export const LIVE_AGENT_WIDGET = 'mpx-live-agents';
 const MAX_VISIBLE_LIVE_AGENTS = 5;
 const LIVE_STATUSES = new Set(['running', 'queued']);
 

@@ -1,7 +1,7 @@
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 
-export async function isMpx2RuntimeSelected(root: string, environment: NodeJS.ProcessEnv = process.env): Promise<boolean> {
+export async function isMpxRuntimeSelected(root: string, environment: NodeJS.ProcessEnv = process.env): Promise<boolean> {
   if (!['personal', 'work'].includes(environment.MPX_ACCOUNT ?? '')) return false;
   const selected = environment.MPX_ACTIVE_CONTENT_ROOT;
   if (!selected || !path.isAbsolute(selected)) return false;

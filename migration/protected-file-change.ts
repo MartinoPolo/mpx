@@ -38,7 +38,7 @@ export function isAllowedProtectedTarget(target: string, roots: ProtectedTargetR
     path.join(roots.home, '.claude-work', 'settings.local.json'),
     path.join(roots.documents, 'PowerShell', 'Microsoft.PowerShell_profile.ps1'),
   ];
-  if (roots.appData && path.isAbsolute(roots.appData)) candidates.push(path.join(roots.appData, 'mpx2', 'config.json'));
+  if (roots.appData && path.isAbsolute(roots.appData)) candidates.push(path.join(roots.appData, 'mpx', 'config.json'));
   if (roots.localAppData && path.isAbsolute(roots.localAppData)) candidates.push(path.join(roots.localAppData, 'Packages', 'Microsoft.WindowsTerminal_8wekyb3d8bbwe', 'LocalState', 'settings.json'));
   return candidates.some(candidate => samePath(absolute, candidate));
 }

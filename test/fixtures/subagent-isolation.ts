@@ -20,8 +20,8 @@ const parentOnlyExtensions = [
 const retainedExtensions = ['authorized-test-mcp', 'authorized-safeguard'] as const;
 const parentOnlyExtensionNames = new Set<string>(parentOnlyExtensions);
 const allFixtureExtensions = [...parentOnlyExtensions, ...retainedExtensions] as const;
-const trackerSymbol = Symbol.for('mpx2.subagent-isolation.fixture');
-const processProbeEvent = 'mpx2:subagent-isolation:process-probe';
+const trackerSymbol = Symbol.for('mpx.subagent-isolation.fixture');
+const processProbeEvent = 'mpx:subagent-isolation:process-probe';
 
 interface ActivationEvidence {
   name: string;
@@ -69,7 +69,7 @@ const put = async (path: string, content: string): Promise<void> => {
 const fixtureExtension = (name: string): string => `
 import { Type } from 'typebox';
 
-const tracker = globalThis[Symbol.for('mpx2.subagent-isolation.fixture')];
+const tracker = globalThis[Symbol.for('mpx.subagent-isolation.fixture')];
 export default function(pi) {
   const activation = {
     name: ${JSON.stringify(name)},
@@ -80,7 +80,7 @@ export default function(pi) {
   };
   tracker.activations.push(activation);
 
-  const busEvent = ${JSON.stringify(`mpx2:subagent-isolation:bus:${name}`)};
+  const busEvent = ${JSON.stringify(`mpx:subagent-isolation:bus:${name}`)};
   pi.events.on(busEvent, () => { activation.eventBusEvents += 1; });
   tracker.eventBusTriggers.push(() => pi.events.emit(busEvent, undefined));
 
@@ -143,7 +143,7 @@ export default function(pi) {
   pi.registerCommand('subagent-isolation-probe', {
     description: 'Run disposable same-process child sessions',
     handler: async (_args, ctx) => {
-      const tracker = globalThis[Symbol.for('mpx2.subagent-isolation.fixture')];
+      const tracker = globalThis[Symbol.for('mpx.subagent-isolation.fixture')];
       try {
       const run = async (type) => {
         const firstActivation = tracker.activations.length;
@@ -187,7 +187,7 @@ export default function(pi) {
       const baselineChild = await run('isolation-baseline');
       const excludedChild = await run('isolation-excluded');
       tracker.result = { baselineChild, excludedChild };
-      pi.events.emit('mpx2:subagent-isolation:result', tracker.result);
+      pi.events.emit('mpx:subagent-isolation:result', tracker.result);
       } catch (error) {
         tracker.error = error instanceof Error ? error.stack ?? error.message : String(error);
         throw error;
@@ -198,7 +198,7 @@ export default function(pi) {
 `;
 
 export async function runSubagentIsolationFixture(): Promise<SubagentIsolationEvidence> {
-  const root = await mkdtemp(join(tmpdir(), 'mpx2-subagent-isolation-'));
+  const root = await mkdtemp(join(tmpdir(), 'mpx-subagent-isolation-'));
   const home = join(root, 'home');
   const account = join(root, 'account');
   const project = join(root, 'project');
@@ -382,7 +382,7 @@ export interface NativeExtensionFilterEvidence {
 }
 
 export async function runNativeExtensionFilterFeasibilityFixture(): Promise<NativeExtensionFilterEvidence> {
-  const root = await mkdtemp(join(tmpdir(), 'mpx2-native-extension-filter-'));
+  const root = await mkdtemp(join(tmpdir(), 'mpx-native-extension-filter-'));
   const extensionNames = [...allFixtureExtensions];
 
   const runCase = async (

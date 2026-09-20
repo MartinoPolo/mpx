@@ -10,12 +10,12 @@ const exec = promisify(execFile);
 const packageRoot = fileURLToPath(new URL('../', import.meta.url));
 
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), 'mpx2-cli-'));
+  const root = await mkdtemp(join(tmpdir(), 'mpx-cli-'));
   await exec('git', ['init', '--quiet'], { cwd: root });
   const accounts = { personal: { pi: join(root, 'ppi'), claude: join(root, 'pcc') }, work: { pi: join(root, 'wpi'), claude: join(root, 'wcc') } };
   for (const roots of Object.values(accounts)) for (const directory of Object.values(roots)) await mkdir(directory);
-  await mkdir(join(root, 'mpx2'));
-  await writeFile(join(root, 'mpx2', 'config.json'), JSON.stringify({ accounts, domains: { personal: [root], work: [] }, defaultPacks: { personal: [], work: [] } }));
+  await mkdir(join(root, 'mpx'));
+  await writeFile(join(root, 'mpx', 'config.json'), JSON.stringify({ accounts, domains: { personal: [root], work: [] }, defaultPacks: { personal: [], work: [] } }));
   const run = async (...args: string[]) => {
     try {
       return { ...await exec(process.execPath, ['--import', import.meta.resolve('tsx'), join(packageRoot, 'src', 'cli.ts'), ...args], { cwd: root, env: { ...process.env, APPDATA: root }, timeout: 20_000 }), code: 0 };
@@ -43,7 +43,7 @@ test('command help exposes the same scoped sync syntax as validation errors', as
 test('project config reports override provenance and explicit omission as JSON', async () => {
   const f = await fixture();
   try {
-    const configFile = join(f.root, 'mpx2', 'config.json');
+    const configFile = join(f.root, 'mpx', 'config.json');
     const user = JSON.parse(await readFile(configFile, 'utf8'));
     user.projectOverrides = [{ path: f.root, omitConfig: true }];
     await writeFile(configFile, JSON.stringify(user));

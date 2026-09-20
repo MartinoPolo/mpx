@@ -31,7 +31,7 @@ function allowedTarget(file, projectRoot) {
     path.join(documents, 'PowerShell', 'Microsoft.PowerShell_profile.ps1'),
   ];
   const appData = process.env.APPDATA, localAppData = process.env.LOCALAPPDATA;
-  if (typeof appData === 'string' && path.isAbsolute(appData)) candidates.push(path.join(appData, 'mpx2', 'config.json'));
+  if (typeof appData === 'string' && path.isAbsolute(appData)) candidates.push(path.join(appData, 'mpx', 'config.json'));
   if (typeof localAppData === 'string' && path.isAbsolute(localAppData)) candidates.push(path.join(localAppData, 'Packages', 'Microsoft.WindowsTerminal_8wekyb3d8bbwe', 'LocalState', 'settings.json'));
   const same = candidate => process.platform === 'win32' ? absolute.toLowerCase() === path.resolve(candidate).toLowerCase() : absolute === path.resolve(candidate);
   return candidates.some(same);

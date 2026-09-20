@@ -16,7 +16,7 @@ const MAX_OUTPUT_BYTES = 1024 * 1024;
 const MAX_QUEUED_RECORDS = 4096;
 const MAX_SKILL_HEADER_BYTES = 64 * 1024;
 const DEADLINE_MS = 120_000;
-const OBSERVATION_PREFIX = 'MPX2_NATIVE_PROBE:';
+const OBSERVATION_PREFIX = 'MPX_NATIVE_PROBE:';
 type Obj = Record<string, unknown>;
 
 export interface RpcTransport {
@@ -83,7 +83,7 @@ function windowsArgument(value: string): string {
 }
 export function rpcSpawnCommand(spec: LaunchSpec): { executable: string; args: string[]; windowsVerbatimArguments: boolean } {
   const needsBash = process.platform === 'win32' && !/\.(exe|com)$/i.test(spec.executable);
-  const args = needsBash ? ['--noprofile', '--norc', '-c', 'exec "$@"', 'mpx2-native-probe', spec.executable, ...spec.args] : spec.args;
+  const args = needsBash ? ['--noprofile', '--norc', '-c', 'exec "$@"', 'mpx-native-probe', spec.executable, ...spec.args] : spec.args;
   return { executable: needsBash ? 'bash' : spec.executable, args: needsBash ? args.map(windowsArgument) : args, windowsVerbatimArguments: needsBash };
 }
 
@@ -252,7 +252,7 @@ async function expectedSkillFiles(paths: string[]): Promise<Map<string, string>>
     if (end < 0) throw new Error(`Skill has no bounded YAML frontmatter: ${file}`);
     const match = /^name:\s*["']?([^\s"']+)["']?\s*$/m.exec(text.slice(4, end));
     if (!match) throw new Error(`Skill frontmatter has no name: ${file}`);
-    if (expected.has(match[1]!)) throw new Error(`Duplicate expected MPX2 skill name: ${match[1]}`);
+    if (expected.has(match[1]!)) throw new Error(`Duplicate expected MPX skill name: ${match[1]}`);
     expected.set(match[1]!, await realpath(file));
   };
   const walk = async (directory: string): Promise<void> => {
@@ -279,7 +279,7 @@ export async function validateCommands(data: Obj, expected: Map<string, string>,
       return sourcePath;
     }) : undefined;
     if (expected.has(name)) (found.get(name) ?? (found.set(name, []), found.get(name)!)).push(actual!);
-    else if (name.startsWith('mpx-') || (actual !== undefined && (managedRoots.some(root => inside(actual, root)) || expectedPaths.has(comparable(actual))))) throw new Error(`Unexpected MPX2 skill command: ${name}`);
+    else if (name.startsWith('mpx-') || (actual !== undefined && (managedRoots.some(root => inside(actual, root)) || expectedPaths.has(comparable(actual))))) throw new Error(`Unexpected MPX skill command: ${name}`);
   }
   const evidence: Array<{ name: string; path: string }> = [];
   for (const [name, path] of expected) {
@@ -376,9 +376,9 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
     if (!(await stat(options.cwd).catch(() => undefined))?.isDirectory()) throw new Error('--cwd is not a directory');
     const project = await resolveProject(options.cwd);
-    if (!project.config) throw new Error('--cwd must be a registered MPX2 project');
+    if (!project.config) throw new Error('--cwd must be a registered MPX project');
     if (!process.env.APPDATA) throw new Error('APPDATA is unset');
-    const config = await readUserConfig(join(process.env.APPDATA, 'mpx2', 'config.json'));
+    const config = await readUserConfig(join(process.env.APPDATA, 'mpx', 'config.json'));
     const accountRoot = config.accounts[options.account].pi;
     const localArtifact = comparable(dirname(options.artifacts)) === comparable(join(root, '.local'))
       ? { root, exactPath: options.artifacts } : undefined;
@@ -393,7 +393,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       if (overrideSkills.size !== 1) throw new Error('Project override directory is ambiguous');
       const [name, skillPath] = [...overrideSkills][0]!;
       const selectedPackPath = expected.get(name);
-      if (!selectedPackPath || comparable(skillPath) !== comparable(overridePath)) throw new Error('Project override does not match a selected MPX2 skill');
+      if (!selectedPackPath || comparable(skillPath) !== comparable(overridePath)) throw new Error('Project override does not match a selected MPX skill');
       expected.set(name, skillPath);
       projectOverrides.push({ name, path: skillPath, selectedPackPath });
     }

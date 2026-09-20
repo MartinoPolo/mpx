@@ -15,7 +15,7 @@ function nativeSkill(name: string, marker: string) { return `---\nname: ${name}\
 interface NativeResult { skills: Array<{ name: string; hidden: boolean; filePath: string }>; prompt: string; diagnostics: unknown[]; contexts: string[]; extensions: string[]; bodies: Array<{ name: string; body: string }> }
 
 test('separate native Pi loaders preserve additive trusted discovery, exposure and concurrent selection', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'mpx2-native-discovery-'));
+  const root = await mkdtemp(join(tmpdir(), 'mpx-native-discovery-'));
   try {
     const home = join(root, 'home');
     const content = join(root, 'package');

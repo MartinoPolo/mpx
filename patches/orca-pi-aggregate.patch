@@ -25,7 +25,7 @@ index 5e2e144..a6aafb8 100644
  }
  
 +
-+// Checkout-local candidate: aggregate authority stays in MPX2; this Orca hook is the only sender.
++// Checkout-local candidate: aggregate authority stays in MPX; this Orca hook is the only sender.
 +// DEPLOYMENT GATE: the current Pi receiver drops interrupted. Cancellation requires its companion fix.
 +type MpxActivity = {
 +  sessionId: string; activityId: string; revision: number;
@@ -94,7 +94,7 @@ index 5e2e144..a6aafb8 100644
    if (ownerPid && ownerPid !== selfPid) return
    process.env.ORCA_PI_STATUS_OWNED = selfPid
 +  let requestingActivity = false
-+  const unsubscribeActivity = pi.events?.on('mpx2:pi-ui:activity', (value: unknown) => {
++  const unsubscribeActivity = pi.events?.on('mpx:pi-ui:activity', (value: unknown) => {
 +    if (!acceptMpxActivity(value)) return
 +    if (mpxActivityId && value.activityId !== mpxActivityId && !requestingActivity) return
 +    if (value.activityId === mpxActivityId && value.revision <= mpxRevision) return
@@ -112,7 +112,7 @@ index 5e2e144..a6aafb8 100644
 +    mpxRevision = -1
 +    mpxAnnouncedState = ''
 +    requestingActivity = true
-+    try { pi.events?.emit('mpx2:pi-ui:activity:request', {}) } finally { requestingActivity = false }
++    try { pi.events?.emit('mpx:pi-ui:activity:request', {}) } finally { requestingActivity = false }
      // Why: /reload re-registers the active session, but it is not a
      // turn boundary and must not clear the visible status or unread state.
      if (event.reason === 'reload') return

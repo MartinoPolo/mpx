@@ -9,7 +9,7 @@ import test from 'node:test';
 const execFileAsync = promisify(execFile);
 
 test('native Pi SDK transcript is read and planned read-only, then restores model, effort, and history', async () => {
-  const root = await mkdtemp(path.join(tmpdir(), 'mpx2-native-resume-'));
+  const root = await mkdtemp(path.join(tmpdir(), 'mpx-native-resume-'));
   try {
     const account = path.join(root, 'account');
     const cwd = path.join(root, 'project');

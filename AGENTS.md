@@ -23,7 +23,7 @@ pnpm test
 - `migration/` contains current acceptance and recovery tooling, not normal runtime APIs.
 - `patches/` contains reviewed checkout-local dependency and undeployed compatibility candidates.
 
-User configuration is `$APPDATA/mpx2/config.json`; repository configuration is `mpxconfig.json`.
+User configuration is `$APPDATA/mpx/config.json`; repository configuration is `mpxconfig.json`.
 Resolve machine locations from the documented `MPX_*` variables rather than hardcoding user paths.
 Native account roots contain credentials, settings, and transcripts: do not inspect, copy, or replace
 them broadly.

@@ -10,7 +10,7 @@ import { readClaudeSession, readPiSession } from '../src/resume.js';
 const iso = (seconds: number) => new Date(Date.UTC(2026, 2, 1, 0, 0, seconds)).toISOString();
 
 async function fixture() {
-  const root = await mkdtemp(path.join(tmpdir(), 'mpx2-resume-launch-'));
+  const root = await mkdtemp(path.join(tmpdir(), 'mpx-resume-launch-'));
   const accounts = {
     personal: { pi: path.join(root, 'personal-pi'), claude: path.join(root, 'personal-claude') },
     work: { pi: path.join(root, 'work-pi'), claude: path.join(root, 'work-claude') },

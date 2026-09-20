@@ -63,7 +63,7 @@ test('RPC request records extension errors without retaining arbitrary diagnosti
 test('observation wait collects extension errors before observer evidence', async () => {
   const fake = new Fake([
     { type: 'extension_error', extensionPath: '/bad.ts', error: 'broken' },
-    { type: 'extension_ui_request', method: 'notify', message: 'MPX2_NATIVE_PROBE:{"tools":[]}' },
+    { type: 'extension_ui_request', method: 'notify', message: 'MPX_NATIVE_PROBE:{"tools":[]}' },
   ]);
   const errors: string[] = [];
   assert.deepEqual(await waitForObservation(fake, Date.now() + 1000, errors), { tools: [] });
@@ -176,11 +176,11 @@ test('native sourceInfo paths accept mpx skills and reject missing, duplicate, s
     const expected = new Map([['mpx-alpha', expectedPath]]);
     const skill = (name: string, sourcePath = expectedPath) => ({ name: `skill:${name}`, source: 'skill', sourceInfo: { path: sourcePath } });
     assert.deepEqual(await validateCommands({ commands: [skill('mpx-alpha'), { name: 'skill:mp-project', source: 'extension' }, { name: 'skill:mcp-scripting', source: 'extension' }] }, expected), [{ name: 'mpx-alpha', path: expectedPath }]);
-    await assert.rejects(validateCommands({ commands: [skill('mpx-alpha'), { name: 'skill:mpx-unselected', source: 'extension' }] }, expected), /Unexpected MPX2 skill/);
+    await assert.rejects(validateCommands({ commands: [skill('mpx-alpha'), { name: 'skill:mpx-unselected', source: 'extension' }] }, expected), /Unexpected MPX skill/);
     await assert.rejects(validateCommands({ commands: [{ ...skill('mpx-alpha'), source: 'extension' }] }, expected), /wrong source/);
     await assert.rejects(validateCommands({ commands: [skill('mpx-alpha'), skill('mpx-alpha')] }, expected), /resolved 2 times/);
     await assert.rejects(validateCommands({ commands: [skill('mpx-alpha', wrong)] }, expected), /wrong path/);
-    await assert.rejects(validateCommands({ commands: [skill('mpx-alpha'), skill('mp-stale', wrong)] }, expected, [directory]), /Unexpected MPX2 skill/);
+    await assert.rejects(validateCommands({ commands: [skill('mpx-alpha'), skill('mp-stale', wrong)] }, expected, [directory]), /Unexpected MPX skill/);
     await rm(file);
     await assert.rejects(validateCommands({ commands: [skill('mpx-alpha')] }, expected), /source is unavailable/);
   } finally { await rm(directory, { recursive: true, force: true }); }

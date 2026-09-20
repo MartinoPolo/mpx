@@ -10,7 +10,7 @@ import { createLaunchSpec, runLaunch, confirmLaunch, formatLaunchWarning } from 
 import { LAUNCH_WARNING_CODE, WARNING_SEVERITY, type UserConfig } from '../src/contracts.js';
 
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), 'mpx2-launch-'));
+  const root = await mkdtemp(join(tmpdir(), 'mpx-launch-'));
   const roots = { personal: { pi: join(root, 'personal pi'), claude: join(root, 'personal cc') }, work: { pi: join(root, 'work pi'), claude: join(root, 'work cc') } };
   for (const account of Object.values(roots)) for (const p of Object.values(account)) await mkdir(p);
   const config: UserConfig = { accounts: roots, domains: { personal: [join(root, 'personal')], work: [join(root, 'work')] }, executables: { pi: process.execPath, claude: process.execPath } };
@@ -35,9 +35,11 @@ test('additive arguments and selected native roots preserve all caller argument 
     assert.equal(spec.env.MPX_OWNER, undefined);
     assert.equal(spec.env.PI_MODEL, undefined);
     assert.equal(spec.requiresConfirmation, false);
+    assert.equal(spec.label, 'MPX · PERSONAL · Pi');
     const cc = await createLaunchSpec({ root: f.root, cwd: f.root, harness: 'claude', account: 'personal', config: f.config, project: registered, selection: packs, args, env: { SHELL: '/usr/bin/bash', MSYSTEM: 'MINGW64' } });
     assert.deepEqual(cc.args, ['--add-dir', packs.paths[0], ...args]);
     assert.equal(cc.env.CLAUDE_CONFIG_DIR, f.config.accounts.personal.claude);
+    assert.equal(cc.label, 'MPX · PERSONAL · Claude');
     assert.equal(cc.env.SHELL, '/usr/bin/bash');
     assert.equal(cc.env.MSYSTEM, 'MINGW64');
   } finally { await f.cleanup(); }
@@ -139,7 +141,7 @@ test('all Git Bash wrapper entrypoints forward account and hostile-looking argum
   const exec = promisify(execFile);
   try {
     const appdata = join(f.root, 'appdata');
-    await mkdir(join(appdata, 'mpx2'), { recursive: true });
+    await mkdir(join(appdata, 'mpx'), { recursive: true });
     const launchDirectories = { personal: join(f.root, 'personal'), work: join(f.root, 'work') };
     for (const directory of Object.values(launchDirectories)) {
       await mkdir(directory, { recursive: true });
@@ -151,7 +153,7 @@ test('all Git Bash wrapper entrypoints forward account and hostile-looking argum
     const shim = join(f.root, 'native shim');
     await writeFile(shim, '#!/usr/bin/env bash\nexec node "$FIXTURE_CAPTURE" "$@"\n');
     f.config.executables = { pi: shim, claude: shim };
-    await writeFile(join(appdata, 'mpx2', 'config.json'), JSON.stringify(f.config));
+    await writeFile(join(appdata, 'mpx', 'config.json'), JSON.stringify(f.config));
     const nativeArgs = ['--', 'a b', '', 'first\nsecond', '$(touch NEVER)', 'a"b', 'C:\\path\\'];
     for (const [wrapper, account, harness] of [['pi', 'personal', 'pi'], ['piw', 'work', 'pi'], ['cc', 'personal', 'claude'], ['ccw', 'work', 'claude'], ['xpi', 'personal', 'pi']] as const) {
       // Enter through a real shell command, not Node's unquoted LF -> MSYS boundary.

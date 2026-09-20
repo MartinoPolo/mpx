@@ -7,7 +7,7 @@ import type { UserConfig } from '../src/contracts.js';
 import { inspectAgentLinks, planAgentLinks, syncAgentLinks } from '../src/install.js';
 
 async function fixture(): Promise<{ root: string; config: UserConfig }> {
-  const root = await mkdtemp(path.join(tmpdir(), 'mpx2-install-'));
+  const root = await mkdtemp(path.join(tmpdir(), 'mpx-install-'));
   for (const harness of ['pi', 'claude'] as const) {
     const source = path.join(root, 'dist', harness, 'agents');
     await mkdir(source, { recursive: true });

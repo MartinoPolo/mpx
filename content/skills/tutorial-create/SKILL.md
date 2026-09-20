@@ -100,9 +100,9 @@ Authoring rules:
 node "<skill-dir>/scripts/compile.js" "$MPX_AI_GENERATED/_TUTORIALS/<category>/<slug>.source.md"
 ```
 
-Shiki and yaml come from the MPX2 package installation. Do not install dependencies or edit files
+Shiki and yaml come from the MPX package installation. Do not install dependencies or edit files
 inside committed skill projections. Mermaid additionally requires `@mermaid-js/mermaid-cli` and
-its browser dependency in the MPX2 installation; request explicit dependency setup when needed.
+its browser dependency in the MPX installation; request explicit dependency setup when needed.
 Mermaid blocks compile to inline SVG in light and dark variants. If the optional renderer is missing,
 the build prints a "diagram skipped" warning and still succeeds; report that limitation, never claim
 the missing diagrams were rendered.

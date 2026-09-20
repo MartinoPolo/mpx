@@ -12,7 +12,7 @@ const packageRoot = fileURLToPath(new URL('../', import.meta.url));
 
 for (const profile of ['personal', 'work'] as const) {
   test(`native composed runtime loads and enforces policy for the ${profile} account`, async () => {
-    const root = await mkdtemp(path.join(tmpdir(), `mpx2-native-runtime-${profile}-`));
+    const root = await mkdtemp(path.join(tmpdir(), `mpx-native-runtime-${profile}-`));
     try {
       const home = path.join(root, 'home');
       const appdata = path.join(root, 'appdata');

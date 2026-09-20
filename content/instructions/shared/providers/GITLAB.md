@@ -12,7 +12,7 @@ version-sensitive flags.
 
 ## Issue-provider boundary
 
-GitLab Issue operations are outside the MPX2 Issue-provider contract. Do not execute them or
+GitLab Issue operations are outside the MPX Issue-provider contract. Do not execute them or
 substitute GitLab for the independently selected GitHub or KanbanFlow Issue provider.
 
 ## Merge requests and CI

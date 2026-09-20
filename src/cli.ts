@@ -19,8 +19,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const [command, ...args] = process.argv.slice(2);
 const syncSyntax = 'sync [--agents-only|--orca-hooks-only [--harness pi|claude]|--runtime-only [--account personal|work --harness pi|claude]] [--preview]';
 function userConfigPath(): string {
-  if (!process.env.APPDATA) throw new Error('APPDATA is unset; cannot resolve mpx2/config.json.');
-  return join(process.env.APPDATA, 'mpx2', 'config.json');
+  if (!process.env.APPDATA) throw new Error('APPDATA is unset; cannot resolve mpx/config.json.');
+  return join(process.env.APPDATA, 'mpx', 'config.json');
 }
 async function optionalUserConfig() {
   if (!process.env.APPDATA) return undefined;
@@ -77,7 +77,7 @@ async function main(): Promise<number> {
           if (item.status !== 'ready') missingLinks = true;
         }
         for (const conflict of packages.conflicts) console.log(`  Native package versions differ: ${conflict.packageName} ${conflict.versions.join(' / ')} (preserved; no upgrades)`);
-      } else console.log('Agent links: NOT VERIFIED; no MPX2 user configuration.');
+      } else console.log('Agent links: NOT VERIFIED; no MPX user configuration.');
       console.log('Hooks/extensions, interactive discovery and cutover: NOT VERIFIED.');
       return drift.length || missingLinks ? 1 : 0;
     }
@@ -224,11 +224,11 @@ async function main(): Promise<number> {
       return result.status === 'conflict' ? 1 : 0;
     }
     default:
-      console.log(`MPX2 development checkout\nCommands: build, status, ${syncSyntax}, project setup, project config, check-dangerous, check-staged-secrets, check-package-manager, resume [--list|--preview|--launch], launch-preview, launch\nLocal implementation only: installed acceptance and live cutover remain gated.`);
+      console.log(`MPX development checkout\nCommands: build, status, ${syncSyntax}, project setup, project config, check-dangerous, check-staged-secrets, check-package-manager, resume [--list|--preview|--launch], launch-preview, launch\nLocal implementation only: installed acceptance and live cutover remain gated.`);
       return command ? 1 : 0;
   }
 }
 main().then(code => { process.exitCode = code; }).catch(error => {
-  console.error(`MPX2: ${error instanceof Error ? error.message : String(error)}`);
+  console.error(`MPX: ${error instanceof Error ? error.message : String(error)}`);
   process.exitCode = 1;
 });

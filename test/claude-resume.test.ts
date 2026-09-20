@@ -22,7 +22,7 @@ function claudeEntry(type: 'user' | 'assistant', uuid: string, parentUuid: strin
 }
 
 async function fixture() {
-  const root = await mkdtemp(path.join(tmpdir(), 'mpx2-claude-resume-'));
+  const root = await mkdtemp(path.join(tmpdir(), 'mpx-claude-resume-'));
   const accounts = {
     personal: { pi: path.join(root, 'personal-pi'), claude: path.join(root, 'personal-claude') },
     work: { pi: path.join(root, 'work-pi'), claude: path.join(root, 'work-claude') },

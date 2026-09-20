@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const sourceRoot = fileURLToPath(
   new URL('../../node_modules/@tintinweb/pi-subagents/src/', import.meta.url),
 ).replaceAll('\\', '/');
-const trackerSymbol = Symbol.for('mpx2.subagent-policy.fixture');
+const trackerSymbol = Symbol.for('mpx.subagent-policy.fixture');
 
 export interface SubagentPolicyEvidence {
   explicit: {
@@ -43,7 +43,7 @@ const explicit = resolveAgentInvocationConfig(
   profile({ model: 'fixture/profile', thinking: 'low' }),
   { model: 'fixture/requested', thinking: 'high' },
 );
-globalThis[Symbol.for('mpx2.subagent-policy.fixture')] = {
+globalThis[Symbol.for('mpx.subagent-policy.fixture')] = {
   explicit: {
     modelInput: explicit.modelInput,
     modelFromParams: explicit.modelFromParams,
@@ -68,7 +68,7 @@ export default function() {}
 `;
 
 export async function runSubagentPolicyFixture(): Promise<SubagentPolicyEvidence> {
-  const root = await mkdtemp(join(tmpdir(), 'mpx2-subagent-policy-'));
+  const root = await mkdtemp(join(tmpdir(), 'mpx-subagent-policy-'));
   const account = join(root, 'account');
   const project = join(root, 'project');
   const extensionPath = join(account, 'extensions', 'policy-controller.ts');

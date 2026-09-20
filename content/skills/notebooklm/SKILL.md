@@ -62,7 +62,7 @@ pip install "notebooklm-py[browser] @ git+https://github.com/teng-lin/notebooklm
 unreleased/unstable changes. Always use PyPI or a specific release tag, unless you are testing
 unreleased features.
 
-**MPX packaging:** This loaded skill is already installed by the MPX2 content compiler. Do not run
+**MPX packaging:** This loaded skill is already installed by the MPX content compiler. Do not run
 the upstream skill installers or write another agent skill root. Only the Python package and native
 NotebookLM authentication below are external prerequisites.
 

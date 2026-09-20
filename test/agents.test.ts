@@ -12,7 +12,7 @@ const exec = promisify(execFile);
 const packageRoot = fileURLToPath(new URL('../', import.meta.url));
 
 test('published upstream parser loads actual generated specialist names/models/effort/tools alongside project agents', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'mpx2-native-agents-'));
+  const root = await mkdtemp(join(tmpdir(), 'mpx-native-agents-'));
   try {
     const account = join(root, 'account');
     const project = join(root, 'project');
@@ -27,7 +27,7 @@ test('published upstream parser loads actual generated specialist names/models/e
     await writeFile(join(project, '.pi', 'agents', 'project-native.md'), '---\nname: project-native\ndescription: Independent project specialist\ntools: read\n---\nRead only.\n');
     const upstream = join(packageRoot, 'node_modules', '@tintinweb', 'pi-subagents', 'src', 'custom-agents.ts').replaceAll('\\', '/');
     const probe = join(root, 'definitions-probe.ts');
-    await writeFile(probe, `import {loadCustomAgents} from ${JSON.stringify(upstream)};\nexport default function(pi) { const agents=loadCustomAgents(${JSON.stringify(project)}, true); pi.events.emit('mpx2:agent-definitions', [...agents.values()].map(a=>({name:a.name,model:a.model,thinking:a.thinking,tools:a.builtinToolNames}))); }\n`);
+    await writeFile(probe, `import {loadCustomAgents} from ${JSON.stringify(upstream)};\nexport default function(pi) { const agents=loadCustomAgents(${JSON.stringify(project)}, true); pi.events.emit('mpx:agent-definitions', [...agents.values()].map(a=>({name:a.name,model:a.model,thinking:a.thinking,tools:a.builtinToolNames}))); }\n`);
     const { stdout } = await exec(process.execPath, ['--import', 'tsx', join(packageRoot, 'test', 'fixtures', 'native-agents.ts'), JSON.stringify({ cwd: project, account, probe })], {
       cwd: packageRoot, env: { ...process.env, HOME: root, USERPROFILE: root, PI_CODING_AGENT_DIR: account, PI_OFFLINE: '1', PI_TELEMETRY: '0' }, timeout: 30_000,
     });

@@ -14,7 +14,7 @@ worktree service, or notification fallback.
 | UI | `pi-ui.ts` | Native lifecycle state, footer data, title fallback, and terminal-specific behavior |
 | Runtime | `pi-runtime.ts` | Activation guard and component composition |
 
-The installer writes a physical forwarding module at the native account's `extensions/mpx2.ts`.
+The installer writes a physical forwarding module at the native account's `extensions/mpx.ts`.
 Do not replace it with a file symlink: Pi resolves relative imports from the registration path. The
 forwarder activates only for an explicitly selected MPX account and checkout.
 

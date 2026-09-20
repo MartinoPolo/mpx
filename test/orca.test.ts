@@ -12,7 +12,7 @@ const piNames = ['orca-agent-status.ts', 'orca-prefill.ts', 'orca-titlebar-spinn
 const marker = '@orca-managed-pi-extension';
 
 async function fixture(): Promise<{ root: string; config: UserConfig }> {
-  const root = await mkdtemp(path.join(tmpdir(), 'mpx2-orca-'));
+  const root = await mkdtemp(path.join(tmpdir(), 'mpx-orca-'));
   const accounts = {
     personal: { pi: path.join(root, 'personal-pi'), claude: path.join(root, 'personal-claude') },
     work: { pi: path.join(root, 'work-pi'), claude: path.join(root, 'work-claude') },

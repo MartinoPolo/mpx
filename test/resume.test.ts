@@ -26,7 +26,7 @@ function assistant(id: string, parentId: string | null, provider: unknown, model
 }
 
 async function fixture() {
-  const root = await mkdtemp(path.join(tmpdir(), 'mpx2-resume-'));
+  const root = await mkdtemp(path.join(tmpdir(), 'mpx-resume-'));
   const accounts = {
     personal: { pi: path.join(root, 'personal-pi'), claude: path.join(root, 'personal-claude') },
     work: { pi: path.join(root, 'work-pi'), claude: path.join(root, 'work-claude') },

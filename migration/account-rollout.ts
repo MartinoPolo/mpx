@@ -30,7 +30,7 @@ export interface AccountRolloutPlan {
 export interface ApplyInjection { failAfterMutations?: number; failCompensationAfterOperations?: number }
 
 const SURFACES: Record<Harness, readonly string[]> = {
-  pi: ['settings.json', 'subagents.json', 'keybindings.json', 'agents', 'extensions/mpx2.ts'],
+  pi: ['settings.json', 'subagents.json', 'keybindings.json', 'agents', 'extensions/mpx.ts'],
   claude: ['settings.json', 'rules', 'output-styles', 'agents', 'skills'],
 };
 const MAX_FILES = 50_000; const MAX_BYTES = 256 * 1024 * 1024; const MAX_DEPTH = 64;
@@ -145,7 +145,7 @@ export async function prepareAccountRollout(options: PrepareAccountRolloutOption
   const scopedPlan: AgentLinkPlan = { links, errors: [], scopes: planned.scopes.filter(scope => scope.account === options.account && scope.harness === options.harness) }; const synced = await syncAgentLinks(scopedPlan); if (!synced.ok) throw new Error('cannot stage generated agent links');
   const id = randomUUID(); const entries: RolloutEntry[] = [];
   for (const relative of SURFACES[options.harness]) {
-    const destination = path.join(accountRoot, relative); const staged = path.join(stagingRoot, relative); const suffix = `.mpx2-${id}`;
+    const destination = path.join(accountRoot, relative); const staged = path.join(stagingRoot, relative); const suffix = `.mpx-${id}`;
     entries.push({ relative, destination, staged, candidate: `${destination}${suffix}-candidate`, retained: `${destination}${suffix}-original`, retainedAfter: `${destination}${suffix}-postimage`, before: before.get(relative)!, beforeTopology: beforeTopology.get(relative)!, after: await boundedFingerprint(staged, true), afterTopology: await boundedFingerprint(staged, false), parentWasMissing: await statKind(path.dirname(destination)) === 'missing' });
   }
   const plan: AccountRolloutPlan = { version: 1, id, state: 'prepared', account: options.account, harness: options.harness, accountRoot, root: options.root, backupRoot: options.backupRoot, stagingRoot, planPath: path.join(options.backupRoot, 'account-rollout-plan.json'), recoveryPath, recoveryFingerprint: await boundedFingerprint(recoveryPath), entries }; await persist(plan); return plan;

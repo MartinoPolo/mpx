@@ -34,9 +34,9 @@ function prepared(overrides: Partial<PreparedResumeLaunch> = {}): PreparedResume
         PATH: 'C:\\native tools',
         PI_CODING_AGENT_DIR: accountRoot,
         MPX_ACCOUNT: 'work',
-        MPX_ACTIVE_CONTENT_ROOT: 'C:\\mpx2',
+        MPX_ACTIVE_CONTENT_ROOT: 'C:\\mpx',
       },
-      label: 'MPX2 · WORK · Pi', warnings: [{ code: 'ownership-unknown', severity: 'yellow', message: 'visible warning' }], requiresConfirmation: true,
+      label: 'MPX · WORK · Pi', warnings: [{ code: 'ownership-unknown', severity: 'yellow', message: 'visible warning' }], requiresConfirmation: true,
     },
     verification: {
       verified: true, method: 'pi-rpc-read-only-preflight',
@@ -46,7 +46,7 @@ function prepared(overrides: Partial<PreparedResumeLaunch> = {}): PreparedResume
   };
 }
 
-test('adapter preserves the exact prepared MPX2 Pi launch without adopting mutable input', () => {
+test('adapter preserves the exact prepared MPX Pi launch without adopting mutable input', () => {
   const source = prepared();
   const launch = adaptPreparedPiResurrection(source);
   assert.deepEqual(launch.spec, source.spec);

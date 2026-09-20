@@ -56,7 +56,7 @@ function assistantMessage(model: { readonly api: string; readonly provider: stri
 }
 
 async function createCancellationFixture(): Promise<CancellationFixture> {
-  const root = await mkdtemp(join(tmpdir(), 'mpx2-native-cancellation-'));
+  const root = await mkdtemp(join(tmpdir(), 'mpx-native-cancellation-'));
   const cwd = join(root, 'project');
   const account = join(root, 'account');
   const observations: string[] = [];

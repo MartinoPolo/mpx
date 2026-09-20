@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const packageRoot = fileURLToPath(new URL('../', import.meta.url));
-const root = await mkdtemp(join(tmpdir(), 'mpx2-subagent-packs-'));
+const root = await mkdtemp(join(tmpdir(), 'mpx-subagent-packs-'));
 const home = join(root, 'home');
 const account = join(root, 'account');
 const contentRoot = join(root, 'content-root');
@@ -106,7 +106,7 @@ export default function(pi) {
       };
       const discovery = await run('probe-discovery');
       const named = await run(namedType);
-      pi.events.emit('mpx2:pack-probe', { id, inheritedPaths, discovery, named });
+      pi.events.emit('mpx:pack-probe', { id, inheritedPaths, discovery, named });
     }
   });
 }
@@ -135,7 +135,7 @@ export default function(pi) {
   const runCase = async ({ id, paths, namedType }) => {
     const events = createEventBus();
     let emitted;
-    events.on('mpx2:pack-probe', (value) => { emitted = value; });
+    events.on('mpx:pack-probe', (value) => { emitted = value; });
     const settings = SettingsManager.create(linked, account);
     settings.setProjectTrusted(true);
     const loader = new DefaultResourceLoader({

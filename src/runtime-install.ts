@@ -26,7 +26,7 @@ async function mergeJson(file: string, transform: (current: Record<string, unkno
   const next = transform(structuredClone(current) as Record<string, unknown>);
   if (JSON.stringify(current) === JSON.stringify(next)) return 'unchanged';
   if (preview) return 'planned';
-  const temporary = `${file}.mpx2-${randomUUID()}.tmp`;
+  const temporary = `${file}.mpx-${randomUUID()}.tmp`;
   try {
     await writeFile(temporary, `${JSON.stringify(next, null, 2)}\n`, { flag: 'wx' });
     await physicalDirectory(path.dirname(file));
@@ -54,7 +54,7 @@ async function ownedLink(source: string, destination: string, preview: boolean, 
   return 'installed';
 }
 export function piRuntimeBootstrap(root: string): string {
-  return `// MPX2-owned Pi runtime registration.\nexport { default } from ${JSON.stringify(path.join(root, 'extensions/pi-runtime.ts').replaceAll('\\', '/'))};\n`;
+  return `// MPX-owned Pi runtime registration.\nexport { default } from ${JSON.stringify(path.join(root, 'extensions/pi-runtime.ts').replaceAll('\\', '/'))};\n`;
 }
 async function ownedPiRuntime(root: string, destination: string, preview: boolean): Promise<RuntimeInstallEntry['status']> {
   if (!(await lstat(path.join(root, 'extensions/pi-runtime.ts'))).isFile()) throw new Error('Pi runtime source is missing.');
@@ -146,7 +146,7 @@ async function runRuntime(root: string, config: UserConfig, preview: boolean, sc
     };
     if (harness === 'pi') {
       const source = path.join(root, 'extensions/pi-runtime.ts');
-      const destination = path.join(accountRoot, 'extensions/mpx2.ts');
+      const destination = path.join(accountRoot, 'extensions/mpx.ts');
       await perform(source, destination, () => ownedPiRuntime(root, destination, preview));
       await perform('native treeFilterMode', path.join(accountRoot, 'settings.json'), () => mergeJson(path.join(accountRoot, 'settings.json'), current => ({ ...current, treeFilterMode: 'no-tools' }), preview));
       await perform('compact subagent presentation', path.join(accountRoot, 'subagents.json'), () => mergeJson(path.join(accountRoot, 'subagents.json'), current => ({ ...current, showModel: true, widgetMode: 'off', fleetView: false }), preview));
@@ -156,12 +156,12 @@ async function runRuntime(root: string, config: UserConfig, preview: boolean, sc
         return { ...current, 'tui.input.newLine': [...new Set([...(typeof value === 'string' ? [value] : Array.isArray(value) ? value : []), 'shift+enter', 'ctrl+j', 'ctrl+enter'])] };
       }, preview));
     } else {
-      for (const [relative, target, folder] of [['rules', 'rules/mpx2', true], ['output-styles/mpx-terse.md', 'output-styles/mpx-terse.md', false]] as const) {
+      for (const [relative, target, folder] of [['rules', 'rules/mpx', true], ['output-styles/mpx-terse.md', 'output-styles/mpx-terse.md', false]] as const) {
         const source = path.join(root, 'dist/claude', relative);
         const destination = path.join(accountRoot, target);
         await perform(source, destination, () => ownedLink(source, destination, preview, folder));
       }
-      await perform('MPX2 native Claude hook registrations', path.join(accountRoot, 'settings.json'), () => mergeJson(path.join(accountRoot, 'settings.json'), current => {
+      await perform('MPX native Claude hook registrations', path.join(accountRoot, 'settings.json'), () => mergeJson(path.join(accountRoot, 'settings.json'), current => {
         if (current.hooks !== undefined && (!current.hooks || typeof current.hooks !== 'object' || Array.isArray(current.hooks))) throw new Error('invalid hooks object; preserved');
         if (current.permissions !== undefined && (!current.permissions || typeof current.permissions !== 'object' || Array.isArray(current.permissions))) throw new Error('invalid permissions object; preserved');
         const permissions = (current.permissions ?? {}) as Record<string, unknown>;

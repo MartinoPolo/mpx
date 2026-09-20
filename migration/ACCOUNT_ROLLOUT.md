@@ -1,111 +1,40 @@
-# Applied account rollout
+# Native adoption recovery
 
-This records the already-applied account rollout and its recovery locations, not authorization for
-another apply. Current acceptance and remaining work are tracked only in [HANDOFF.md](HANDOFF.md).
+Current installation and remaining acceptance are tracked in [HANDOFF.md](HANDOFF.md).
+Native account credentials, settings unrelated to MPX, and transcripts remain in place.
 
-## Routing and preservation
+## Protected transactions
 
-The unified implementation owns `mpx`, `pi`, `piw`, `cc`, and `ccw`. Installed legacy MPX, suffixed
-launchers, and direct `l*` recovery functions were removed by the later final cutover. Fresh shells
-are required after routing changes. Native account data remains in place; backups are not independent
-account profiles. Current location and remaining acceptance are in [HANDOFF.md](HANDOFF.md).
+Ignored canonical `.local/` pointers identify machine-local recovery artifacts:
 
-Ignored `.local/final-cutover-pointer.json` identifies protected shell/config/link recovery.
-`.local/legacy-archive-pointer.json` identifies the archived installed/local/roaming copies.
-`.local/legacy-preservation-pointer.json` identifies the latest verified Git bundles and full `.git`
-snapshots, including stashes and reflogs, for the legacy source repositories. Preserve any later
-uncommitted files separately. These pointers and their private artifacts must not be published.
+- `native-name-cutover-pointer.json`: configuration and native registration naming migration.
+- `location-cutover-pointer.json`: canonical checkout routing switch.
+- `final-cutover-pointer.json`: earlier installed-runtime retirement.
+- `legacy-archive-pointer.json`: archived installations.
+- `legacy-preservation-pointer.json`: Git bundles and full Git snapshots, including stashes and reflogs.
 
-The final location move requires its own protection. Older recovery plans target the paths that
-existed when prepared; do not apply them after relocation without reviewing those targets.
+These pointers and their private artifacts must not be published. Original backup directory names
+and contents remain unchanged. Historical account evidence stays with the retained source checkout;
+current acceptance evidence is under canonical `.local/`.
 
-## Evidence
+## Recovery order
 
-Machine-local bounded artifacts are under checkout `.local/`:
+1. Stop affected agents and preserve newer configuration changes.
+2. Review the naming transaction first, then the location transaction. Their standalone recovery
+   scripts default to preview; mutation requires explicit `--apply`.
+3. Coordinate source-version rollback with configuration and registration rollback. Current code
+   expects `$APPDATA/mpx/config.json`, Pi `extensions/mpx.ts`, and Claude `rules/mpx`; restoring only
+   old names does not make current code compatible with them.
+4. Inspect older transaction targets before considering further recovery. Never restore whole native
+   account directories over newer credentials or conversations.
 
-- `native-pi-work-03` and `native-pi-work-linked-01`: fresh/native catalog and managed resume.
-- `native-pi-personal-clean-01`: personal account with exact selected-pack sources.
-- `native-pi-personal-preserved-01`: real Prejemesi fresh/managed resume with the former explicitly
-  recorded project override. It preserves evidence of the pre-removal native precedence.
-- `native-pi-personal-prejemesi-canonical-01`: after approved removal of the older clean tracked
-  workaround, real Prejemesi fresh/managed resume resolves `mp-board-to-issues` from the MPX pack.
-- `native-pi-work-project-01`: real Yoursafe Components fresh/managed resume.
-- `native-claude-work-02/managed-resume.json`: actual `prepareResumeLaunch` continuity evidence;
-  earlier explicit permission/effort overrides are not default-state evidence.
-- `native-claude-work-project-01`: persisted native executable, real project, fresh/resume, observed
-  Manual default without a permission-mode flag, and successful owned-transcript hook evidence.
-- `native-claude-work-shell-01`: actual fresh Git Bash `ccw` function, selected work account/project,
-  native model/catalog, observed Manual default, and no hook failures.
+Drift refusal requires inspection, not forced replacement. Preserve protected artifacts until
+restart/resurrection acceptance passes. The original personal pilot has a concurrency limitation:
+its recovery can remove a file changed after validation. Do not automate that older recovery while
+sessions or editors can still write its targets.
 
-Claude marker probes disable tools/MCP and explicitly request low effort. Saved Claude effort is
-not claimed as recovered. Personal Claude authentication/inference is an accepted adoption exception while the subscription
-is inactive; repeat authenticated acceptance if it returns. These checks do not establish physical reboot, interactive keyboard behavior, or Orca restart
-and notification acceptance.
+## Acceptance boundaries
 
-The work manifest change is mechanical: project ID, GitLab repository, KanbanFlow board/states, and
-Yarn remain intact. The sibling workspace marker and project-authored native skills are untouched.
-
-## Protected recovery
-
-Current account and single-file recovery scripts default to preview and refuse newer edits detected
-by their checks. Add `--apply` only for deliberate recovery. Recover routing before configurations
-and account surfaces; preserve protected artifacts through restart acceptance. The older personal
-pilot uses a separate recovery implementation with the concurrency limitation below.
-
-1. **Removal of installed-MPX `x*` launchers**:
-   `$MPX_APPS/_backups/mpx2-remove-x-launchers-2026-09-15T13-27-11.764Z/`
-2. **Work launcher routing**:
-   `$MPX_APPS/_backups/mpx2-work-launchers-2026-09-15T09-54-43.810Z/shell/`
-3. **Work project manifest, then MPX2 user configuration**:
-   `$MPX_APPS/_backups/mpx2-work-configuration-2026-09-15T09-52-56.839Z/`
-   uses `project-config/` then `user-config/`.
-4. **Claude hook repair before initial Claude account rollout**:
-   work hook repair `mpx2-work-claude-hooks-2026-09-15T08-20-04.880Z`, then initial work account
-   `mpx2-work-claude-rollout-2026-09-15T08-03-48.316Z` under `$MPX_APPS/_backups`.
-   Personal hook repair `mpx2-personal-claude-hooks-2026-09-15T08-20-04.884Z`, then personal account
-   `mpx2-personal-claude-rollout-2026-09-15T08-03-48.309Z`.
-5. **Work Pi account**:
-   `$MPX_APPS/_backups/mpx2-work-pi-rollout-2026-09-15T08-02-11.229Z`.
-
-Preview the shell recovery without changing anything:
-
-```bash
-node "$MPX_APPS/_backups/mpx2-remove-x-launchers-2026-09-15T13-27-11.764Z/protected-file-change-recovery.mjs"
-```
-
-Single-file directories contain `protected-file-change-plan.json` and the standalone script.
-Account directories contain their separate account-rollout plan/recovery script. Machine-local
-`work-launchers-pointer.json`, `work-configuration-pointer.json`, and Claude recovery-order records
-under `.local` identify the applied transactions. Do not restore whole account directories over
-new authentication or conversation data.
-
-An initial configuration preparation stopped before live writes because the protection helper used
-directory inheritance flags on a file. File-specific flags and real Windows protection tests fixed
-that defect. The incomplete preparation at `mpx2-work-configuration-2026-09-15T09-51-25.790Z`
-contains no applied transaction and is retained, not silently deleted. Recovery candidates use
-unique attempt names so a Windows sharing failure cannot permanently block retry.
-
-## Original personal pilot recovery
-
-The original protected pilot backup remains at:
-
-`$MPX_APPS/_backups/mpx2-personal-pilot-2026-09-14T14-03-39.437Z`
-
-It contains its own standalone Node recovery script and manifests; it does not require the retired
-repository pilot installer or checkout dependencies. Resolve later personal-account transactions
-before considering this older rollback. Never restore the whole native profile over newer settings,
-authentication, or conversations.
-
-```bash
-backup="$MPX_APPS/_backups/mpx2-personal-pilot-2026-09-14T14-03-39.437Z"
-node "$backup/rollback-personal-pilot.mjs" "$backup"
-```
-
-**Legacy limitation:** this script can delete a newer file if another writer replaces a pilot-owned
-file between verification and removal. The protected copy has not been upgraded. Do not automate its
-`--apply`: stop affected sessions/editors and review current targets and the transaction before a
-manual recovery. Preview is not a concurrency guarantee. Original directory links are restored only
-when unrelated private changes would not be lost; the private pilot agent copy is retained.
-
-Historical installer sources remain in Git. Use [HANDOFF.md](HANDOFF.md), not an older transaction's
-launcher table, to establish the current adoption scope.
+Personal Claude authentication is an accepted exception while its subscription is inactive.
+Configuration, executable, hook, and launch checks still apply. Marker probes do not establish
+unrestricted tools, saved Claude effort, desktop notifications, or physical restart behavior.

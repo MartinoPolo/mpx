@@ -46,7 +46,7 @@ test('allows only exact native settings and profile paths', () => {
     path.join(roots.home, '.claude', 'settings.local.json'),
     path.join(roots.home, '.claude-work', 'settings.local.json'),
     path.join(roots.documents, 'PowerShell', 'Microsoft.PowerShell_profile.ps1'),
-    path.join(roots.appData, 'mpx2', 'config.json'),
+    path.join(roots.appData, 'mpx', 'config.json'),
     path.join(roots.localAppData, 'Packages', 'Microsoft.WindowsTerminal_8wekyb3d8bbwe', 'LocalState', 'settings.json'),
   ];
   for (const target of allowed) assert.equal(isAllowedProtectedTarget(target, roots), true, target);

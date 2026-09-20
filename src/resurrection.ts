@@ -39,7 +39,7 @@ function forbiddenArgument(argument: string): boolean {
 }
 
 /**
- * Adapt the already prepared MPX2 Pi resume without rediscovery, a session
+ * Adapt the already prepared MPX Pi resume without rediscovery, a session
  * registry, legacy ownership markers, or a wrapper/alias round trip.
  */
 export function adaptPreparedPiResurrection(prepared: PreparedResumeLaunch): PreparedResurrectionLaunch {

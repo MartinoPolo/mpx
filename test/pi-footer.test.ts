@@ -19,7 +19,7 @@ function snapshot(overrides: Partial<FooterSnapshot> = {}): FooterSnapshot {
     sessionId: '12345678-abcdef',
     model: 'anthropic/claude-sonnet-4',
     effort: 'high',
-    location: { project: 'mpx2', worktree: 'feature-tree', branch: 'footer' },
+    location: { project: 'mpx', worktree: 'feature-tree', branch: 'footer' },
     contextPercent: 42,
     contextTokens: 42_123,
     compactionTrigger: 100_000,
@@ -48,7 +48,7 @@ test('renders the five core lines in order with exact account color and no runti
   assert.match(text[0]!, /^▾ New session · #12345678 · Personal$/);
   assert.ok(lines[0]!.includes('\x1b[38;2;71;127;204mPersonal\x1b[0m'));
   assert.match(text[1]!, /^claude-sonnet-4 · ◆◆◆◆◇◇$/);
-  assert.equal(text[2], 'mpx2 · feature-tree · footer');
+  assert.equal(text[2], 'mpx · feature-tree · footer');
   assert.match(text[3]!, /42\.1k \(42%\)/);
   assert.doesNotMatch(text[3]!, /Context/);
   assert.match(text[3]!, /\$1\.250$/);
