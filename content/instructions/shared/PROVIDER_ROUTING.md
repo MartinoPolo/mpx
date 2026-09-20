@@ -1,16 +1,13 @@
 # Provider Routing
 
 Here, PR means a GitHub pull request, GitLab merge request, or Gerrit change, as applicable.
-Canonical workflows invoke the native guide selected by project configuration. MPX does not provide
-typed Issue, Review, or CI facade commands.
 
 ## Resolve only the roles needed
 
 Resolve `mpxconfig.json` from the Git main checkout, or the current directory for a non-Git folder.
-Do not inherit parent manifests or skip an invalid file. If the file is absent, an explicitly configured
-machine-local project override may supply the same fields; `mpx project config <directory>` inspects
-that configuration. Without either source, stop provider-dependent work rather than infer providers.
-Validate only the project and role fields needed by the operation.
+If the file is absent, an explicitly configured machine-local project override may supply the same
+fields; `mpx project config <directory>` inspects that configuration. Missing or invalid configuration
+stops provider-dependent work.
 
 - Issue and board work selects `issues.provider`.
 - PR and CI work selects `repository.provider`.
@@ -19,17 +16,8 @@ Validate only the project and role fields needed by the operation.
 
 For repository operations, load exactly the selected [GitHub](providers/GITHUB.md),
 [GitLab](providers/GITLAB.md), or [Gerrit](providers/GERRIT.md) guide. For Issue operations, load
-exactly [GitHub](providers/GITHUB.md) or [KanbanFlow](providers/KANBANFLOW.md). The
-[Local provider](providers/LOCAL.md) is explicitly unsupported. `local`, `generic`, `none`, an
-unknown provider, a missing guide, or a role mismatch stops that branch; never substitute GitHub.
-
-## Explicit GitHub repository creation
-
-The development `init-github-repo` skill explicitly selects GitHub before repository configuration
-exists. For that workflow only, use the confirmed GitHub account, owner and name, and visibility
-rather than requiring an existing configured remote. If existing project configuration selects
-another repository provider, stop. This exception does not authorize other workflows to infer a
-provider.
+exactly [GitHub](providers/GITHUB.md) or [KanbanFlow](providers/KANBANFLOW.md).
+`local`, `generic`, `none`, an unknown provider, a missing guide, or a role mismatch stops that branch; never substitute GitHub.
 
 ## Validate explicit targets
 
@@ -41,41 +29,27 @@ fragment components, malformed ports, and empty, dot, or traversal path segments
 terminal `.git`. Preserve the complete namespace path and host. If a caller-supplied target
 conflicts, stop rather than choosing silently.
 
-For KanbanFlow, run `kf` at the repository root, read `kf board --json`, and require its single
-board `_id` to equal configured `issues.metadata.boardId` before any operation. Validate configured state
-mappings before movement. A local Issue provider is unsupported and receives a manual handoff.
-
 Use explicit Issue, PR, run, job, branch, repository, project, and board IDs. Capture returned
 immutable IDs and reuse them; do not rediscover an update target implicitly. Before mutation, verify
 the provider, target, and intended change. Preserve native errors and fail closed on ambiguity.
 
 ## Authentication and launch binding
 
-Native tools own authentication. Do not log in or out, switch accounts, copy tokens, expose
-credential paths, or fabricate authentication routing. Preserve launch-provided bindings such as
-`GH_CONFIG_DIR` and `GLAB_CONFIG_DIR` unchanged. KanbanFlow credentials remain in the OS keyring.
+Preserve native authentication and launch-provided bindings. Do not log in or out, switch accounts,
+copy tokens, or expose credentials.
 
 ## Relationships, labels, and privacy
 
-Use ordinary body links and reciprocal link sections for parent and child relationships; do not
-depend on native hierarchy.
+Use reciprocal body links for parent/child relationships, not native hierarchy.
 
-Inspect existing labels and milestones first. Use exact native provider values. Create a label or
-milestone only when supported and explicitly authorized. A missing or rejected required value is a
-decision point, not permission to continue silently.
+Inspect existing labels and milestones; use exact provider values. Creation requires provider
+support and explicit authorization. Do not silently omit required values.
 
-Send only necessary content. Never publish secrets, machine paths, private account data, raw
-environment values, or unrelated logs. Prefer reviewed body files for multiline content.
+Publish only necessary content; exclude secrets, machine paths, private account data, raw environment
+values, and unrelated logs.
 
 ## Interface boundary
 
-- Use only the selected native guide's documented commands.
-
-Stop only the affected branch and return a manual handoff containing:
-
-- selected role, provider, and explicit target ID;
-- requested operation and exact unsupported, configuration, or tooling condition;
-- safe remaining steps and the decision needed.
-
-Never switch providers, copy tokens, silently omit fields, reinterpret an unsupported operation, or
-repeat an uncertain mutation.
+Use only the selected guide’s documented commands. If configuration, tooling, or capability blocks
+an operation, stop that branch and report the role/provider, known target, operation, blocker, and
+required decision or manual action. Reconcile uncertain mutations before retrying.

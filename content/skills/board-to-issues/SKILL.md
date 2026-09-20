@@ -23,13 +23,11 @@ First:
 1. Read [Board Convention]({{MPX_SHARED_INSTRUCTIONS}}/BOARD_CONVENTION.md),
    [Provider Routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md), and the bundled canonical
    [Issue template](ISSUE_TEMPLATE.md). Resolve bundled assets relative to this loaded skill.
-2. Read the nearest valid `mpxconfig.json`. Resolve `issues.provider` independently and load its
-   selected native guide under `{{MPX_SHARED_INSTRUCTIONS}}/providers/`. Use only that guide's native Issue
+2. Resolve project configuration as specified by Provider Routing, then select `issues.provider`.
+   Load its selected native guide under `{{MPX_SHARED_INSTRUCTIONS}}/providers/`. Use only that guide's native Issue
    operations; never invent an MPX facade command or substitute the repository provider.
-3. When the Issue provider is KanbanFlow, select only `issues.boardId` (and verify optional
-   `boardName`) from `mpxconfig.json`. Never infer or interactively guess a board. Obtain
-   credentials only through the selected guide's documented environment/secret flow; never print,
-   persist in the repository, or commit credentials.
+3. For KanbanFlow, follow the selected guide’s board-identity validation using `issues.metadata.boardId`
+   and optional `issues.metadata.boardName`. Native tools own authentication; credentials remain in the OS keyring.
 
 ## Rules
 

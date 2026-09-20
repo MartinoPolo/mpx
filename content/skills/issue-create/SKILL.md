@@ -19,8 +19,9 @@ Create one well-scoped Issue from the invocation input using
 
 ## Provider and identity
 
-Read the nearest committed `mpxconfig.json` and resolve `issues.provider` exactly as specified by
-[provider routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md). Load only the selected
+Resolve project configuration as specified by
+[Provider Routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md), then select `issues.provider`.
+Load only the selected
 [GitHub]({{MPX_SHARED_INSTRUCTIONS}}/providers/GITHUB.md) or
 [KanbanFlow]({{MPX_SHARED_INSTRUCTIONS}}/providers/KANBANFLOW.md) guide. Preserve the native
 authentication environment and explicit target identity. Never infer a provider from remotes,

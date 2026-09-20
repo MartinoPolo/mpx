@@ -41,7 +41,8 @@ with optional `number` and `attachments`; edit returns the updated issue object.
 returned `issueId` or issue `_id` as the immutable target rather than assuming a common response
 envelope.
 
-Before every read or write, require the single `_id` from `kf board --json` to equal configured
+Run `kf` at the repository root. Before every read or write, require the single `_id` from
+`kf board --json` to equal configured
 `issues.metadata.boardId`; stop on absence, duplication, or mismatch. Issue identifiers may be a displayed
 number such as `E613` or native issue ID. Labels must already exist; `kf` has no label-create
 command. Use only canonical state names whose mappings are present in `mpxconfig.json` or its local override; optional

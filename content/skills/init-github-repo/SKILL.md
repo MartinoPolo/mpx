@@ -20,10 +20,8 @@ Initialize a new repository with deterministic local configuration, shared agent
 GitHub publication, and branch protection. This skill continues the original `init-repo` workflow.
 `dev` is the default development branch; `main` is for stable releases.
 
-Invocation selects GitHub explicitly, not GitLab or another provider. Read
-[Provider Routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md) and the
-[GitHub guide]({{MPX_SHARED_INSTRUCTIONS}}/providers/GITHUB.md); use their repository-creation exception when no
-project config exists yet. Preserve the active native GitHub authentication and environment.
+Invocation selects GitHub explicitly, not GitLab or another provider. Preserve the active native
+GitHub authentication and environment.
 
 ## 1. Resolve and check the project
 

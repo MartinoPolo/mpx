@@ -7,17 +7,6 @@ preserve native authentication and any existing `GH_CONFIG_DIR`, and bind every 
 Installed `gh 2.86.0 --help` verifies the forms below. Prefer `--body-file <file>` for reviewed
 multiline content.
 
-## Repository initialization
-
-The explicitly invoked development `init-github-repo` skill owns repository creation, initial
-pushes, default-branch selection, and protection setup. Its reviewed native commands are
-`gh repo create OWNER/REPO --private|--public --source=. --remote=origin --push`, and
-`gh api --hostname github.com` for `user`, `repos/OWNER/REPO`, and
-`repos/OWNER/REPO/branches/BRANCH[/protection]`. Confirm owner/name and visibility before creating;
-bind API paths to those literal validated values. Follow the repository-creation exception in
-Provider Routing instead of requiring a remote that does not exist yet. Preserve the native
-authentication environment.
-
 ## Issues
 
 ```text

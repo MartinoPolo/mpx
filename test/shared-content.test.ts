@@ -314,6 +314,21 @@ test('native-first content has stable projected dependencies and no retired runt
   assert.match(source, /Do not create, switch, or remove worktrees/);
 });
 
+test('GitHub initialization bundles no provider-routing dependencies', async () => {
+  const projections = await projectContent(root);
+  for (const harnessRoot of ['pi', 'claude/.claude']) {
+    const skillRoot = `dist/packs/development/${harnessRoot}/skills/mpx-init-github-repo/`;
+    const bundle = projections.filter(projection => projection.path.startsWith(skillRoot));
+    assert.ok(bundle.some(projection => projection.path === `${skillRoot}SKILL.md`));
+    for (const projection of bundle) {
+      assert.doesNotMatch(projection.path, /PROVIDER_ROUTING\.md|\/providers\//);
+      if (projection.path.endsWith('.md')) {
+        assert.doesNotMatch(projection.content.toString('utf8'), /PROVIDER_ROUTING\.md|repository-creation exception/);
+      }
+    }
+  }
+});
+
 test('provider roles remain independent and local is explicitly unsupported', async () => {
   const routing = await readFile(path.join(content, 'instructions/shared/PROVIDER_ROUTING.md'), 'utf8');
   const local = await readFile(path.join(content, 'instructions/shared/providers/LOCAL.md'), 'utf8');

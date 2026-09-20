@@ -54,8 +54,9 @@ Issues and using `{{MPX_SKILL_COMMAND}}execute`; do not launch a broad unbounded
 
 ## Provider boundaries
 
-Resolve `issues.provider` and `repository.provider` independently from nearest valid
-`mpxconfig.json`. Follow the selected shared provider guides. Issue create/edit/read/close uses
+Resolve project configuration as specified by
+[Provider Routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md), then select `issues.provider`
+and `repository.provider` independently. Follow the selected shared provider guides. Issue create/edit/read/close uses
 only the Issue provider. PR and CI evidence uses only
 the repository provider. If an unsupported Issue provider, missing tooling, or a provider limitation blocks an operation,
 continue independent local work, preserve evidence, and return exact manual steps without a provider
