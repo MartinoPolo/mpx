@@ -24,7 +24,7 @@ must be grounded in how the library actually works. Before guessing:
   `$MPX_CLONED/shadcn-svelte/docs/content/components/<name>.md` and
   `$MPX_CLONED/bits-ui/docs/content/components/<name>.md`. shadcn wraps Bits UI, so behaviour/props
   usually trace to the Bits UI page.
-- **Context7 MCP** (`mp-context7-docs-fetcher`) for anything the clones don't cover.
+- **Context7 MCP** (`mpx-context7-docs-fetcher`) for anything the clones don't cover.
 
 This overrides any convention below when they disagree.
 

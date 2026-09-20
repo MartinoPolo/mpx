@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   execute,
+  expectedSkills,
   parseArguments,
   parseStream,
   sanitizeProbeEnvironment,
@@ -23,8 +24,8 @@ const spec: LaunchSpec = {
   requiresConfirmation: false,
 };
 const expected: ExpectedSkill[] = [
-  { name: 'mp-visible', path: absolutePath('pack/visible/SKILL.md'), explicitOnly: false },
-  { name: 'mp-explicit', path: absolutePath('pack/explicit/SKILL.md'), explicitOnly: true },
+  { name: 'mpx-visible', path: absolutePath('pack/visible/SKILL.md'), explicitOnly: false },
+  { name: 'mpx-explicit', path: absolutePath('pack/explicit/SKILL.md'), explicitOnly: true },
 ];
 
 function stream(sessionId: string, marker: string, options: {
@@ -38,8 +39,8 @@ function stream(sessionId: string, marker: string, options: {
   const records: object[] = [{
     type: 'system', subtype: 'init', session_id: sessionId,
     cwd: options.cwd ?? spec.cwd, model: options.model ?? 'claude-test',
-    permissionMode: options.permissionMode ?? 'default', skills: options.skills ?? ['mp-visible'],
-    slash_commands: options.commands ?? ['mp-explicit'],
+    permissionMode: options.permissionMode ?? 'default', skills: options.skills ?? ['mpx-visible'],
+    slash_commands: options.commands ?? ['mpx-explicit'],
   }, { type: 'assistant', message: { content: [{ type: 'text', text: marker }] } }];
   if (options.result !== 'missing') records.push({ type: 'result', subtype: options.result ?? 'success', is_error: options.result === 'error', result: marker });
   return records.map(record => JSON.stringify(record)).join('\n');
@@ -86,11 +87,27 @@ test('parses only authoritative init, assistant text, and successful final resul
   assert.equal(parseStream(stream('session', 'MARK', { result: 'error' })).successfulResult, false);
 });
 
-test('catalog handles explicit-only skills and rejects missing, duplicate, or unexpected names', () => {
+test('selected skill discovery accepts mpx names and rejects stale generated mp names', async () => {
+  const { mkdtemp, mkdir, rm, writeFile } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const directory = await mkdtemp(join(tmpdir(), 'mpx-claude-skills-'));
+  const current = join(directory, 'current');
+  const stale = join(directory, 'stale');
+  try {
+    await mkdir(current); await mkdir(stale);
+    await writeFile(join(current, 'SKILL.md'), '---\nname: mpx-current\n---\n');
+    await writeFile(join(stale, 'SKILL.md'), '---\nname: mp-stale\n---\n');
+    assert.deepEqual((await expectedSkills([current])).map(skill => skill.name), ['mpx-current']);
+    await assert.rejects(expectedSkills([stale]), /invalid name/);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('catalog handles explicit-only mpx skills and rejects duplicate or unexpected owned names', () => {
   const metadata = parseStream(stream('session', 'x'));
-  assert.doesNotThrow(() => validateCatalog(metadata, expected));
-  assert.throws(() => validateCatalog({ ...metadata, skills: ['mp-visible', 'mp-visible'] }, expected), /duplicate/);
-  assert.throws(() => validateCatalog({ ...metadata, skills: ['mp-other'] }, expected), /unexpected/);
+  assert.doesNotThrow(() => validateCatalog({ ...metadata, skills: [...metadata.skills, 'mp-project'] }, expected));
+  assert.throws(() => validateCatalog({ ...metadata, skills: ['mpx-visible', 'mpx-visible'] }, expected), /duplicate/);
+  assert.throws(() => validateCatalog({ ...metadata, skills: ['mpx-other'] }, expected), /unexpected/);
   assert.throws(() => validateCatalog({ ...metadata, skills: [] }, expected), /missing catalog/);
   assert.throws(() => validateCatalog({ ...metadata, slashCommands: [] }, expected), /explicit-only/);
 });

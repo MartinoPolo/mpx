@@ -191,7 +191,7 @@ export function readSessionRecords(stateFile: string): StateRecord[] {
 // --- Agent identity ------------------------------------------------------------
 
 export interface SubagentMeta {
-    /** The subagent_type the Agent tool was called with: "Explore", "mp-executor", "fork". */
+    /** The subagent_type the Agent tool was called with: "Explore", "mpx-executor", "fork". */
     agentType: string;
     description: string;
     /** Set only for named background agents and teammates; "" for a plain Task spawn. */

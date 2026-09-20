@@ -14,7 +14,7 @@ test('projected tutorial helper uses MPX2 dependencies and validates its adapted
     const file = join(directory, 'fixture.source.md');
     const source = '---\ntitle: Native helper fixture\ntype: code-showcase\nformat: brief\ncategory: fixture\nslug: fixture\ndate: 2026-09-13\n---\n# start | Start here\n\n```js\nconst answer = 42;\n```\n';
     await writeFile(file, source);
-    const helper = resolve('dist/packs/personal/pi/skills/mp-tutorial-create/scripts/compile.js');
+    const helper = resolve('dist/packs/personal/pi/skills/mpx-tutorial-create/scripts/compile.js');
     const options = { env: { ...process.env, MPX_AI_GENERATED: root }, timeout: 20_000 };
     await exec(process.execPath, [helper, file, '--no-index'], options);
     const html = await readFile(join(directory, 'fixture.html'), 'utf8');

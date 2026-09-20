@@ -1,4 +1,4 @@
-﻿# Shared helpers for mp-clean-pc scanners.
+﻿# Shared helpers for mpx-clean-pc scanners.
 # Dot-source from any scanner: . "$PSScriptRoot\_Common.ps1"
 #
 # Set-StrictMode belongs in the entry scripts, not here: dot-sourcing applies it to the

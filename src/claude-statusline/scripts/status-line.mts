@@ -1424,7 +1424,7 @@ export function buildSubagentLine(input: SubagentLineInput): string[] {
     const lines = [joinSegments([`${DIM}Σ ${summary.agents} agent${summary.agents === 1 ? "" : "s"}${RESET}`, tiers])];
 
     // Both columns size to the widest value actually on screen: an all-`Explore`
-    // session should not be indented for the width of `mp-reviewer-security`,
+    // session should not be indented for the width of `mpx-reviewer-security`,
     // and the gauges still have to start at one column so their filled slots
     // compare down the block.
     const nameWidth = Math.max(...summary.rows.map((agent) => agent.type.length));

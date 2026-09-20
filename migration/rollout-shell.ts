@@ -11,7 +11,7 @@ function markerIndex(lines: readonly string[], marker: string): number {
 }
 
 function shellLaunchers(): string[] {
-  return COMMANDS.map(command => `${command}() { bash "\${MPX_PROJECTS:?${command} requires MPX_PROJECTS}/mpx2/bin/${command}" "$@"; }`);
+  return COMMANDS.map(command => `${command}() { bash "\${MPX_PROJECTS:?${command} requires MPX_PROJECTS}/mpx/bin/${command}" "$@"; }`);
 }
 
 function preserveNewline(source: string, transform: (lines: string[]) => string[]): string {
@@ -35,13 +35,13 @@ export function renderFinalCutoverShell(source: string): string {
     return result
       .filter(line => !/^alias gw(?:r)?=/.test(line))
       .map(line => line === 'alias p0="cd \\"$mpProjectsFolder/mpx-claude-code\\""'
-        ? 'alias p0=\'cd "${MPX_PROJECTS:?p0 requires MPX_PROJECTS}/mpx2"\''
+        ? 'alias p0=\'cd "${MPX_PROJECTS:?p0 requires MPX_PROJECTS}/mpx"\''
         : line);
   });
 }
 
 function powershellLaunchers(): string[] {
-  return COMMANDS.map(command => `function ${command} { if (-not $env:MPX_PROJECTS -or -not $env:MPX_APPS) { throw '${command} requires MPX_PROJECTS and MPX_APPS' }; & "$env:MPX_APPS/Git/bin/bash.exe" --login "$env:MPX_PROJECTS/mpx2/bin/${command}" @args }`);
+  return COMMANDS.map(command => `function ${command} { if (-not $env:MPX_PROJECTS -or -not $env:MPX_APPS) { throw '${command} requires MPX_PROJECTS and MPX_APPS' }; & "$env:MPX_APPS/Git/bin/bash.exe" --login "$env:MPX_PROJECTS/mpx/bin/${command}" @args }`);
 }
 
 export function renderFinalPowerShellProfile(source: string): string {

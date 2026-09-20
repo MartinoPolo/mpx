@@ -37,7 +37,7 @@ conventions belong in `AGENTS.md`; rollout evidence and recovery belong in `migr
   links. An empty selection disables only MPX global packs.
 - **Respect project ownership and native precedence.** Project resources may override globals;
   resolve collisions through provenance and explicit comparison, never blanket deletion or disabling.
-  Reserve `mp-` for MPX global skills and use project-owned names for new project skills.
+  Reserve `mpx-` for MPX-owned skills and agents, and use project-owned names for new project skills.
 - **Propagate selected packs to subagents.** Parent and child sessions need the same effective
   workflow vocabulary; discovery and named-skill preloading must preserve that selection.
 

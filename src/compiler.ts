@@ -20,6 +20,7 @@ const THINKING_LEVELS: readonly Thinking[] = ['off', 'minimal', 'low', 'medium',
 const CAPABILITIES: readonly Capability[] = ['read', 'search', 'shell', 'write', 'browser', 'context', 'web'];
 const EXPOSURES: readonly Exposure[] = ['normal', 'name-only', 'explicit-only'];
 const OUTPUT_ROOTS = ['dist/packs', 'dist/pi', 'dist/claude'] as const;
+const MPX_PREFIX = 'mpx-';
 const PLACEHOLDERS = [
   '{{MPX_SKILL_COMMAND}}',
   '{{MPX_SKILL_PREFIX}}',
@@ -120,7 +121,7 @@ function canonicalNativeMetadata(data: Mapping): Mapping {
 function skillMetadata(data: Mapping, directoryName: string, where: string): SkillMetadata {
   assertBareName(data.name, `${where} name`);
   if (data.name !== directoryName) throw new Error(`${where} name must match its skill directory`);
-  if (`mp-${data.name}`.length > 64) throw new Error(`${where} projected mp- skill name must be at most 64 characters`);
+  if (`${MPX_PREFIX}${data.name}`.length > 64) throw new Error(`${where} projected ${MPX_PREFIX} skill name must be at most 64 characters`);
   if (typeof data.description !== 'string' || data.description.trim() === '') throw new Error(`${where} description is required`);
   const { mpx } = metadataBlock(data, where);
   assertExactKeys(mpx, ['schemaVersion', 'skillPacks', 'defaultExposure'], `${where} metadata.mpx`);
@@ -324,9 +325,9 @@ function replacePlaceholders(content: Buffer, harness: Harness, outputPath: stri
     ? relativeReference(outputPath, 'agents/references')
     : relativeReference(outputPath, `${targetRoot}/agents/references`);
   const values: Record<(typeof PLACEHOLDERS)[number], string> = {
-    '{{MPX_SKILL_COMMAND}}': harness === 'pi' ? '/skill:mp-' : '/mp-',
-    '{{MPX_SKILL_PREFIX}}': canonical ? '' : 'mp-',
-    '{{MPX_AGENT_PREFIX}}': 'mpx-',
+    '{{MPX_SKILL_COMMAND}}': harness === 'pi' ? `/skill:${MPX_PREFIX}` : `/${MPX_PREFIX}`,
+    '{{MPX_SKILL_PREFIX}}': canonical ? '' : MPX_PREFIX,
+    '{{MPX_AGENT_PREFIX}}': MPX_PREFIX,
     '{{MPX_SHARED_INSTRUCTIONS}}': shared,
     '{{MPX_AGENT_REFERENCES}}': references,
     '{{MPX_HARNESS}}': harness,
@@ -560,7 +561,7 @@ function validateReferences(files: readonly { path: string; content: Buffer }[],
 
 function nativeSkill(data: Mapping, metadata: SkillMetadata, harness: Harness): Mapping {
   const native = canonicalNativeMetadata(data);
-  native.name = `mp-${String(data.name)}`;
+  native.name = `${MPX_PREFIX}${String(data.name)}`;
   const exposure = metadata.defaultExposure ?? (metadata.skillPacks.every((pack) => pack === 'personal') ? 'explicit-only' : 'normal');
   delete native['disable-model-invocation'];
   if (exposure === 'name-only') native.description = `Loads the ${native.name} skill when explicitly referenced.`;
@@ -573,7 +574,7 @@ function nativeSkill(data: Mapping, metadata: SkillMetadata, harness: Harness): 
 function nativeAgent(data: Mapping, metadata: AgentMetadata, profiles: RuntimeProfiles, harness: Harness): Mapping {
   const native = canonicalNativeMetadata(data);
   for (const field of ['model', 'tools', 'thinking', 'effort']) delete native[field];
-  native.name = `mpx-${String(data.name)}`;
+  native.name = `${MPX_PREFIX}${String(data.name)}`;
   native.model = profiles.models[harness][metadata.modelClass];
   native[harness === 'pi' ? 'thinking' : 'effort'] = metadata.thinking;
   const tools = metadata.capabilities.flatMap((capability) => profiles.tools[harness][capability]);
@@ -627,8 +628,8 @@ export async function projectContent(root: string): Promise<Projection[]> {
     for (const pack of metadata.skillPacks) {
       for (const harness of HARNESSES) {
         const skillRoot = harness === 'pi'
-          ? `dist/packs/${pack}/pi/skills/mp-${directoryName}`
-          : `dist/packs/${pack}/claude/.claude/skills/mp-${directoryName}`;
+          ? `dist/packs/${pack}/pi/skills/${MPX_PREFIX}${directoryName}`
+          : `dist/packs/${pack}/claude/.claude/skills/${MPX_PREFIX}${directoryName}`;
         const outputPath = `${skillRoot}/SKILL.md`;
         const body = replacePlaceholders(parsed.body, harness, outputPath);
         add(outputPath, renderMarkdown(nativeSkill(parsed.data, metadata, harness), body));
@@ -646,7 +647,7 @@ export async function projectContent(root: string): Promise<Projection[]> {
     const parsed = parseMarkdown(`content/${source.relative}`, source.content);
     const metadata = agentMetadata(parsed.data, filename, `content/${source.relative}`);
     for (const harness of HARNESSES) {
-      const destination = `dist/${harness}/agents/mpx-${filename}.md`;
+      const destination = `dist/${harness}/agents/${MPX_PREFIX}${filename}.md`;
       const body = replacePlaceholders(parsed.body, harness, destination);
       add(destination, renderMarkdown(nativeAgent(parsed.data, metadata, profiles, harness), body));
     }

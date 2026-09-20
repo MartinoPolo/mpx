@@ -58,7 +58,7 @@ Missing optional MPX port metadata is not a startup blocker.
 Follow applicable project instructions, including nested instructions for files changed. Private
 local instructions supplement shared guidance.
 
-Invoke MPX skills with their native command: `/skill:mp-<name>` in Pi and `/mp-<name>` in Claude.
+Invoke MPX skills with their native command: `/skill:mpx-<name>` in Pi and `/mpx-<name>` in Claude.
 
 ## Sub-agents
 

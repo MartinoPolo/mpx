@@ -131,7 +131,7 @@ export async function expectedSkills(paths: string[]): Promise<ExpectedSkill[]> 
       const info = await stat(physical);
       if (info.size > MAX_SKILL_BYTES) throw new Error(`Skill exceeds ${MAX_SKILL_BYTES} bytes: ${candidate}`);
       const frontmatter = parseFrontmatter(await readFile(physical, 'utf8'), physical);
-      if (typeof frontmatter.name !== 'string' || !/^mp-[a-z0-9-]+$/.test(frontmatter.name)) throw new Error(`Skill frontmatter has invalid name: ${physical}`);
+      if (typeof frontmatter.name !== 'string' || !/^mpx-[a-z0-9-]+$/.test(frontmatter.name)) throw new Error(`Skill frontmatter has invalid name: ${physical}`);
       if (frontmatter['disable-model-invocation'] !== undefined && typeof frontmatter['disable-model-invocation'] !== 'boolean') throw new Error(`disable-model-invocation must be boolean: ${physical}`);
       output.push({ name: frontmatter.name, path: physical, explicitOnly: frontmatter['disable-model-invocation'] === true });
     }
@@ -145,10 +145,10 @@ export async function expectedSkills(paths: string[]): Promise<ExpectedSkill[]> 
 export function validateCatalog(meta: StreamMeta, expected: ExpectedSkill[]): void {
   const expectedNames = new Set(expected.map(skill => skill.name));
   for (const catalog of [meta.skills, meta.slashCommands]) {
-    const duplicate = catalog.find((name, index) => name.startsWith('mp-') && catalog.indexOf(name) !== index);
+    const duplicate = catalog.find((name, index) => name.startsWith('mpx-') && catalog.indexOf(name) !== index);
     if (duplicate) throw new Error(`duplicate MPX2 catalog name: ${duplicate}`);
   }
-  const unexpected = [...meta.skills, ...meta.slashCommands].find(name => name.startsWith('mp-') && !expectedNames.has(name));
+  const unexpected = [...meta.skills, ...meta.slashCommands].find(name => name.startsWith('mpx-') && !expectedNames.has(name));
   if (unexpected) throw new Error(`unexpected out-of-selection MPX2 skill: ${unexpected}`);
   for (const skill of expected) {
     if (skill.explicitOnly && !meta.slashCommands.includes(skill.name)) throw new Error(`missing explicit-only catalog skill: ${skill.name}`);

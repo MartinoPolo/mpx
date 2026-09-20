@@ -12,15 +12,15 @@ Run these from Git Bash:
 | --- | --- |
 | `pi` / `piw` | Start Pi with the personal / work account |
 | `cc` / `ccw` | Start Claude Code with the personal / work account |
-| `bash "$MPX_PROJECTS/mpx2/bin/mpx" resume --list` | List resumable native sessions |
-| `bash "$MPX_PROJECTS/mpx2/bin/mpx" status` | Inspect MPX2 resources and conflicts |
-| `bash "$MPX_PROJECTS/mpx2/bin/mpx" sync --preview` | Preview account-resource synchronization |
-| `bash "$MPX_PROJECTS/mpx2/bin/mpx" sync --runtime-only --account personal --harness pi --preview` | Preview one account/harness runtime scope |
-| `bash "$MPX_PROJECTS/mpx2/bin/mpx" sync --orca-hooks-only --harness pi --preview` | Preview only Orca-owned Pi extension mirroring |
-| `bash "$MPX_PROJECTS/mpx2/bin/mpx" project setup --preview` | Preview optional project setup |
+| `mpx resume --list` | List resumable native sessions |
+| `mpx status` | Inspect MPX resources and conflicts |
+| `mpx sync --preview` | Preview account-resource synchronization |
+| `mpx sync --runtime-only --account personal --harness pi --preview` | Preview one account/harness runtime scope |
+| `mpx sync --orca-hooks-only --harness pi --preview` | Preview only Orca-owned Pi extension mirroring |
+| `mpx project setup --preview` | Preview optional project setup |
 | `mpx project config <directory>` | Inspect `mpxconfig.json` or its local override |
 
-Bare `mpx` and the account commands now use this checkout. Legacy recovery and suffixed launchers
+Bare `mpx` and the account commands use the MPX installation. Legacy recovery and suffixed launchers
 are removed. PowerShell and the Windows `mpx.cmd` shim explicitly select Git Bash rather than the
 Windows/WSL `bash` executable. Reopen existing terminals after migration to discard cached routing.
 
@@ -29,7 +29,7 @@ output. Pass `pi --verbose` or `piw --verbose` when expanded resource paths are 
 
 ## Execution and delivery skills
 
-Use `/skill:mp-<name>` in Pi or `/mp-<name>` in Claude Code:
+Use `/skill:mpx-<name>` in Pi or `/mpx-<name>` in Claude Code:
 
 | Skill | Endpoint |
 | --- | --- |

@@ -144,7 +144,7 @@ test('authoring workflows use one writing standard without retired policy depend
   for (const harness of ['pi', 'claude']) {
     for (const skill of ['agent-create', 'skill-create', 'skill-audit']) {
       const skillRoot = harness === 'pi' ? 'pi/skills' : 'claude/.claude/skills';
-      const destination = `dist/packs/development/${skillRoot}/mp-${skill}/SKILL.md`;
+      const destination = `dist/packs/development/${skillRoot}/mpx-${skill}/SKILL.md`;
       const projection = projections.find(file => file.path === destination);
       assert.ok(projection, destination);
       const text = projection.content.toString('utf8');
@@ -308,8 +308,8 @@ test('native-first content has stable projected dependencies and no retired runt
   ]) assert.ok(!source.includes(banned), `retired dependency: ${banned}`);
   assert.doesNotMatch(source, /pnpm (?:run )?typecheck/i);
   assert.match(source, /MPX_ACTIVE_CONTENT_ROOT/);
-  assert.match(source, /\/skill:mp-<name>/);
-  assert.match(source, /\/mp-<name>/);
+  assert.match(source, /\/skill:mpx-<name>/);
+  assert.match(source, /\/mpx-<name>/);
   assert.match(source, /parent may start a server/);
   assert.doesNotMatch(source, /Project servers are started manually/);
   assert.match(source, /Do not create, switch, or remove worktrees/);
@@ -330,8 +330,8 @@ test('provider roles remain independent and local is explicitly unsupported', as
 test('compiler resolves native commands and every added local Markdown dependency', async () => {
   const projections = await projectContent(root);
   const byPath = new Map(projections.map(item => [item.path, item.content.toString('utf8')]));
-  assert.match(byPath.get('dist/pi/instructions/shared/AGENTS.md')!, /\/skill:mp-<name>/);
-  assert.match(byPath.get('dist/claude/instructions/shared/AGENTS.md')!, /\/mp-<name>/);
+  assert.match(byPath.get('dist/pi/instructions/shared/AGENTS.md')!, /\/skill:mpx-<name>/);
+  assert.match(byPath.get('dist/claude/instructions/shared/AGENTS.md')!, /\/mpx-<name>/);
   assert.match(byPath.get('dist/pi/agents/mpx-executor.md')!, /Use meaningful end-to-end tests for user-facing behavior/);
   assert.match(byPath.get('dist/claude/agents/mpx-chrome-devtools-tester.md')!, /Playwright Testing — Reliability Contract/);
   assert.ok(byPath.has('dist/pi/rules/projects/storybook.md'));

@@ -13,7 +13,7 @@ metadata:
     defaultExposure: explicit-only
 ---
 
-# mp-playwright-test
+# mpx-playwright-test
 
 Run reliable browser verification over a defined scope. This skill owns **scope → surfaces** and
 orchestration. Read the canonical compiled-relative `{{MPX_SHARED_INSTRUCTIONS}}/PLAYWRIGHT_TESTING.md` now — the
@@ -29,7 +29,7 @@ input
 ## Rules
 
 - **Raw Playwright only** — the project's installed `playwright` dep, run as a Node script. Browser
-  MCP work belongs to the exploratory `mp-chrome-devtools-tester` agent, not this reliability path.
+  MCP work belongs to the exploratory `mpx-chrome-devtools-tester` agent, not this reliability path.
 - **Verify only** — assert and screenshot, leaving source untouched.
 - This skill encodes **policy**; the runner command, dev-server port, auth endpoint, and seed users
   come from the project's `AGENTS.md` / memory, not from here.

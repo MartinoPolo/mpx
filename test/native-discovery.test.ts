@@ -60,31 +60,31 @@ test('separate native Pi loaders preserve additive trusted discovery, exposure a
     const [a, b] = await Promise.all([load(repoA, personal, [paths('development'), paths('personal')]), load(repoB, work, [paths('development')])]);
     for (const result of [a, b]) {
       const names = result.skills.map(skill => skill.name);
-      for (const name of ['mp-normal', 'mp-named', 'independent', 'packaged', 'shared-global', 'project-native', 'pi-project']) assert.ok(names.includes(name), `missing ${name}: ${names}`);
+      for (const name of ['mpx-normal', 'mpx-named', 'independent', 'packaged', 'shared-global', 'project-native', 'pi-project']) assert.ok(names.includes(name), `missing ${name}: ${names}`);
       assert.equal(new Set(names).size, names.length);
       assert.ok(!names.includes('named'), `bundled reference discovered as a native skill: ${names}`);
       assert.equal(result.extensions.length, 0);
       assert.ok(result.contexts.some(file => file.endsWith('AGENTS.md')));
       assert.equal(result.diagnostics.length, 0);
       assert.ok(result.prompt.includes('Meaningful normal description'));
-      assert.ok(result.prompt.includes('mp-named'));
+      assert.ok(result.prompt.includes('mpx-named'));
       assert.ok(!result.prompt.includes('UNIQUE_BODY_'));
-      assert.ok(!result.prompt.includes('mp-private'));
+      assert.ok(!result.prompt.includes('mpx-private'));
     }
-    assert.ok(a.skills.some(skill => skill.name === 'mp-private' && skill.hidden));
-    assert.ok(!b.skills.some(skill => skill.name === 'mp-private'));
+    assert.ok(a.skills.some(skill => skill.name === 'mpx-private' && skill.hidden));
+    assert.ok(!b.skills.some(skill => skill.name === 'mpx-private'));
     assert.ok(a.skills.some(skill => skill.name === 'personal-owned'));
     assert.ok(!a.skills.some(skill => skill.name === 'work-owned'));
     assert.ok(b.skills.some(skill => skill.name === 'work-owned'));
     assert.ok(!b.skills.some(skill => skill.name === 'personal-owned'));
-    const privateFile = a.skills.find(skill => skill.name === 'mp-private')!.filePath;
+    const privateFile = a.skills.find(skill => skill.name === 'mpx-private')!.filePath;
     assert.equal(await readFile(join(dirname(privateFile), 'support.txt'), 'utf8'), 'SUPPORT_private\n');
     const empty = await load(repoA, personal, []);
-    assert.ok(!empty.skills.some(skill => skill.name.startsWith('mp-')));
+    assert.ok(!empty.skills.some(skill => skill.name.startsWith('mpx-')));
     assert.ok(empty.skills.some(skill => skill.name === 'project-native'));
     const untrusted = await load(repoA, personal, [paths('development')], false);
     assert.ok(!untrusted.skills.some(skill => ['project-native', 'pi-project'].includes(skill.name)));
-    assert.ok(untrusted.skills.some(skill => skill.name === 'mp-normal'));
+    assert.ok(untrusted.skills.some(skill => skill.name === 'mpx-normal'));
     // Restart with identical selection is stable; nothing links shared account packs.
     assert.deepEqual((await load(repoA, personal, [paths('development'), paths('personal')])).skills, a.skills);
   } finally { await rm(root, { recursive: true, force: true }); }

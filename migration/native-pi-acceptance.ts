@@ -279,7 +279,7 @@ export async function validateCommands(data: Obj, expected: Map<string, string>,
       return sourcePath;
     }) : undefined;
     if (expected.has(name)) (found.get(name) ?? (found.set(name, []), found.get(name)!)).push(actual!);
-    else if (name.startsWith('mp-') || (actual !== undefined && (managedRoots.some(root => inside(actual, root)) || expectedPaths.has(comparable(actual))))) throw new Error(`Unexpected MPX2 skill command: ${name}`);
+    else if (name.startsWith('mpx-') || (actual !== undefined && (managedRoots.some(root => inside(actual, root)) || expectedPaths.has(comparable(actual))))) throw new Error(`Unexpected MPX2 skill command: ${name}`);
   }
   const evidence: Array<{ name: string; path: string }> = [];
   for (const [name, path] of expected) {

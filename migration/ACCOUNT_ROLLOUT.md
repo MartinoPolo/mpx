@@ -3,25 +3,21 @@
 This records the already-applied account rollout and its recovery locations, not authorization for
 another apply. Current acceptance and remaining work are tracked only in [HANDOFF.md](HANDOFF.md).
 
-## Current routing
+## Routing and preservation
 
-| Command | Route |
-| --- | --- |
-| `pi` | MPX2 personal, accepted pilot |
-| `piw` | MPX2 work |
-| `ccw` | MPX2 work Claude |
-| `cc` | Unchanged; personal Claude live checks deferred |
-| `lpi`, `lpiw` | Temporary direct legacy Pi recovery launchers |
-| `lccw` | Temporary direct work-Claude recovery launcher |
-| `xpi`, `xpiw`, `xccw` | Removed; bare `mpx`, personal `cc`, and suffixed legacy functions remain |
+The unified implementation owns `mpx`, `pi`, `piw`, `cc`, and `ccw`. Installed legacy MPX, suffixed
+launchers, and direct `l*` recovery functions were removed by the later final cutover. Fresh shells
+are required after routing changes. Native account data remains in place; backups are not independent
+account profiles. Current location and remaining acceptance are in [HANDOFF.md](HANDOFF.md).
 
-A fresh Git Bash shell loads these functions. Existing shells retain their old definitions until
-refreshed. Installed MPX strips Git Bash shell markers, causing Claude's Bash-style hooks to be
-parsed by PowerShell. MPX2 preserves them; Orca commands were not modified to hide this defect.
-Installed MPX also does not understand converted project manifests. Original direct launchers are
-the retained fallback, not evidence that installed MPX supports the new manifest. They retain original
-routing, not independent profile snapshots: account data is shared by approval. Exact pre-migration
-resource state requires the scoped recovery below.
+Ignored `.local/final-cutover-pointer.json` identifies protected shell/config/link recovery.
+`.local/legacy-archive-pointer.json` identifies the archived installed/local/roaming copies.
+`.local/legacy-preservation-pointer.json` identifies the latest verified Git bundles and full `.git`
+snapshots, including stashes and reflogs, for the legacy source repositories. Preserve any later
+uncommitted files separately. These pointers and their private artifacts must not be published.
+
+The final location move requires its own protection. Older recovery plans target the paths that
+existed when prepared; do not apply them after relocation without reviewing those targets.
 
 ## Evidence
 
@@ -42,8 +38,8 @@ Machine-local bounded artifacts are under checkout `.local/`:
   native model/catalog, observed Manual default, and no hook failures.
 
 Claude marker probes disable tools/MCP and explicitly request low effort. Saved Claude effort is
-not claimed as recovered. Personal Claude authentication/inference was explicitly deferred by the
-user. These checks do not establish physical reboot, interactive keyboard behavior, or Orca restart
+not claimed as recovered. Personal Claude authentication/inference is an accepted adoption exception while the subscription
+is inactive; repeat authenticated acceptance if it returns. These checks do not establish physical reboot, interactive keyboard behavior, or Orca restart
 and notification acceptance.
 
 The work manifest change is mechanical: project ID, GitLab repository, KanbanFlow board/states, and
@@ -111,5 +107,5 @@ file between verification and removal. The protected copy has not been upgraded.
 manual recovery. Preview is not a concurrency guarantee. Original directory links are restored only
 when unrelated private changes would not be lost; the private pilot agent copy is retained.
 
-The original pilot's stale launcher table and pending-acceptance instructions are superseded by the
-current routing above and [HANDOFF.md](HANDOFF.md). Historical installer sources remain in Git.
+Historical installer sources remain in Git. Use [HANDOFF.md](HANDOFF.md), not an older transaction's
+launcher table, to establish the current adoption scope.

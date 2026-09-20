@@ -48,9 +48,9 @@ const exactSupportHashes: Record<string, string> = {
   'clean-pc/scripts/Invoke-Removal.ps1': 'acb77d4b9ca07db61b20916fa86a293b23e2203835c001e4727480f939c3bd1c',
   'clean-pc/scripts/New-VisualStaging.ps1': '78e71f21afb7bc396b9781a012dcc25d7bd4a9d0186eb01474167abf67697cc1',
   'clean-pc/scripts/Scan-FolderMap.ps1': '873d79f871aa614a67d8679182d36ddcf9c38e3d64dbc6c28971d23e6e33a71d',
-  'clean-pc/scripts/_Common.ps1': '8fe60555ac3096cc5e2f0dcac94b32157e74bf0f1d9381b5e22512e4f23c0a29',
+  'clean-pc/scripts/_Common.ps1': '62ab06d902b72fe8af048f9053b2dd3c8c1029bcaea21e3552e5bf6f2e94f8af',
   'components-audit/CHECKLISTS.md': 'f5f57ba8eeef297eb527e941114c4ce4ef126b08c6a97c7c89a0af9508ec84e5',
-  'components-audit/references/shadcn-svelte.md': '34b3bef421e136c189c5313275cfd925ac3cf96bc506b623f9226369f443e3d1',
+  'components-audit/references/shadcn-svelte.md': 'fb0fa559425bc395be0722fd9a40f2e58626ed56a8b30e3eec65c110fc6dbf8c',
   'init-github-repo/scripts/init-repo.mjs': 'f5b6d290255065527118c3123daf6f15e0f114c087542a05a52e9e37e2cdfd24',
   'init-github-repo/templates/gitignore.template': '1fe3a632e6a3018608d6c5532f6aa8ad530a36cab8834c58b6f0dadd4a7ab4ef',
   'notebooklm/ARTIFACTS.md': '0a7e76b0c093d75165a7298785a4af67b39f52d34617a8c8431d6b5a3cc9413f',
@@ -59,7 +59,7 @@ const exactSupportHashes: Record<string, string> = {
   'notebooklm/WORKFLOWS.md': 'fa072c14c94497a054dfe97d82f0cdc24681062fe8a1c81975d9cd702263e89f',
   'podcast/reference/BRIEF_FORMAT.md': '95cdd25db6ca969354615a7dd146cdef0ad08a34413fa9cf2d4b6a12ff26da61',
   'podcast/reference/GEMINI_TTS.md': '54c7a0737c95bea3c7e18a9d67ac44b8b9ab45ac3ffe17a874bcf2b69e22c1b8',
-  'podcast/scripts/gemini-tts-podcast.py': '81d33781c123331044942ba68ac638ce0874667bfcfebe6e9cc5cc8b2b799709',
+  'podcast/scripts/gemini-tts-podcast.py': '381d98ceee518927f2ae68b371690337c875774c1d7a9da0164f8b5c70cfa6b1',
   'project-register/OBSIDIAN_REGISTRATION.md': 'c2145c0bdde58f60ca6293505a0b413a4c478b86db7e174d925db54d3b5b6fb0',
   'project-register/scripts/make-icon.py': 'e68ffd84eb7629a6e411f96fbd30a10732d438c5728b4d324ce44dd2e33811b9',
   'project-register/scripts/peacock.mjs': '464c68fa958020d5e548e06502e901cca527eb70e9e2a20906da2786c302645e',
@@ -144,22 +144,22 @@ test('compiler projects pack exposure, support closure, commands, and sibling pr
   for (const [name, [pack, exposure]] of Object.entries(skills)) {
     for (const harness of ['pi', 'claude'] as const) {
       const base = harness === 'pi'
-        ? `dist/packs/${pack}/pi/skills/mp-${name}`
-        : `dist/packs/${pack}/claude/.claude/skills/mp-${name}`;
+        ? `dist/packs/${pack}/pi/skills/mpx-${name}`
+        : `dist/packs/${pack}/claude/.claude/skills/mpx-${name}`;
       const projected = byPath.get(`${base}/SKILL.md`);
       assert.ok(projected, `${harness}:${name}`);
       const data = frontmatter(projected.toString('utf8'));
-      assert.equal(data.name, `mp-${name}`);
+      assert.equal(data.name, `mpx-${name}`);
       assert.equal(data['disable-model-invocation'], exposure === 'explicit-only' ? true : undefined);
-      if (exposure === 'name-only') assert.equal(data.description, `Loads the mp-${name} skill when explicitly referenced.`);
+      if (exposure === 'name-only') assert.equal(data.description, `Loads the mpx-${name} skill when explicitly referenced.`);
       for (const relative of await filesBelow(path.join(contentRoot, name))) {
         if (relative !== 'SKILL.md') assert.ok(byPath.has(`${base}/${relative}`), `${base}/${relative}`);
       }
     }
   }
-  assert.match(byPath.get('dist/packs/personal/pi/skills/mp-project-register/SKILL.md')!.toString(), /\.\.\/mp-raycast-config\/SKILL\.md/);
-  assert.match(byPath.get('dist/packs/personal/claude/.claude/skills/mp-podcast/SKILL.md')!.toString(), /\/mp-notebooklm/);
-  assert.match(byPath.get('dist/packs/development/pi/skills/mp-board-setup/SKILL.md')!.toString(), /\/skill:mp-board-to-issues/);
+  assert.match(byPath.get('dist/packs/personal/pi/skills/mpx-project-register/SKILL.md')!.toString(), /\.\.\/mpx-raycast-config\/SKILL\.md/);
+  assert.match(byPath.get('dist/packs/personal/claude/.claude/skills/mpx-podcast/SKILL.md')!.toString(), /\/mpx-notebooklm/);
+  assert.match(byPath.get('dist/packs/development/pi/skills/mpx-board-setup/SKILL.md')!.toString(), /\/skill:mpx-board-to-issues/);
 });
 
 test('native-first adaptations remove retired services while preserving approved project test-login reading', async () => {

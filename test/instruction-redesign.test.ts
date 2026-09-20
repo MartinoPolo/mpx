@@ -70,9 +70,9 @@ test('compiled execute and ship contracts preserve objective and attempt boundar
   const projections = await projectContent(root);
   for (const harness of ['pi', 'claude']) {
     const skillRoot = harness === 'pi' ? 'pi/skills' : 'claude/.claude/skills';
-    const execute = projectedText(projections, `dist/packs/development/${skillRoot}/mp-execute/SKILL.md`);
-    const pr = projectedText(projections, `dist/packs/development/${skillRoot}/mp-pr/SKILL.md`);
-    const ship = projectedText(projections, `dist/packs/development/${skillRoot}/mp-ship/SKILL.md`);
+    const execute = projectedText(projections, `dist/packs/development/${skillRoot}/mpx-execute/SKILL.md`);
+    const pr = projectedText(projections, `dist/packs/development/${skillRoot}/mpx-pr/SKILL.md`);
+    const ship = projectedText(projections, `dist/packs/development/${skillRoot}/mpx-ship/SKILL.md`);
     assert.ok(execute.includes(executionObjective));
     assert.match(execute, /Three shipping attempts total: initial attempt plus two repair\/retry attempts\./);
     assert.match(execute, /Do not\s+reset this budget between stages or via goal continuation\./);
@@ -118,7 +118,7 @@ test('retired diagnosis agents remain archived without active workflow dependenc
   }
   for (const harness of ['pi', 'claude']) {
     const skillRoot = harness === 'pi' ? 'pi/skills' : 'claude/.claude/skills';
-    const skill = (name: string) => projectedText(projections, `dist/packs/development/${skillRoot}/mp-${name}/SKILL.md`);
+    const skill = (name: string) => projectedText(projections, `dist/packs/development/${skillRoot}/mpx-${name}/SKILL.md`);
     assert.ok(skill('bug-report').includes('Use a general-purpose agent for a bounded read-only investigation of each bug. For multiple bugs, launch those agents in parallel and keep their evidence separate. Do not edit source, publish, or change provider state during investigation.'));
     for (const name of ['check-fix', 'batch-execute']) {
       assert.ok(skill(name).includes('Main evaluates checker and reviewer results, distinguishes root causes from symptoms, and resolves contradictory advice before authorizing repairs. Preserve uncertainty and missing evidence rather than guessing.'), name);
@@ -139,7 +139,7 @@ test('workflow instructions preserve endpoint, test-mode, branch, and shipping b
   const projections = await projectContent(root);
   for (const harness of ['pi', 'claude']) {
     const skillRoot = harness === 'pi' ? 'pi/skills' : 'claude/.claude/skills';
-    const skill = (name: string) => projectedText(projections, `dist/packs/development/${skillRoot}/mp-${name}/SKILL.md`);
+    const skill = (name: string) => projectedText(projections, `dist/packs/development/${skillRoot}/mpx-${name}/SKILL.md`);
     const execute = skill('execute');
     const batch = skill('batch-execute');
     const pr = skill('pr');
@@ -173,7 +173,7 @@ test('PR and ship skip optional Issue discovery when no tracker is configured', 
   for (const harness of ['pi', 'claude']) {
     const skillRoot = harness === 'pi' ? 'pi/skills' : 'claude/.claude/skills';
     for (const name of ['pr', 'ship']) {
-      const workflow = projectedText(projections, `dist/packs/development/${skillRoot}/mp-${name}/SKILL.md`);
+      const workflow = projectedText(projections, `dist/packs/development/${skillRoot}/mpx-${name}/SKILL.md`);
       assert.match(workflow, /Publication requires.*`repository\.provider`/is, `${harness}:${name}: repository provider`);
       assert.match(workflow, /Resolve `issues\.provider` only.*explicit Issue reference.*optional\s+discovery.*Issue tracker is configured/is, `${harness}:${name}: conditional Issue provider`);
       assert.match(workflow, /no explicit Issue reference and no configured Issue tracker.*continue without an Issue.*do not dispatch `mpx-issue-finder`/is, `${harness}:${name}: absent optional tracker`);
@@ -204,7 +204,7 @@ test('review autofix dispatches checker before read-only reviewers and deferred 
   const projections = await projectContent(root);
   for (const harness of ['pi', 'claude']) {
     const skillRoot = harness === 'pi' ? 'pi/skills' : 'claude/.claude/skills';
-    const review = projectedText(projections, `dist/packs/development/${skillRoot}/mp-review/SKILL.md`);
+    const review = projectedText(projections, `dist/packs/development/${skillRoot}/mpx-review/SKILL.md`);
     assert.match(review, /project `fast_checks` \/ `full_checks`.*repository scripts/is);
     assert.match(review, /dispatch `mpx-checker`.*formatting and early checks.*reviewers and deferred checks/is);
     assert.match(review, /reviewers do not write source/i);
@@ -257,7 +257,7 @@ test('bundled check detector runs from its compiled skill link in both standalon
     };
     for (const harness of ['pi', 'claude']) {
       const skillRoot = harness === 'pi' ? 'pi/skills' : 'claude/.claude/skills';
-      const prefix = `dist/packs/development/${skillRoot}/mp-execute/`;
+      const prefix = `dist/packs/development/${skillRoot}/mpx-execute/`;
       const bundle = path.join(temporary, harness);
       const bundledFiles = projections.filter(item => item.path.startsWith(prefix));
       for (const file of bundledFiles) {

@@ -75,7 +75,7 @@ test('inactive skills retain their sources without any build projections', async
   ] as const) {
     const source = await readFile(path.join(skillsRoot, category, name, 'SKILL.md'), 'utf8');
     assert.equal(frontmatter(source).name, name);
-    assert.ok(!projections.some(item => item.path.includes(`/skills/mp-${name}/`)), name);
+    assert.ok(!projections.some(item => item.path.includes(`/skills/mpx-${name}/`)), name);
   }
 });
 
@@ -133,8 +133,8 @@ test('execute projects autonomous server and delivery defaults with safety gates
   const projections = await projectContent(root);
   for (const harness of ['pi', 'claude']) {
     const skillDirectory = harness === 'pi'
-      ? 'dist/packs/development/pi/skills/mp-execute'
-      : 'dist/packs/development/claude/.claude/skills/mp-execute';
+      ? 'dist/packs/development/pi/skills/mpx-execute'
+      : 'dist/packs/development/claude/.claude/skills/mpx-execute';
     const textAt = (relative: string): string => {
       const projection = projections.find(item => item.path === relative);
       assert.ok(projection, `missing projection: ${relative}`);
@@ -176,10 +176,14 @@ test('repository and Issue provider roles remain independent', async () => {
 
 test('compiler closure resolves skill prefixes without a placeholder fallback', async () => {
   const projected = new Map((await projectContent(root)).map(item => [item.path, item.content.toString('utf8')]));
-  assert.match(projected.get('dist/packs/development/pi/skills/mp-mockup/SKILL.md')!, /\/skill:mp-design-refine/);
-  assert.match(projected.get('dist/packs/development/claude/.claude/skills/mp-mockup/SKILL.md')!, /\/mp-design-refine/);
-  assert.match(projected.get('dist/packs/development/pi/skills/mp-design-init/SKILL.md')!, /mp-design-brief/);
-  assert.ok([...projected.keys()].some(item => item.endsWith('/skills/mp-execute/references/instructions/shared/detect-check-scripts.mjs')));
-  assert.ok([...projected.keys()].some(item => item.endsWith('/skills/mp-board-to-issues/ISSUE_TEMPLATE.md')));
-  assert.ok(![...projected.keys()].some(item => item.includes('/skills/mp-grill-voice/')));
+  for (const [projectionPath, content] of projected) {
+    assert.ok(!projectionPath.includes('/skills/mp-'), projectionPath);
+    assert.doesNotMatch(content, /\/skill:mp-(?!x)|\/mp-(?!x)/, projectionPath);
+  }
+  assert.match(projected.get('dist/packs/development/pi/skills/mpx-mockup/SKILL.md')!, /\/skill:mpx-design-refine/);
+  assert.match(projected.get('dist/packs/development/claude/.claude/skills/mpx-mockup/SKILL.md')!, /\/mpx-design-refine/);
+  assert.match(projected.get('dist/packs/development/pi/skills/mpx-design-init/SKILL.md')!, /mpx-design-brief/);
+  assert.ok([...projected.keys()].some(item => item.endsWith('/skills/mpx-execute/references/instructions/shared/detect-check-scripts.mjs')));
+  assert.ok([...projected.keys()].some(item => item.endsWith('/skills/mpx-board-to-issues/ISSUE_TEMPLATE.md')));
+  assert.ok(![...projected.keys()].some(item => item.includes('/skills/mpx-grill-voice/')));
 });

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render a two-host dialogue script to an MP3 with Gemini multi-speaker TTS.
 
-Fallback backend for the mp-podcast skill, used when the NotebookLM audio quota is
+Fallback backend for the mpx-podcast skill, used when the NotebookLM audio quota is
 exhausted. Unlike NotebookLM, this backend writes no dialogue of its own: the input file
 must already contain every spoken line.
 

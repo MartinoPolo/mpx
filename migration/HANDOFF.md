@@ -1,94 +1,69 @@
-# Final MPX migration handoff
+# Final MPX adoption
 
-This is the current-state record and remaining migration checklist. Use [account recovery](ACCOUNT_ROLLOUT.md)
-for applied transactions and backup locations, [Orca integration](ORCA_INTEGRATION.md) for installed
-ownership boundaries, and [DECISIONS.md](../DECISIONS.md) for durable product choices.
+## Accepted scope
 
-## Current state
+- Publish this implementation into `MartinoPolo/mpx`, preserving both repository histories. Keep
+  `main` as the destination branch; do not force-push or publish private recovery artifacts.
+- Use `mpx-` for MPX-owned skills and agents. Pi invokes `/skill:mpx-<name>`; Claude invokes
+  `/mpx-<name>`. Preserve project-owned resources and native discovery precedence.
+- Make `$MPX_PROJECTS/mpx` the canonical checkout. Preserve the old source checkout intact before
+  occupying its path. Use a clean user-created checkout and a protected routing switch rather than
+  moving a running checkout and its dependencies.
+- Retire `mpx-pi` and `mpx-claude-code` after preservation and dependency checks. `mpx-ports` and
+  `mpx-worktrees` are outside this retirement scope.
+- Personal Claude has no active subscription. Configuration, executable, hook, and launch checks
+  are sufficient for adoption; authenticated inference is an accepted exception, not a blocker.
+  Recheck authenticated fresh/resume behavior if the subscription returns.
 
-- `pi`, `piw`, and `ccw` route to `$MPX_PROJECTS/mpx2` and passed real-project native fresh/resume
-  acceptance. Personal Claude is configured; live acceptance remains deferred without a subscription.
-- Personal Pi resolved the canonical MPX skill after the obsolete Prejemesi project override was
-  compared and removed. Work Pi also passed linked-worktree coverage. Work Claude preserved Git Bash
-  hook execution, observed Manual default, and reported no owned hook failures.
-- Installed-MPX `xpi`, `xpiw`, and `xccw` shell routes were removed. Bare `mpx`, personal `cc`, and
-  suffixed `*-mpx` functions still reach `$MPX_APPS/mpx`; these are active residues, not recovery-only.
-- `lpi`, `lpiw`, and `lccw` remain temporary direct recovery routes. Pi recovery still depends on
-  `mpx-pi` and its external `pi-tool-display` worktree. Native account data remains shared in place.
-- Orca installs no model instructions or skills. Its owned Pi extensions are mirrored across the
-  personal/work profiles; work Pi fresh/resume passed afterward without extension errors.
-- The existing dirty checkout was preserved in grouped local commits before removing superseded
-  migration scripts and records. No remote is configured. External legacy repositories, shell
-  profiles, installed registrations, protected backups, and ignored local evidence were not changed.
+## Installed state
 
-## Maintained tooling
+`mpx`, `pi`, `piw`, `cc`, and `ccw` use the unified implementation in `$MPX_PROJECTS/mpx2` until the
+location cutover. Inspected native instruction/agent links, hooks, and status lines use that checkout.
+Legacy installed MPX and direct `l*` recovery routes have been removed. The remaining `bin/xpi` is
+this implementation's native-only launcher, not a legacy installation. Scoped work-profile runtime
+and Orca synchronization converged after protected backups. Fresh personal/work Pi catalog checks
+resolved the renamed physical skill sources without extension errors; Claude hook checks passed
+without provider requests.
 
-`migration/` retains account rollout, protected single-file changes, their standalone recovery
-implementations, and native acceptance runners. `pilot-backup.mjs` remains a shared protection helper
-used by the current transactions; its name does not mean the retired pilot installer is required.
-`upstream-probe.mjs` verifies the pinned native dependency contract.
+Protected copies of legacy installations and Git state exist outside the checkout. Current backup
+pointers and bounded acceptance evidence are in ignored `.local/`; see [account recovery](ACCOUNT_ROLLOUT.md).
+Do not infer current installation state from the historical account-rollout transactions.
 
-Historical transfer generators, one-off probes, pilot installation scripts, and superseded status
-reports are archived in Git history, not maintained runtime APIs. Tests specific only to those retired
-implementations were removed with them. Product behavior, current transaction safety, and native
-acceptance checks remain tested. Protected external recovery copies remain untouched; the older
-personal-pilot rollback has a concurrency limitation documented in [account recovery](ACCOUNT_ROLLOUT.md).
+## Final location gate
 
-## Remaining work
+1. Confirm publication through the configured Git remote and native GitHub PR state. Preserve current
+   legacy branches, stashes, reflogs, unreachable objects, and any uncommitted files before archival.
+2. Stop sessions using the old `$MPX_PROJECTS/mpx`, preserve that directory in the source archive, and
+   have the user create/select a clean checkout of published `main` at that path through Orca. Agents
+   must not create or switch worktrees. Keep the working `mpx2` installation intact for rollback.
+3. From the selected canonical checkout, install pinned dependencies and rebuild. Prepare and review
+   protected changes to Bash/PowerShell launchers, persistent PATH, configured Pi executable, native
+   resource links, runtime forwarders, Claude hooks/status lines, and owned terminal/project paths.
+   Ordinary sync cannot rebind links or forwarding modules owned by another checkout; do not force it.
+4. Apply only proven-owned replacements, with drift-checked backups and recovery. Keep
+   `$APPDATA/mpx2/config.json` and internal registration names stable. Preserve unrelated packages,
+   project resources, and native account data.
+5. Verify fresh-shell routing, all account/harness launch previews, physical skill sources, and scoped
+   synchronization convergence. Reopen Orca terminals from `mpx`. Keep `mpx2` intact until its sessions
+   stop and close/reopen plus coordinated reboot/resurrection acceptance passes for the replacement.
 
-### Complete live subagent acceptance
+Native transcripts are not rewritten to disguise a changed checkout path. Old `mpx2` sessions and
+Orca resurrection entries may retain their original working directory; verify an explicit native
+resume at the new location or start a fresh session rather than silently substituting paths.
 
-The [quiet-subagent runtime](../extensions/README.md#quiet-subagents) is maintained through Pi and
-subagent dependency patches with installed-package regression tests. Live provider and desktop
-acceptance remain unverified: start a fresh Pi process to check waits, steering, resume, cancellation,
-and Windows attention. No Orca application patch was deployed; aggregate-aware Orca completion
-remains a separate live-evidence decision.
+## Verification boundaries
 
-### Preserve external history and reconcile consumers
+- Historical native fresh/resume acceptance exists for personal Pi, work Pi, and work Claude. Those
+  probes do not establish the relocated installation or unrestricted tool/provider workflows.
+- Run typecheck, build, tests, and diff checks against the final source. Verify discovery uses physical
+  `mpx-` skill sources and preserves selected packs and project precedence.
+- Complete fresh-process subagent waits, steering, resume, cancellation, and desktop attention checks.
+  Exercise authenticated MCP/web/browser workflows through ordinary use.
+- Close/reopen and coordinated reboot/resurrection acceptance remains a physical check. Preserve
+  account, project, session, model, and recoverable effort; report unavailable state explicitly.
+- Orca remains the only attention writer. Its optional aggregate patches are not required for adoption
+  without a demonstrated live defect; see [Orca integration](ORCA_INTEGRATION.md).
 
-1. Inventory branch, HEAD, remotes, status, stashes, reflogs, worktrees, and unreachable objects for
-   `$MPX_PROJECTS/mpx`, `$MPX_PROJECTS/mpx-pi`, and `$MPX_PROJECTS/mpx-claude-code` before retirement.
-   Preserve dirty/untracked source separately from Git bundles; do not reset or clean those checkouts.
-2. Classify shell functions, PowerShell equivalents, native registrations, links, patches, Orca/project
-   setup commands, and project resources as MPX, native/third-party, project-owned, recovery-only, or
-   removable. Disconnect active consumers before archiving their sources.
-3. Keep credentials, settings, histories, and transcripts in their native account roots. Do not inspect
-   or copy those roots broadly. Preserve unrelated packages and project-authored resources; a name
-   collision alone is not permission to remove a project skill.
-
-### Finish command cutover
-
-Use a reviewed protected shell/config transaction to route bare `mpx` to the unified implementation,
-remove obsolete suffixed functions, and update PowerShell equivalents. Decide whether configuration-only
-personal-Claude acceptance is sufficient before moving `cc`. Keep direct `l*` recovery routes through
-restart acceptance. Do not alter Orca hooks merely as part of launcher cleanup.
-
-### Validate the active installation
-
-- Run `pnpm run typecheck`, `pnpm build`, `pnpm test`, and `git diff --check` after repository changes.
-- Verify fresh Git Bash and PowerShell resolution, active accounts' real-project fresh/resume routes,
-  selected physical skill sources, native resources, safeguards, and scoped synchronization convergence.
-- Exercise representative authenticated child-agent, MCP, web, browser, and normal workflows during
-  ordinary use. Marker probes disabled tools/MCP; Claude probes used an explicit low effort override,
-  so they do not prove those workflows or saved-effort recovery.
-- Check interactive keys, scrolling, questions, footer layout/links, compaction presentation, and actual
-  authenticated quota retrieval. Fixture tests do not prove terminal or provider behavior.
-- Verify close/reopen and one coordinated reboot/resurrection cycle, including account, project,
-  native session, model, and recoverable effort. Report unknown state rather than substituting silently.
-- Observe Orca's installed status/attention behavior. Normal cancellation notifications are acceptable;
-  deploy no optional compatibility patch without a demonstrated live defect and a reviewed Orca change.
-
-### Publish and retire separately
-
-1. Confirm the intended `MartinoPolo/mpx` remote URL and default branch before adding a remote or pushing.
-   Publish to a new migration branch without force, scan staged additions for secrets, and review any
-   unrelated-history integration while preserving the old default-branch history.
-2. After restart acceptance closes the rollback window, remove `l*` routes, `src/legacy.ts` and the
-   `legacy-launch` route, stale legacy profile registrations, and the old installed MPX.
-3. Archive legacy repositories intact with preservation records. Branch promotion, folder renaming,
-   archival, and deletion require separate explicit approval; none follows automatically from sync.
-
-## Next action
-
-Inventory external legacy consumers and preservation state. This checkout is consolidated; do not
-combine that inventory with remote publication, shell cutover, or recovery-source deletion.
+Mid-prompt skill autocomplete is a separate follow-up after naming and location cutover. Port the
+cursor-aware behavior without restoring the retired manifest/runtime infrastructure; distinguish
+completion from submitted inline skill expansion.

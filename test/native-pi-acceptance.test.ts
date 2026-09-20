@@ -163,7 +163,7 @@ test('pinned native extension-load stderr signature is classified without exposi
   await assert.rejects(transport.next(Date.now() + 1000), error => error instanceof Error && /extension-load failure/.test(error.message) && !/private diagnostic/.test(error.message));
 });
 
-test('native sourceInfo paths reject missing, duplicate, shadowed and out-of-pack skills while preserving extension commands', async () => {
+test('native sourceInfo paths accept mpx skills and reject missing, duplicate, shadowed, or out-of-pack skills', async () => {
   const { mkdtemp, writeFile, realpath, rm } = await import('node:fs/promises');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
@@ -173,15 +173,15 @@ test('native sourceInfo paths reject missing, duplicate, shadowed and out-of-pac
     const wrong = join(directory, 'OTHER.md');
     await writeFile(file, 'fixture'); await writeFile(wrong, 'unselected fixture');
     const expectedPath = await realpath(file);
-    const expected = new Map([['alpha', expectedPath]]);
+    const expected = new Map([['mpx-alpha', expectedPath]]);
     const skill = (name: string, sourcePath = expectedPath) => ({ name: `skill:${name}`, source: 'skill', sourceInfo: { path: sourcePath } });
-    assert.deepEqual(await validateCommands({ commands: [skill('alpha'), { name: 'skill:mcp-scripting', source: 'extension' }] }, expected), [{ name: 'alpha', path: expectedPath }]);
-    await assert.rejects(validateCommands({ commands: [skill('alpha'), { name: 'skill:mp-unselected', source: 'extension' }] }, expected), /Unexpected MPX2 skill/);
-    await assert.rejects(validateCommands({ commands: [{ ...skill('alpha'), source: 'extension' }] }, expected), /wrong source/);
-    await assert.rejects(validateCommands({ commands: [skill('alpha'), skill('alpha')] }, expected), /resolved 2 times/);
-    await assert.rejects(validateCommands({ commands: [skill('alpha', wrong)] }, expected), /wrong path/);
-    await assert.rejects(validateCommands({ commands: [skill('alpha'), skill('beta', wrong)] }, expected, [directory]), /Unexpected MPX2 skill/);
+    assert.deepEqual(await validateCommands({ commands: [skill('mpx-alpha'), { name: 'skill:mp-project', source: 'extension' }, { name: 'skill:mcp-scripting', source: 'extension' }] }, expected), [{ name: 'mpx-alpha', path: expectedPath }]);
+    await assert.rejects(validateCommands({ commands: [skill('mpx-alpha'), { name: 'skill:mpx-unselected', source: 'extension' }] }, expected), /Unexpected MPX2 skill/);
+    await assert.rejects(validateCommands({ commands: [{ ...skill('mpx-alpha'), source: 'extension' }] }, expected), /wrong source/);
+    await assert.rejects(validateCommands({ commands: [skill('mpx-alpha'), skill('mpx-alpha')] }, expected), /resolved 2 times/);
+    await assert.rejects(validateCommands({ commands: [skill('mpx-alpha', wrong)] }, expected), /wrong path/);
+    await assert.rejects(validateCommands({ commands: [skill('mpx-alpha'), skill('mp-stale', wrong)] }, expected, [directory]), /Unexpected MPX2 skill/);
     await rm(file);
-    await assert.rejects(validateCommands({ commands: [skill('alpha')] }, expected), /source is unavailable/);
+    await assert.rejects(validateCommands({ commands: [skill('mpx-alpha')] }, expected), /source is unavailable/);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });

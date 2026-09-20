@@ -44,8 +44,8 @@ try {
   runGit(['commit', '--quiet', '-m', 'probe fixture'], main);
   runGit(['worktree', 'add', '--quiet', '-b', 'probe-linked', linked], main);
 
-  await put(join(selectedPath('alpha'), 'mp-alpha', 'SKILL.md'), skill('mp-alpha', 'ALPHA_NAMED_BODY'));
-  await put(join(selectedPath('beta'), 'mp-beta', 'SKILL.md'), skill('mp-beta', 'BETA_NAMED_BODY'));
+  await put(join(selectedPath('alpha'), 'mpx-alpha', 'SKILL.md'), skill('mpx-alpha', 'ALPHA_NAMED_BODY'));
+  await put(join(selectedPath('beta'), 'mpx-beta', 'SKILL.md'), skill('mpx-beta', 'BETA_NAMED_BODY'));
   await put(join(account, 'skills', 'account-native', 'SKILL.md'), skill('account-native', 'ACCOUNT_BODY'));
   await put(join(home, '.agents', 'skills', 'shared-native', 'SKILL.md'), skill('shared-native', 'SHARED_BODY'));
   const unrelated = join(root, 'unrelated-package');
@@ -62,12 +62,12 @@ import { registerAgents } from ${JSON.stringify(typesSource)};
 const base = { description: 'Probe', builtinToolNames: ['read'], extensions: false, systemPrompt: '', promptMode: 'replace' };
 registerAgents(new Map([
   ['probe-discovery', { ...base, name: 'probe-discovery', skills: true }],
-  ['probe-alpha', { ...base, name: 'probe-alpha', skills: ['mp-alpha'] }],
-  ['probe-beta', { ...base, name: 'probe-beta', skills: ['mp-beta'] }],
+  ['probe-alpha', { ...base, name: 'probe-alpha', skills: ['mpx-alpha'] }],
+  ['probe-beta', { ...base, name: 'probe-beta', skills: ['mpx-beta'] }],
 ]));
 const inspect = (systemPrompt) => ({
-  catalogAlpha: systemPrompt.includes('<name>mp-alpha</name>'),
-  catalogBeta: systemPrompt.includes('<name>mp-beta</name>'),
+  catalogAlpha: systemPrompt.includes('<name>mpx-alpha</name>'),
+  catalogBeta: systemPrompt.includes('<name>mpx-beta</name>'),
   linkedProject: systemPrompt.includes('<name>linked-project</name>'),
   piProject: systemPrompt.includes('<name>pi-project</name>'),
   accountNative: systemPrompt.includes('<name>account-native</name>'),
