@@ -113,8 +113,12 @@ test('footer refreshes coalesce, retain valid settings on failure, and fence dis
   assert.deepEqual(component.render(100), []);
 });
 
-test('runtime defaults to expanded footer with collapsed history and mouse controls toggle only on glyph cells', () => {
+test('runtime uses structured glyph targets for independent history and model controls and preserves expansion', () => {
   let renders = 0;
+  let agents = [
+    { id: 'a', type: 'reviewer', status: 'done', model: 'gpt-5.6-luna', effort: 'high', peakInputTokens: 1000, cost: 0 },
+    { id: 'b', type: 'planner', status: 'done', model: 'gpt-6-terra', effort: 'low', peakInputTokens: 500, cost: 1 },
+  ];
   const context = {
     cwd: process.cwd(), model: undefined, thinkingLevel: 'high',
     sessionManager: { getEntries: () => [], getBranch: () => [], getSessionFile: () => undefined, getSessionId: () => 'mouse-session', getLeafId: () => null },
@@ -124,19 +128,57 @@ test('runtime defaults to expanded footer with collapsed history and mouse contr
     { getSessionName: () => undefined } as unknown as ExtensionAPI, context, { requestRender: () => { renders++; } },
     { fg: (_color, text) => text, bold: text => text },
     { getGitBranch: () => 'main', getExtensionStatuses: () => new Map(), getAvailableProviderCount: () => 1, onBranchChange: () => () => {} },
-    {}, () => [{ id: 'a', type: 'reviewer', status: 'done', model: 'gpt-5.6-luna', effort: 'high', tokens: 1000, cost: 0 }],
+    {}, () => agents,
     async cwd => fallbackFooterRepository(cwd), async () => undefined, async () => undefined,
   );
-  const click = (x: number, y: number): TuiMouseEvent => ({ type: 'click', button: 'left', x, y, screenX: x, screenY: y, width: 120, height: 20, shift: false, alt: false, ctrl: false });
-  const summary = component.render(120).map(stripTerminalSequences);
-  const historyRow = summary.indexOf('▸ History (1)');
+  const click = (x: number, y: number): TuiMouseEvent => ({ type: 'click', button: 'left', x, y, screenX: x + 20, screenY: y + 10, width: 120, height: 20, shift: false, alt: false, ctrl: false });
+  let text = component.render(120).map(stripTerminalSequences);
+  let historyRow = text.indexOf('▾ History (2)');
   assert.ok(historyRow > 0);
+  assert.equal(text.filter(line => /^  ▸ /.test(line)).length, 2, 'details are closed by default');
   assert.equal(component.handleMouse?.(click(1, historyRow)), undefined);
   component.handleMouse?.(click(0, historyRow));
-  assert.ok(component.render(120).map(stripTerminalSequences).includes('▾ History (1)'));
-  assert.equal(component.handleMouse?.(click(1, 0)), undefined);
-  component.handleMouse?.(click(0, 0));
+  text = component.render(120).map(stripTerminalSequences);
+  assert.ok(text.length > 1, 'history collapse does not collapse the operational footer');
+  assert.equal(text.filter(line => line.includes('History')).length, 1);
+  assert.match(text.at(-1)!, /^▸ History \(2\).*(Luna ×1).*(Terra ×1)/);
+
+  historyRow = text.length - 1;
+  component.handleMouse?.(click(0, historyRow));
+  text = component.render(120).map(stripTerminalSequences);
+  const lunaRow = text.findIndex(line => /^  ▸ Luna/.test(line));
+  assert.ok(lunaRow > historyRow);
+  assert.equal(component.handleMouse?.(click(0, lunaRow)), undefined, 'row text outside the indented glyph is inert');
+  component.handleMouse?.(click(2, lunaRow));
+  text = component.render(120).map(stripTerminalSequences);
+  assert.ok(text.some(line => /^    ✓ reviewer/.test(line)));
+  assert.ok(text.some(line => /^  ▸ Terra/.test(line)));
+  assert.doesNotMatch(text.join('\n'), /✓ planner/);
+  component.update(context);
+  assert.ok(component.render(120).map(stripTerminalSequences).some(line => /^    ✓ reviewer/.test(line)), 'normal data updates preserve model expansion');
+
+  component.toggleView();
   assert.equal(component.render(120).length, 1);
+  component.toggleView();
+  assert.ok(component.render(120).map(stripTerminalSequences).some(line => /^    ✓ reviewer/.test(line)), 'full collapse preserves model expansion');
+
+  component.setView('details');
+  text = component.render(120).map(stripTerminalSequences);
+  assert.ok(text.some(line => /^    ✓ reviewer/.test(line)) && text.some(line => /^    ✓ planner/.test(line)));
+  component.setView('summary');
+  text = component.render(120).map(stripTerminalSequences);
+  assert.doesNotMatch(text.join('\n'), /^    [✓■×] /m, 'summary restores closed model groups');
+
+  const priorLunaRow = text.findIndex(line => /^  ▸ Luna/.test(line));
+  agents = [];
+  component.update(context);
+  assert.equal(component.handleMouse?.(click(2, priorLunaRow)), undefined, 'data refresh clears stale targets before rerender');
+  agents = [
+    { id: 'a', type: 'reviewer', status: 'done', model: 'gpt-5.6-luna', effort: 'high', peakInputTokens: 1000, cost: 0 },
+    { id: 'b', type: 'planner', status: 'done', model: 'gpt-6-terra', effort: 'low', peakInputTokens: 500, cost: 1 },
+  ];
+  component.render(2);
+  assert.equal(component.handleMouse?.(click(2, priorLunaRow)), undefined, 'a glyph clipped by narrow width has no active target');
   component.dispose();
   const before = renders;
   component.toggleView();

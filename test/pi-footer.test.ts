@@ -5,6 +5,7 @@ import { stripTerminalSequences, visibleWidth } from '@earendil-works/pi-tui';
 import {
   colorAgentModel,
   renderPiFooter,
+  renderPiFooterLayout,
   thinkingGauge,
   type FooterSnapshot,
 } from '../src/pi-footer.js';
@@ -195,20 +196,47 @@ test('marks old quota observations stale and reached reset times awaiting update
   assert.equal(expired, '5h awaiting update');
 });
 
-test('details preserves bounded individual agent status, model, effort, elapsed time, and links', () => {
+test('details expands agents beneath their model row with status, model, effort, elapsed time, and links', () => {
   const agents = Array.from({ length: 7 }, (_, index) => ({
     id: `agent-${index}`, type: `reviewer-${index}`, status: index === 6 ? 'completed' : 'failed',
     model: 'openai/gpt-5', effort: 'medium', elapsedMs: 65_000 + index * 1000,
+    peakInputTokens: index === 0 ? undefined : index * 100,
     url: index === 6 ? 'https://example.test/agent' : undefined,
   }));
   const wideLines = renderPiFooter(snapshot({ agents }), 180, theme, 'details');
   const wide = plain(wideLines);
-  assert.ok(wide.some(line => /Finished agents \(7\)/.test(line)));
-  assert.ok(wide.some(line => /… 2 more agents/.test(line)));
-  assert.ok(wide.some(line => /✓ reviewer-6 · gpt-5 · ◆◆◆◇◇◇ · 1m 11s/.test(line)));
+  const groupRow = wide.findIndex(line => /▾ gpt-5/.test(line));
+  assert.ok(groupRow > 0);
+  assert.match(wide[groupRow + 1]!, /✓ reviewer-6 · gpt-5 · ◆◆◆◇◇◇ · 1m 11s  · 600/);
   assert.ok(wideLines.some(line => line.includes('https://example.test/agent')));
+  assert.doesNotMatch(wide.join('\n'), /Finished agents/);
   assertBounded(wideLines, 180);
   assertBounded(renderPiFooter(snapshot({ agents }), 60, theme, 'details'), 60);
+});
+
+test('agent token columns stay fixed across normal, unknown, and extreme elapsed times', () => {
+  const elapsedValues = [5000, 65_000, 3_660_000, 183_600_000, undefined, Number.MAX_VALUE];
+  const agents = elapsedValues.map((elapsedMs, index) => ({
+    id: `agent-${index}`, type: `Worker-${index}`, status: 'done', model: 'gpt-5.6-luna', effort: 'high',
+    elapsedMs, peakInputTokens: 123_800,
+  }));
+  const detailRows = plain(renderPiFooter(snapshot({ agents }), 200, theme, 'details'))
+    .filter(line => /^    ✓ Worker-/.test(line));
+  const tokenColumns = detailRows.map(line => line.indexOf('123.8k'));
+  assert.equal(new Set(tokenColumns).size, 1);
+  const elapsedFields = detailRows.map(line => line.split(' · ')[3]!);
+  assert.deepEqual(elapsedFields.slice(0, 5), ['5s     ', '1m 5s  ', '1h 1m  ', '2d 3h  ', 'unknown']);
+  assert.equal(visibleWidth(elapsedFields[5]!), 7);
+  assert.match(elapsedFields[5]!, /…$/);
+
+  const columnsAcrossRenders = elapsedValues.map((elapsedMs, index) => {
+    const [row] = plain(renderPiFooter(snapshot({ agents: [{
+      id: `single-${index}`, type: 'Worker-0', status: 'done', model: 'gpt-5.6-luna', effort: 'high',
+      elapsedMs, peakInputTokens: 123_800,
+    }] }), 200, theme, 'details')).filter(line => /^    ✓ Worker-/.test(line));
+    return row!.indexOf('123.8k');
+  });
+  assert.equal(new Set(columnsAcrossRenders).size, 1);
 });
 
 test('shortens only provider prefixes and formats valid cost safely', () => {
@@ -292,13 +320,18 @@ test('quota has no added labels and every footer separator is subdued gray', () 
   }
 });
 
-test('right-column links close OSC8 before padding and separator', () => {
-  const lines = renderPiFooter(snapshot({
-    agents: [{ id: 'a', type: 'reviewer', status: 'done', model: 'openai/gpt-5', effort: 'high', elapsedMs: 1000, url: 'https://example.test/agent' }],
-  }), 180, theme, 'details');
+test('linked agent details retain the elapsed field and stay bounded', () => {
+  const value = snapshot({
+    agents: [{
+      id: 'a', type: 'reviewer', status: 'done', model: 'openai/gpt-5', effort: 'high', elapsedMs: 1000,
+      peakInputTokens: 123_800, url: 'https://example.test/agent',
+    }],
+  });
+  const lines = renderPiFooter(value, 180, theme, 'details');
   const linkedRow = lines.find(line => line.includes('https://example.test/agent'))!;
+  assert.match(stripTerminalSequences(linkedRow), /1s      · 123\.8k$/);
   assert.match(linkedRow, /\x1b]8;;\x1b\\$/);
-  assertBounded(lines, 180);
+  for (const width of [1, 40, 60, 180]) assertBounded(renderPiFooter(value, width, theme, 'details'), width);
 });
 
 test('compact is one bounded bar-free line with aliases, context, and every quota reset', () => {
@@ -315,41 +348,158 @@ test('compact is one bounded bar-free line with aliases, context, and every quot
   assertBounded(lines, 120);
 });
 
-test('history groups are bounded, priced groups sort first, and partial metrics are labelled or omitted', () => {
+test('default history shows every closed model-effort group with honest aggregate metrics', () => {
   const agents = [
-    { id: 'run', type: 'runner', status: 'running', model: 'gpt-9-running', effort: 'high', tokens: 99_000, cost: 99 },
-    { id: 'priced', type: 'worker', status: 'done', model: 'gpt-6-astra', effort: 'high', tokens: 100, cost: 0 },
-    { id: 'partial-a', type: 'worker', status: 'done', model: 'unknown', effort: 'low', tokens: 9000 },
+    { id: 'run', type: 'runner', status: 'running', model: 'gpt-9-running', effort: 'high', peakInputTokens: 99_000, cost: 99 },
+    { id: 'priced', type: 'worker', status: 'done', model: 'gpt-6-astra', effort: 'high', peakInputTokens: 100, cost: 0 },
+    { id: 'partial-a', type: 'worker', status: 'done', model: 'unknown', effort: 'low', peakInputTokens: 9000 },
     { id: 'partial-b', type: 'worker', status: 'failed', model: 'unknown', effort: 'low', cost: 5 },
-    ...Array.from({ length: 6 }, (_, index) => ({ id: `extra-${index}`, type: 'worker', status: 'done', model: `model-${index}`, effort: 'medium', tokens: index + 1 })),
+    ...Array.from({ length: 6 }, (_, index) => ({ id: `extra-${index}`, type: 'worker', status: 'done', model: `model-${index}`, effort: 'medium', peakInputTokens: index + 1 })),
   ];
   const text = plain(renderPiFooter(snapshot({ agents }), 140, theme, 'summary'));
-  const history = text.findIndex(line => line === '▸ History (9)');
+  const history = text.findIndex(line => line === '▾ History (9)');
   assert.ok(history >= 0);
+  assert.equal(text.filter(line => /^  ▸ /.test(line)).length, 8, 'all groups remain reachable');
   assert.match(text[history + 1]!, /Astra.*\$0\.000/);
-  assert.ok(text.some(line => /unknown.*9\.0k known tokens/.test(line)));
-  assert.ok(text.some(line => /… 3 more groups/.test(line)));
-  assert.doesNotMatch(text.join('\n'), /running|\$5\.000/);
+  assert.ok(text.some(line => /unknown.*9\.0k known.*\$5\.000 known cost/.test(line)));
+  assert.doesNotMatch(text.join('\n'), /running|more groups/);
 });
 
 test('history never merges distinct model versions sharing a short display alias', () => {
   const agents = [
-    { id: 'one', type: 'Explore', status: 'completed', model: 'gpt-5.6-luna', effort: 'high', tokens: 100 },
-    { id: 'two', type: 'Explore', status: 'completed', model: 'gpt-6-luna', effort: 'high', tokens: 200 },
-    { id: 'three', type: 'Explore', status: 'steered', model: 'gpt-5-mini', effort: 'high', tokens: 300 },
+    { id: 'one', type: 'Explore', status: 'completed', model: 'gpt-5.6-luna', effort: 'high', peakInputTokens: 100 },
+    { id: 'two', type: 'Explore', status: 'completed', model: 'gpt-6-luna', effort: 'high', peakInputTokens: 200 },
+    { id: 'three', type: 'Explore', status: 'steered', model: 'gpt-5-mini', effort: 'high', peakInputTokens: 300 },
   ];
   const text = plain(renderPiFooter(snapshot({ agents }), 120, theme, 'summary')).join('\n');
   assert.match(text, /History \(3\)/);
-  assert.match(text, /gpt-5\.6-luna.*×1.*100 tokens/);
-  assert.match(text, /gpt-6-luna.*×1.*200 tokens/);
-  assert.match(text, /gpt-5-mini.*×1.*300 tokens/);
+  assert.match(text, /gpt-5\.6-luna.*×1.*100/);
+  assert.match(text, /gpt-6-luna.*×1.*200/);
+  assert.match(text, /gpt-5-mini.*×1.*300/);
   assert.doesNotMatch(text, /×2/);
 });
 
-test('details show no more than five finished agents and preserve zero cost', () => {
-  const agents = Array.from({ length: 7 }, (_, index) => ({ id: `${index}`, type: `agent-${index}`, status: 'done', model: 'gpt-5.6-luna', effort: 'high', tokens: index, cost: index === 0 ? 0 : index }));
-  const text = plain(renderPiFooter(snapshot({ agents }), 120, theme, 'details'));
-  assert.equal(text.filter(line => /^[✓■×] agent-/.test(line)).length, 5);
-  assert.ok(text.some(line => /… 2 more agents/.test(line)));
-  assert.ok(text.some(line => /\$0\.000/.test(line)) === false, 'lowest-cost agent falls outside the five sorted details');
+test('expanded groups rank up to ten agents by peak input with unknown peaks last and deterministic ties', () => {
+  const agents = [
+    ...Array.from({ length: 11 }, (_, index) => ({ id: `known-${String(index).padStart(2, '0')}`, type: `agent-${index}`, status: 'done', model: 'gpt-5.6-luna', effort: 'high', peakInputTokens: index, cost: 100 - index })),
+    { id: 'unknown-a', type: 'unknown-a', status: 'done', model: 'gpt-5.6-luna', effort: 'high', cost: 999 },
+    { id: 'unknown-b', type: 'unknown-b', status: 'done', model: 'gpt-5.6-luna', effort: 'high' },
+  ];
+  const text = plain(renderPiFooter(snapshot({ agents }), 160, theme, 'details'));
+  const agentRows = text.filter(line => /^    [✓■×] /.test(line));
+  assert.equal(agentRows.length, 10);
+  assert.deepEqual(
+    agentRows.map(row => row.match(/agent-\d+/)?.[0]),
+    Array.from({ length: 10 }, (_, index) => `agent-${10 - index}`),
+  );
+  assert.ok(text.some(line => /… 3 more agents/.test(line)));
+  assert.doesNotMatch(agentRows.join('\n'), /unknown-a|unknown-b|agent-0/);
+
+  const tied = plain(renderPiFooter(snapshot({ agents: [
+    { id: 'z-last', type: 'zeta', status: 'done', model: 'gpt-5.6-luna', effort: 'high', peakInputTokens: 10 },
+    { id: 'a-first', type: 'alpha', status: 'done', model: 'gpt-5.6-luna', effort: 'high', peakInputTokens: 10 },
+  ] }), 160, theme, 'details')).filter(line => /^    [✓■×] /.test(line));
+  assert.match(tied[0]!, /alpha/);
+  assert.match(tied[1]!, /zeta/);
+});
+
+test('multi-agent summaries show summed and largest peaks with honest partial knowledge', () => {
+  const text = plain(renderPiFooter(snapshot({ agents: [
+    { id: 'high', type: 'High', status: 'done', model: 'gpt-5.6-luna', effort: 'high', peakInputTokens: 155_300 },
+    { id: 'lower', type: 'Lower', status: 'done', model: 'gpt-5.6-luna', effort: 'high', peakInputTokens: 100_000 },
+    { id: 'unknown', type: 'Unknown', status: 'done', model: 'gpt-5.6-luna', effort: 'high' },
+  ] }), 160, theme, 'details'));
+  assert.match(text.find(line => /^  ▾ Luna/.test(line))!, /×3 · 255\.3k known \(155\.3k known\)/);
+  assert.doesNotMatch(text.join('\n'), /tokens/i);
+  const details = text.filter(line => /^    [✓■×] /.test(line));
+  assert.match(details[0]!, /High.*155\.3k/);
+  assert.match(details[1]!, /Lower.*100\.0k/);
+  assert.match(details[2]!, /Unknown.*—/);
+});
+
+test('aggregate peaks format normal multi-agent and singleton groups without ambiguity', () => {
+  const multi = plain(renderPiFooter(snapshot({ agents: [
+    { id: 'a', type: 'Worker', status: 'done', model: 'gpt-5.6-luna', effort: 'high', peakInputTokens: 123_800 },
+    { id: 'b', type: 'Worker', status: 'done', model: 'gpt-5.6-luna', effort: 'high', peakInputTokens: 100_000 },
+    { id: 'c', type: 'Worker', status: 'done', model: 'gpt-5.6-luna', effort: 'high', peakInputTokens: 100_000 },
+    { id: 'd', type: 'Worker', status: 'done', model: 'gpt-5.6-luna', effort: 'high', peakInputTokens: 94_200 },
+  ] }), 160, theme));
+  assert.match(multi.find(line => /^  ▸ Luna/.test(line))!, /×4 · 418\.0k \(123\.8k\)/);
+
+  const singleton = plain(renderPiFooter(snapshot({ agents: [
+    { id: 'only', type: 'Worker', status: 'done', model: 'gpt-5.6-terra', effort: 'high', peakInputTokens: 123_800 },
+  ] }), 160, theme));
+  const singletonSummary = singleton.find(line => /^  ▸ Terra/.test(line))!;
+  assert.match(singletonSummary, /×1 · 123\.8k ·/);
+  assert.doesNotMatch(singletonSummary, /\(/);
+});
+
+test('aggregate peaks distinguish unknown, zero, and invalid values', () => {
+  const text = plain(renderPiFooter(snapshot({ agents: [
+    { id: 'unknown-a', type: 'Worker', status: 'done', model: 'unknown-model', effort: 'high' },
+    { id: 'unknown-b', type: 'Worker', status: 'done', model: 'unknown-model', effort: 'high', peakInputTokens: Number.NaN },
+    { id: 'zero', type: 'Worker', status: 'done', model: 'zero-model', effort: 'high', peakInputTokens: 0 },
+    { id: 'negative', type: 'Worker', status: 'done', model: 'zero-model', effort: 'high', peakInputTokens: -1 },
+    { id: 'infinite', type: 'Worker', status: 'done', model: 'zero-model', effort: 'high', peakInputTokens: Infinity },
+  ] }), 180, theme));
+  assert.match(text.find(line => /^  ▸ unknown-model/.test(line))!, /×2 · — \(—\)/);
+  assert.match(text.find(line => /^  ▸ zero-model/.test(line))!, /×3 · 0 known \(0 known\)/);
+});
+
+test('model summary aggregates every agent peak beyond the visible detail limit', () => {
+  const agents = Array.from({ length: 12 }, (_, index) => ({
+    id: `agent-${index}`, type: `Worker-${index}`, status: 'done',
+    model: 'gpt-5.6-terra', effort: 'high', peakInputTokens: index === 11 ? 30_000 : 18_000,
+  }));
+  for (const view of ['summary', 'details'] as const) {
+    const text = plain(renderPiFooter(snapshot({ agents }), 160, theme, view));
+    assert.match(text.find(line => /^  [▸▾] Terra/.test(line))!, /×12 · 228\.0k \(30\.0k\) ·/);
+    assert.equal(text.filter(line => /^    ✓ /.test(line)).length, view === 'details' ? 10 : 0);
+  }
+});
+
+test('clipped disclosure glyphs do not register click controls', () => {
+  const agents = [{ id: 'one', type: 'Explore', status: 'done', model: 'gpt-5.6-luna', effort: 'low', peakInputTokens: 10 }];
+  const compact = renderPiFooterLayout(snapshot({ agents }), 1, theme, {
+    view: 'compact', historyExpanded: true, expandedGroups: new Set(),
+  });
+  assert.equal(compact.controls.some(control => control.kind === 'footer'), false);
+  const expanded = renderPiFooterLayout(snapshot({ agents }), 3, theme, {
+    view: 'summary', historyExpanded: true, expandedGroups: new Set(),
+  });
+  assert.equal(expanded.controls.some(control => control.kind === 'group'), false);
+});
+
+test('collapsed history is one aggregate line combining efforts per exact model and disambiguating aliases', () => {
+  const agents = [
+    { id: 'one', type: 'Explore', status: 'done', model: 'gpt-5.6-luna', effort: 'low', cost: 1 },
+    { id: 'two', type: 'Review', status: 'failed', model: 'gpt-5.6-luna', effort: 'high' },
+    { id: 'three', type: 'Plan', status: 'done', model: 'gpt-6-luna', effort: 'high', cost: 2 },
+  ];
+  const layout = renderPiFooterLayout(snapshot({ agents }), 180, theme, {
+    view: 'summary', historyExpanded: false, expandedGroups: new Set(),
+  });
+  const text = plain(layout.lines);
+  assert.equal(text.filter(line => line.includes('History')).length, 1);
+  assert.match(text.at(-1)!, /^▸ History \(3\) · \$3\.000 known cost · gpt-5\.6-luna ×2 · gpt-6-luna ×1$/);
+});
+
+test('one model group can expand independently while the other remains a summary', () => {
+  const agents = [
+    { id: 'one', type: 'Explore', status: 'done', model: 'gpt-5.6-luna', effort: 'low', peakInputTokens: 10 },
+    { id: 'two', type: 'Review', status: 'done', model: 'gpt-6-terra', effort: 'high', peakInputTokens: 20 },
+  ];
+  const defaultLayout = renderPiFooterLayout(snapshot({ agents }), 160, theme, {
+    view: 'summary', historyExpanded: true, expandedGroups: new Set(),
+  });
+  const groupControls = defaultLayout.controls.filter(control => control.kind === 'group');
+  assert.equal(groupControls.length, 2);
+  const luna = groupControls.find(control => control.groupKey?.includes('gpt-5.6-luna'))!;
+  const expanded = plain(renderPiFooterLayout(snapshot({ agents }), 160, theme, {
+    view: 'summary', historyExpanded: true, expandedGroups: new Set([luna.groupKey!]),
+  }).lines);
+  assert.ok(expanded.some(line => /^  ▾ Luna/.test(line)));
+  assert.ok(expanded.some(line => /^    ✓ Explore/.test(line)));
+  assert.ok(expanded.some(line => /^  ▸ Terra/.test(line)));
+  assert.doesNotMatch(expanded.join('\n'), /✓ Review/);
 });

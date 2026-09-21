@@ -38,9 +38,6 @@ export function finishedAgentFromRecord(value: unknown, sessionId: string): Foot
     || source.parentAgentId !== undefined || source.workflowId !== undefined) return undefined;
   const invocation = object(source.invocation);
   const usage = object(source.lifetimeUsage);
-  const components = [usage?.input, usage?.output, usage?.cacheWrite, usage?.cacheRead ?? 0];
-  const tokens = components.every(component => amount(component) !== undefined)
-    ? components.reduce<number>((total, component) => total + Number(component), 0) : undefined;
   const cost = amount(usage?.cost);
   const startedAt = amount(source.startedAt);
   const completedAt = amount(source.completedAt);
@@ -49,7 +46,6 @@ export function finishedAgentFromRecord(value: unknown, sessionId: string): Foot
     id, type, status: LIVE_STATUSES.has(status) ? 'stopped' : status,
     model: text(invocation?.modelId) ?? text(invocation?.modelName),
     effort: text(invocation?.thinking),
-    ...(tokens !== undefined && tokens > 0 ? { tokens } : {}),
     // Upstream initializes missing pricing to zero, so only a positive estimate is trustworthy.
     ...(cost !== undefined && cost > 0 ? { cost } : {}),
     ...(startedAt !== undefined && completedAt !== undefined && completedAt >= startedAt

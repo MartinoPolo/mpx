@@ -149,7 +149,6 @@ test('finished-agent lifecycle data stays unknown when upstream omits it', () =>
     type: 'Explore',
     status: 'completed',
     elapsedMs: 1_250,
-    tokens: 120,
   });
   assert.equal('model' in lifecycle!, false);
   assert.equal('effort' in lifecycle!, false);
@@ -162,7 +161,7 @@ test('public tool_result details enrich model and effective effort without repla
       type: 'Explore',
       status: 'completed',
       elapsedMs: 1_250,
-      tokens: 120,
+      peakInputTokens: 120,
     },
     {
       agentId: 'a1',
@@ -181,7 +180,7 @@ test('public tool_result details enrich model and effective effort without repla
     model: 'luna 5.6',
     effort: 'low',
     elapsedMs: 1_300,
-    tokens: 120,
+    peakInputTokens: 120,
   });
 });
 
@@ -196,9 +195,9 @@ test('wheel override is Windows Terminal marker-only, with positive Orca precede
   assert.equal(applyThreeLineFullscreenWheel({ mode: 'default', wheelScrollLines: 1 }), false);
 });
 
-test('finished lifecycle prefers cache-inclusive usage and omits unknown pricing', () => {
+test('finished lifecycle ignores cumulative token fields and preserves lifetime price', () => {
   const agent = finishedAgentFromLifecycle({ id: 'one', tokens: { total: 30 }, usage: { totalTokens: 100, cost: { total: 0.5 } } });
-  assert.equal(agent?.tokens, 100);
+  assert.equal(agent?.peakInputTokens, undefined);
   assert.equal(agent?.cost, 0.5);
   for (const cost of [undefined, 0, NaN, -1]) {
     assert.equal(finishedAgentFromLifecycle({ id: 'one', usage: { cost: { total: cost } } })?.cost, undefined);
@@ -315,7 +314,7 @@ function extensionHarness(options: { titleResult?: () => Promise<string> } = {})
 
 const SUBAGENT_MANAGER_FIXTURE = Symbol.for('pi-subagents:manager');
 
-type RegistryFixtureRecord = { status: string; resultConsumed?: boolean; invocation?: { modelId?: string; thinking?: string; requestedModel?: string; requestedThinking?: string } };
+type RegistryFixtureRecord = { status: string; resultConsumed?: boolean; sessionFile?: string; invocation?: { modelId?: string; thinking?: string; requestedModel?: string; requestedThinking?: string } };
 
 function installNativeRegistryFixture(records: Map<string, RegistryFixtureRecord>): () => void {
   // Fixture only: this stubs the documented in-process registry; no provider or child process runs.
@@ -436,8 +435,13 @@ test('footer commands and shortcut toggle compact presentation without sending m
     assert.doesNotMatch(stripVTControlCharacters(component.render(100)[0]), /[█░]/);
     await harness.shortcuts.get('ctrl+alt+f').handler(harness.ctx);
     assert.ok(component.render(100).length > 1);
+    harness.emitBus('subagents:completed', {
+      id: 'command-agent', type: 'Explore', status: 'completed', durationMs: 1000, tokens: { total: 10 },
+    });
     await command.handler('details', harness.ctx);
-    assert.ok(component.render(100).length > 1);
+    assert.match(stripVTControlCharacters(component.render(100).join('\n')), /^    ✓ Explore/m);
+    await command.handler('summary', harness.ctx);
+    assert.doesNotMatch(stripVTControlCharacters(component.render(100).join('\n')), /^    [✓■×] /m);
     await command.handler('invalid', harness.ctx);
     assert.match(harness.notifications.at(-1)!, /Usage: \/footer/);
     assert.equal(harness.completedCalls.length, 0);
@@ -481,29 +485,153 @@ test('live display disappears on completion and resume never duplicates finished
   assert.equal(harness.widgets.has(LIVE_AGENT_WIDGET), false);
 });
 
-test('footer restores only the selected branch history and refreshes it on tree changes', async () => {
-  const harness = extensionHarness();
-  harness.entries.push({ type: 'custom', customType: 'subagents:record', data: {
-    id: 'saved', type: 'SavedExplorer', status: 'completed', parentSessionId: 'session-12345678',
+test('peak enrichment survives metadata replacement and stale reads cannot cross reruns or session switches', async () => {
+  const records = new Map<string, RegistryFixtureRecord>([['one', {
+    status: 'completed', resultConsumed: true, sessionFile: 'C:/sessions/one.jsonl',
     invocation: { modelId: 'gpt-5.6-luna', thinking: 'low' },
-    lifetimeUsage: { input: 1000, output: 100, cacheWrite: 0, cacheRead: 500, cost: 0.2 },
-  } });
-  registerPiUi(harness.pi, { environment: {} });
+  }]]);
+  const restore = installNativeRegistryFixture(records);
+  const reads: Array<{ signal: AbortSignal; resolve: (peak: number | undefined) => void }> = [];
+  const harness = extensionHarness();
+  registerPiUi(harness.pi, {
+    environment: {},
+    readPeakInputTokens: (_url, signal) => new Promise(resolve => reads.push({ signal, resolve })),
+  });
   try {
     await harness.call('session_start');
     const component = harness.footerFactory()({ requestRender() {} }, footerTheme, {
       getGitBranch: () => 'main', onBranchChange: () => () => {},
     });
     component.setView('details');
+    harness.emitBus('subagents:completed', { id: 'one', type: 'Explore', status: 'completed' });
+    await harness.call('tool_result', { toolName: 'get_subagent_result', details: {
+      agentId: 'one', status: 'completed', subagentType: 'Explore', modelName: 'fallback-model',
+    } });
+    assert.equal(reads.length, 1);
+    reads[0]!.resolve(155_300);
+    await pause();
+    assert.match(stripVTControlCharacters(component.render(180).join('\n')), /Explore.*Luna.*155\.3k/);
+
+    records.set('one', { status: 'running', resultConsumed: true, sessionFile: 'C:/sessions/one.jsonl' });
+    harness.emitBus('subagents:started', { id: 'one', type: 'Explore' });
+    assert.doesNotMatch(stripVTControlCharacters(component.render(180).join('\n')), /155\.3k/);
+    records.set('one', { status: 'completed', resultConsumed: true, sessionFile: 'C:/sessions/one.jsonl' });
+    harness.emitBus('subagents:completed', { id: 'one', type: 'Explore', status: 'completed' });
+    assert.equal(reads.length, 2, 'rerun invalidates the identical transcript scan');
+    await harness.call('session_before_switch');
+    assert.equal(reads[1]!.signal.aborted, true);
+    reads[1]!.resolve(999_999);
+    await pause();
+    assert.doesNotMatch(stripVTControlCharacters(component.render(180).join('\n')), /1000\.0k|999\.9k/);
+  } finally {
+    await harness.call('session_shutdown');
+    restore();
+  }
+});
+
+test('session tree aborts a pending peak read and fences its late result from restored branch state', async () => {
+  const harness = extensionHarness();
+  const reads: Array<{ signal: AbortSignal; resolve: (peak: number | undefined) => void }> = [];
+  let renderRequests = 0;
+  harness.entries.push({ type: 'custom', customType: 'subagents:record', data: {
+    id: 'saved', type: 'OriginalExplorer', status: 'completed', parentSessionId: 'session-12345678',
+    sessionFile: 'C:/sessions/original.jsonl',
+  } });
+  registerPiUi(harness.pi, {
+    environment: {},
+    readPeakInputTokens: (_url, signal) => new Promise(resolve => reads.push({ signal, resolve })),
+  });
+  try {
+    await harness.call('session_start');
+    const component = harness.footerFactory()({ requestRender() { renderRequests++; } }, footerTheme, {
+      getGitBranch: () => 'main', onBranchChange: () => () => {},
+    });
+    component.setView('details');
+    assert.equal(reads.length, 1);
+
+    harness.entries.splice(0, 1, { type: 'custom', customType: 'subagents:record', data: {
+      id: 'saved', type: 'ChangedExplorer', status: 'completed', parentSessionId: 'session-12345678',
+      sessionFile: 'C:/sessions/changed.jsonl',
+    } });
+    await harness.call('session_tree');
+    assert.equal(reads[0]!.signal.aborted, true);
+    assert.equal(reads.length, 2);
+    await pause();
+    const rendersAfterTree = renderRequests;
+
+    reads[0]!.resolve(999_999);
+    await pause();
+    const text = stripVTControlCharacters(component.render(180).join('\n'));
+    assert.match(text, /ChangedExplorer/);
+    assert.doesNotMatch(text, /OriginalExplorer|999\.9k|1000\.0k/);
+    assert.equal(renderRequests, rendersAfterTree, 'a stale tree read cannot request a render');
+  } finally {
+    await harness.call('session_shutdown');
+  }
+});
+
+test('session shutdown aborts a pending peak read and fences its late result from rendering', async () => {
+  const harness = extensionHarness();
+  const reads: Array<{ signal: AbortSignal; resolve: (peak: number | undefined) => void }> = [];
+  let renderRequests = 0;
+  harness.entries.push({ type: 'custom', customType: 'subagents:record', data: {
+    id: 'saved', type: 'SavedExplorer', status: 'completed', parentSessionId: 'session-12345678',
+    sessionFile: 'C:/sessions/saved.jsonl',
+  } });
+  registerPiUi(harness.pi, {
+    environment: {},
+    readPeakInputTokens: (_url, signal) => new Promise(resolve => reads.push({ signal, resolve })),
+  });
+  await harness.call('session_start');
+  const component = harness.footerFactory()({ requestRender() { renderRequests++; } }, footerTheme, {
+    getGitBranch: () => 'main', onBranchChange: () => () => {},
+  });
+  component.setView('details');
+  assert.equal(reads.length, 1);
+
+  await harness.call('session_shutdown');
+  assert.equal(reads[0]!.signal.aborted, true);
+  await pause();
+  const rendersAfterShutdown = renderRequests;
+  reads[0]!.resolve(999_999);
+  await pause();
+  assert.equal(renderRequests, rendersAfterShutdown, 'a stale shutdown read cannot request a render');
+  assert.deepEqual(component.render(180), []);
+});
+
+test('footer asynchronously restores transcript peak only for the selected branch', async () => {
+  const harness = extensionHarness();
+  const reads: string[] = [];
+  harness.entries.push({ type: 'custom', customType: 'subagents:record', data: {
+    id: 'saved', type: 'SavedExplorer', status: 'completed', parentSessionId: 'session-12345678',
+    invocation: { modelId: 'gpt-5.6-luna', thinking: 'low' }, sessionFile: 'C:/sessions/saved.jsonl',
+    lifetimeUsage: { input: 1000, output: 100, cacheWrite: 0, cacheRead: 500, cost: 0.2 },
+  } });
+  registerPiUi(harness.pi, {
+    environment: {},
+    readPeakInputTokens: async url => { reads.push(url); return 100_000; },
+  });
+  try {
+    await harness.call('session_start');
+    const component = harness.footerFactory()({ requestRender() {} }, footerTheme, {
+      getGitBranch: () => 'main', onBranchChange: () => () => {},
+    });
+    component.setView('details');
+    await pause();
     let text = stripVTControlCharacters(component.render(120).join('\n'));
-    assert.match(text, /SavedExplorer/);
-    assert.match(text, /1.6k/);
+    assert.match(text, /SavedExplorer.*100\.0k/);
     assert.match(text, /\$0.200/);
+    assert.equal(reads.length, 1);
     assert.equal(harness.widgets.has(LIVE_AGENT_WIDGET), false);
+    await harness.call('session_tree');
+    await pause();
+    text = stripVTControlCharacters(component.render(120).join('\n'));
+    assert.match(text, /SavedExplorer.*100\.0k/);
+    assert.equal(reads.length, 1, 'an identical restored record reuses its peak result');
     harness.entries.length = 0;
     await harness.call('session_tree');
     text = stripVTControlCharacters(component.render(120).join('\n'));
-    assert.doesNotMatch(text, /SavedExplorer|1.6k/);
+    assert.doesNotMatch(text, /SavedExplorer|100\.0k/);
   } finally { await harness.call('session_shutdown'); }
 });
 

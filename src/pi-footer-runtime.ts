@@ -1,9 +1,8 @@
 import type { ExtensionAPI, ExtensionContext, Theme } from '@earendil-works/pi-coding-agent';
 import type { Component, TUI, TuiMouseEvent, TuiMouseEventResult } from '@earendil-works/pi-tui';
-import { stripTerminalSequences } from '@earendil-works/pi-tui';
 import { pathToFileURL } from 'node:url';
 import { fallbackFooterRepository, footerCompactions, footerSessionCost, parseFooterQuota, repositoryFooterLocation, resolveFooterRepository, type FooterRepository } from './pi-footer-data.js';
-import { renderPiFooter, type FooterAgent, type FooterCompaction, type FooterQuotaWindow, type FooterReview, type FooterView } from './pi-footer.js';
+import { renderPiFooterLayout, type FooterAgent, type FooterCompaction, type FooterControl, type FooterQuotaWindow, type FooterReview, type FooterView } from './pi-footer.js';
 import { discoverFooterReview } from './footer-review.js';
 
 import { readFooterCompactionSettings, type FooterCompactionSettings } from './pi-footer-settings.js';
@@ -36,7 +35,10 @@ export function createPiFooterComponent(
   let context = initialContext;
   let disposed = false;
   let view: FooterView = 'summary';
-  let historyControlRow = -1;
+  let expandedView: Exclude<FooterView, 'compact'> = 'summary';
+  let historyExpanded = true;
+  let expandedGroups = new Set<string>();
+  let controls: FooterControl[] = [];
   let repository = fallbackFooterRepository(context.cwd);
   let repositoryRefreshActive = false;
   let repositoryRefreshRequested = false;
@@ -54,7 +56,10 @@ export function createPiFooterComponent(
   const sessionFile = context.sessionManager.getSessionFile();
   const sessionUrl = sessionFile ? pathToFileURL(sessionFile).href : undefined;
   const sessionId = context.sessionManager.getSessionId();
-  const render = () => { if (!disposed) tui.requestRender(); };
+  const render = () => {
+    controls = [];
+    if (!disposed) tui.requestRender();
+  };
   let quotaRefreshController: AbortController | undefined;
   let quotaRefreshAttemptedAt = -Infinity;
   let quotaRevision = 0;
@@ -192,28 +197,55 @@ export function createPiFooterComponent(
       if (observed) { quotaRevision++; quota = observed; quotaObservedAt = now; render(); }
     },
     setView(nextView) {
-      if (disposed || view === nextView) return;
-      view = nextView;
+      if (disposed) return;
+      if (nextView === 'compact') {
+        if (view !== 'compact') {
+          expandedView = view;
+          view = 'compact';
+        }
+      } else {
+        view = nextView;
+        expandedView = nextView;
+        historyExpanded = true;
+        expandedGroups = new Set<string>();
+      }
       render();
     },
     toggleView() {
       if (disposed) return;
-      view = view === 'compact' ? 'summary' : 'compact';
+      if (view === 'compact') view = expandedView;
+      else {
+        expandedView = view;
+        view = 'compact';
+      }
       render();
     },
     handleMouse(event: TuiMouseEvent): TuiMouseEventResult | undefined {
       if (disposed || event.type !== 'click' || event.button !== 'left') return undefined;
-      if (event.y === 0 && event.x === 0) {
-        view = view === 'compact' ? 'summary' : 'compact';
-        render();
-        return { handled: true, render: true };
+      const control = controls.find(candidate => candidate.row === event.y
+        && event.x >= candidate.startColumn && event.x < candidate.endColumn);
+      if (!control) return undefined;
+      if (control.kind === 'footer') {
+        if (view === 'compact') view = expandedView;
+        else {
+          expandedView = view;
+          view = 'compact';
+        }
+      } else if (control.kind === 'history') {
+        historyExpanded = !historyExpanded;
+      } else {
+        if (view === 'details') {
+          expandedGroups = new Set(controls
+            .filter(candidate => candidate.kind === 'group')
+            .map(candidate => candidate.groupKey));
+        }
+        if (expandedGroups.has(control.groupKey)) expandedGroups.delete(control.groupKey);
+        else expandedGroups.add(control.groupKey);
+        view = 'summary';
+        expandedView = 'summary';
       }
-      if (event.y === historyControlRow && event.x === 0 && view !== 'compact') {
-        view = view === 'details' ? 'summary' : 'details';
-        render();
-        return { handled: true, render: true };
-      }
-      return undefined;
+      render();
+      return { handled: true, render: true };
     },
     invalidate() {},
     render(width) {
@@ -226,7 +258,7 @@ export function createPiFooterComponent(
       const compactionTrigger = compactionSettings && contextWindow !== undefined && Number.isFinite(contextWindow)
         ? compactionSettings.enabled ? Math.max(0, contextWindow - compactionSettings.reserveTokens) : 0
         : undefined;
-      const lines = renderPiFooter({
+      const layout = renderPiFooterLayout({
         sessionName: pi.getSessionName(),
         sessionId,
         sessionUrl,
@@ -243,13 +275,14 @@ export function createPiFooterComponent(
         quota,
         quotaObservedAt,
         agents: agents(),
-      }, width, theme, view);
-      historyControlRow = lines.findIndex(line => /^(?:▸|▾) History/.test(stripTerminalSequences(line)));
-      return lines;
+      }, width, theme, { view, historyExpanded, expandedGroups });
+      controls = layout.controls;
+      return layout.lines;
     },
     dispose() {
       if (disposed) return;
       disposed = true;
+      controls = [];
       quotaRefreshController?.abort();
       quotaRefreshController = undefined;
       repositoryRefreshRequested = false;

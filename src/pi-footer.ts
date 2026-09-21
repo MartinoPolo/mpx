@@ -3,6 +3,31 @@ import { hyperlink, stripTerminalSequences, truncateToWidth, visibleWidth } from
 
 export type FooterView = 'compact' | 'summary' | 'details';
 
+export interface FooterLayoutState {
+  view: FooterView;
+  historyExpanded: boolean;
+  expandedGroups: ReadonlySet<string>;
+}
+
+type FooterControlPosition = {
+  row: number;
+  startColumn: number;
+  endColumn: number;
+};
+
+type FooterControlKind =
+  | { kind: 'footer' }
+  | { kind: 'history' }
+  | { kind: 'group'; groupKey: string };
+
+export type FooterControl = FooterControlPosition & FooterControlKind;
+type FooterControlTarget = Omit<FooterControlPosition, 'row'> & FooterControlKind;
+
+export interface FooterLayout {
+  lines: string[];
+  controls: FooterControl[];
+}
+
 export interface FooterLocation {
   project: string;
   worktree?: string;
@@ -42,7 +67,7 @@ export interface FooterAgent {
   effort?: string;
   elapsedMs?: number;
   url?: string;
-  tokens?: number;
+  peakInputTokens?: number;
   cost?: number;
 }
 
@@ -76,8 +101,8 @@ const EFFORT_COLOR: Readonly<Record<string, number>> = {
 };
 const VSCODE_ICON = '󰨞';
 const MAX_HISTORY = 5;
-const MAX_AGENTS = 5;
-const MAX_AGENT_GROUPS = 5;
+const MAX_AGENTS = 10;
+const ELAPSED_FIELD_WIDTH = 7;
 const ACCOUNT_COLOR = {
   personal: '\x1b[38;2;71;127;204m',
   work: '\x1b[38;2;194;122;53m',
@@ -290,101 +315,176 @@ function finishedAgents(agents: readonly FooterAgent[]): FooterAgent[] {
 }
 
 function compareAgents(left: FooterAgent, right: FooterAgent): number {
-  const leftPriced = finite(left.cost) && left.cost >= 0;
-  const rightPriced = finite(right.cost) && right.cost >= 0;
-  if (leftPriced !== rightPriced) return leftPriced ? -1 : 1;
-  const leftCost = leftPriced ? left.cost! : -1;
-  const rightCost = rightPriced ? right.cost! : -1;
-  if (leftPriced && rightPriced && leftCost !== rightCost) return rightCost - leftCost;
-  const leftTokens = finite(left.tokens) && left.tokens >= 0 ? left.tokens : -1;
-  const rightTokens = finite(right.tokens) && right.tokens >= 0 ? right.tokens : -1;
-  const leftElapsed = finite(left.elapsedMs) && left.elapsedMs >= 0 ? left.elapsedMs : -1;
-  const rightElapsed = finite(right.elapsedMs) && right.elapsedMs >= 0 ? right.elapsedMs : -1;
-  return rightTokens - leftTokens || rightElapsed - leftElapsed || left.id.localeCompare(right.id);
+  const leftPeak = finite(left.peakInputTokens) && left.peakInputTokens >= 0 ? left.peakInputTokens : undefined;
+  const rightPeak = finite(right.peakInputTokens) && right.peakInputTokens >= 0 ? right.peakInputTokens : undefined;
+  if (leftPeak === undefined || rightPeak === undefined) {
+    if (leftPeak !== undefined) return -1;
+    if (rightPeak !== undefined) return 1;
+  } else if (leftPeak !== rightPeak) return rightPeak - leftPeak;
+  return safeText(left.id).localeCompare(safeText(right.id));
 }
 
-function agentLines(agents: readonly FooterAgent[], theme: FooterTheme): string[] {
-  const finished = finishedAgents(agents).sort(compareAgents);
-  if (!finished.length) return [];
-  const visible = finished.slice(0, MAX_AGENTS);
-  const rows = [theme.bold(`Finished agents (${finished.length})`)];
-  if (finished.length > visible.length) rows.push(theme.fg('dim', `… ${finished.length - visible.length} more agents`));
+type AgentGroup = {
+  key: string;
+  identifier: string;
+  model: string;
+  effort: string;
+  agents: FooterAgent[];
+  summedPeakInputTokens: number;
+  largestPeakInputTokens: number;
+  peakCount: number;
+  cost: number;
+  costCount: number;
+};
+
+function agentGroups(agents: readonly FooterAgent[]): AgentGroup[] {
+  const groups = new Map<string, AgentGroup>();
+  for (const agent of finishedAgents(agents)) {
+    const identifier = modelIdentifier(agent.model);
+    const model = shortModel(agent.model);
+    const effort = safeText(agent.effort, '<unknown>').toLowerCase();
+    const key = `${identifier}\u0000${effort}`;
+    const group = groups.get(key) ?? {
+      key, identifier, model, effort, agents: [], summedPeakInputTokens: 0, largestPeakInputTokens: 0,
+      peakCount: 0, cost: 0, costCount: 0,
+    };
+    group.agents.push(agent);
+    if (finite(agent.peakInputTokens) && agent.peakInputTokens >= 0) {
+      group.summedPeakInputTokens += agent.peakInputTokens;
+      group.largestPeakInputTokens = Math.max(group.largestPeakInputTokens, agent.peakInputTokens);
+      group.peakCount++;
+    }
+    if (finite(agent.cost) && agent.cost >= 0) { group.cost += agent.cost; group.costCount++; }
+    groups.set(key, group);
+  }
+  return [...groups.values()].sort((left, right) => {
+    const leftFullyPriced = left.costCount === left.agents.length;
+    const rightFullyPriced = right.costCount === right.agents.length;
+    if (leftFullyPriced !== rightFullyPriced) return leftFullyPriced ? -1 : 1;
+    if (leftFullyPriced && rightFullyPriced && left.cost !== right.cost) return right.cost - left.cost;
+    return right.summedPeakInputTokens - left.summedPeakInputTokens || left.identifier.localeCompare(right.identifier) || left.effort.localeCompare(right.effort);
+  });
+}
+
+function aggregateMetrics(group: AgentGroup): string[] {
+  const count = group.agents.length;
+  const partialLabel = group.peakCount > 0 && group.peakCount < count ? ' known' : '';
+  const summedPeaks = group.peakCount ? `${formatTokenCount(group.summedPeakInputTokens)}${partialLabel}` : '—';
+  const largestPeak = group.peakCount ? `${formatTokenCount(group.largestPeakInputTokens)}${partialLabel}` : '—';
+  const peaks = count === 1 ? summedPeaks : `${summedPeaks} (${largestPeak})`;
+  const cost = group.costCount === count ? `$${group.cost.toFixed(3)}`
+    : group.costCount ? `$${group.cost.toFixed(3)} known cost` : 'cost unavailable';
+  return [`×${count}`, peaks, cost];
+}
+
+function agentDetailLines(group: AgentGroup, theme: FooterTheme): string[] {
+  const ordered = [...group.agents].sort(compareAgents);
+  const visible = ordered.slice(0, MAX_AGENTS);
+  const rows: string[] = [];
   for (const agent of visible) {
     const glyph = agentGlyph(safeText(agent.status));
     const color = glyph === '✓' ? 'success' : glyph === '■' ? 'warning' : 'error';
     const model = shortModel(agent.model);
     const effort = safeText(agent.effort, '<unknown>');
-    const elapsed = finite(agent.elapsedMs) && agent.elapsedMs >= 0 ? duration(agent.elapsedMs) : 'unknown';
+    const elapsed = bounded(
+      finite(agent.elapsedMs) && agent.elapsedMs >= 0 ? duration(agent.elapsedMs) : 'unknown',
+      ELAPSED_FIELD_WIDTH,
+    ).padEnd(ELAPSED_FIELD_WIDTH);
     const metrics = [
-      finite(agent.tokens) && agent.tokens >= 0 ? `${formatTokenCount(agent.tokens)} tokens` : undefined,
+      finite(agent.peakInputTokens) && agent.peakInputTokens >= 0 ? formatTokenCount(agent.peakInputTokens) : '—',
       finite(agent.cost) && agent.cost >= 0 ? `$${agent.cost.toFixed(3)}` : undefined,
     ].filter((value): value is string => value !== undefined);
     const text = [`${theme.fg(color, glyph)} ${colorAgentModel(agent.model, safeText(agent.type), theme)}`, colorAgentModel(agent.model, model, theme), thinkingGauge(effort), elapsed, ...metrics].join(footerSeparator(theme));
-    rows.push(linked(text, agent.url));
+    rows.push(`    ${linked(text, agent.url)}`);
   }
+  if (ordered.length > visible.length) rows.push(theme.fg('dim', `    … ${ordered.length - visible.length} more agents`));
   return rows;
 }
 
-function agentSummaryLines(agents: readonly FooterAgent[], expanded: boolean, theme: FooterTheme): string[] {
-  const finished = finishedAgents(agents);
-  if (!finished.length) return [];
-  const groups = new Map<string, { identifier: string; model: string; effort: string; count: number; tokens: number; tokenCount: number; cost: number; costCount: number }>();
-  for (const agent of finished) {
-    const identifier = modelIdentifier(agent.model);
-    const model = shortModel(agent.model);
-    const effort = safeText(agent.effort, '<unknown>').toLowerCase();
-    const key = `${identifier}\u0000${effort}`;
-    const group = groups.get(key) ?? { identifier, model, effort, count: 0, tokens: 0, tokenCount: 0, cost: 0, costCount: 0 };
-    group.count++;
-    if (finite(agent.tokens) && agent.tokens >= 0) { group.tokens += agent.tokens; group.tokenCount++; }
-    if (finite(agent.cost) && agent.cost >= 0) { group.cost += agent.cost; group.costCount++; }
-    groups.set(key, group);
+function compactHistoryLine(groups: readonly AgentGroup[], theme: FooterTheme): string {
+  const agentCount = groups.reduce((sum, group) => sum + group.agents.length, 0);
+  const knownCost = groups.reduce((sum, group) => sum + group.cost, 0);
+  const knownCostCount = groups.reduce((sum, group) => sum + group.costCount, 0);
+  const cost = knownCostCount === agentCount ? `$${knownCost.toFixed(3)}`
+    : knownCostCount ? `$${knownCost.toFixed(3)} known cost` : 'cost unavailable';
+  const modelCounts = new Map<string, { identifier: string; model: string; count: number }>();
+  for (const group of groups) {
+    const current = modelCounts.get(group.identifier) ?? { identifier: group.identifier, model: group.model, count: 0 };
+    current.count += group.agents.length;
+    modelCounts.set(group.identifier, current);
   }
-  const ordered = [...groups.values()].sort((left, right) => {
-    const leftPriced = left.costCount === left.count;
-    const rightPriced = right.costCount === right.count;
-    if (leftPriced !== rightPriced) return leftPriced ? -1 : 1;
-    if (leftPriced && rightPriced && left.cost !== right.cost) return right.cost - left.cost;
-    return right.tokens - left.tokens || left.model.localeCompare(right.model);
+  const models = [...modelCounts.values()].sort((left, right) => left.identifier.localeCompare(right.identifier));
+  const counts = models.map(model => {
+    const collision = models.some(other => other.identifier !== model.identifier && other.model === model.model);
+    const label = collision ? model.identifier : model.model;
+    return `${colorAgentModel(model.identifier, label, theme)} ×${model.count}`;
   });
-  const visible = ordered.slice(0, MAX_AGENT_GROUPS);
-  const rows = [`${expanded ? '▾' : '▸'} History (${finished.length})`];
-  for (const group of visible) {
-    const metrics = [`×${group.count}`];
-    if (group.tokenCount === group.count) metrics.push(`${formatTokenCount(group.tokens)} tokens`);
-    else if (group.tokenCount) metrics.push(`${formatTokenCount(group.tokens)} known tokens`);
-    if (group.costCount === group.count) metrics.push(`$${group.cost.toFixed(3)}`);
-    const label = ordered.some(other => other.model === group.model && other.identifier !== group.identifier) ? group.identifier : group.model;
-    rows.push(`  ${colorAgentModel(group.identifier, label, theme)}${footerSeparator(theme)}${thinkingGauge(group.effort)}${footerSeparator(theme)}${metrics.join(footerSeparator(theme))}`);
-  }
-  if (ordered.length > visible.length) rows.push(theme.fg('dim', `  … ${ordered.length - visible.length} more groups`));
-  return rows;
+  return [`▸ History (${agentCount})`, cost, ...counts].join(footerSeparator(theme));
 }
 
-export function renderPiFooter(snapshot: FooterSnapshot, width: number, theme: FooterTheme, view: FooterView = 'summary'): string[] {
-  if (!Number.isFinite(width) || width <= 0) return [];
+const DEFAULT_LAYOUT_STATE: FooterLayoutState = {
+  view: 'summary', historyExpanded: true, expandedGroups: new Set<string>(),
+};
+
+export function renderPiFooterLayout(
+  snapshot: FooterSnapshot,
+  width: number,
+  theme: FooterTheme,
+  state: FooterLayoutState = DEFAULT_LAYOUT_STATE,
+): FooterLayout {
+  if (!Number.isFinite(width) || width <= 0) return { lines: [], controls: [] };
   const columns = Math.max(1, Math.floor(width));
-  if (view === 'compact') {
+  const lines: string[] = [];
+  const controls: FooterControl[] = [];
+  const addLine = (line: string, control?: FooterControlTarget) => {
+    const row = lines.length;
+    const lineWidth = visibleWidth(line);
+    lines.push(bounded(line, columns));
+    const retainedColumns = lineWidth <= columns ? columns : Math.max(0, columns - visibleWidth('…'));
+    if (control && control.endColumn <= retainedColumns) controls.push({ ...control, row });
+  };
+  if (state.view === 'compact') {
     const id = safeText(snapshot.sessionId, '').slice(0, 8) || 'unknown';
-    const line = [
+    addLine([
       theme.fg('dim', '▸'),
       linked(theme.fg('dim', `#${id}`), snapshot.sessionUrl),
       colorAgentModel(snapshot.model, shortModel(snapshot.model), theme),
       thinkingGauge(safeText(snapshot.effort, 'unknown').toLowerCase()),
       contextLine(snapshot, theme, false, false),
       quotaLine(snapshot, theme, false),
-    ].join(footerSeparator(theme));
-    return [bounded(line, columns)];
+    ].join(footerSeparator(theme)), { kind: 'footer', startColumn: 0, endColumn: 1 });
+    return { lines, controls };
   }
-  const core = [
-    `${theme.fg('dim', '▾')} ${sessionLine(snapshot, Math.max(1, columns - 2), theme)}`,
-    modelLine(snapshot, columns, theme),
-    locationLine(snapshot.location, columns, theme),
-    contextLine(snapshot, theme),
-    ...compactionLines(snapshot.compactions, theme),
-    quotaLine(snapshot, theme),
-    ...agentSummaryLines(snapshot.agents, view === 'details', theme),
-    ...(view === 'details' ? agentLines(snapshot.agents, theme) : []),
-  ];
-  return core.map(line => bounded(line, columns));
+  addLine(`${theme.fg('dim', '▾')} ${sessionLine(snapshot, Math.max(1, columns - 2), theme)}`, { kind: 'footer', startColumn: 0, endColumn: 1 });
+  addLine(modelLine(snapshot, columns, theme));
+  addLine(locationLine(snapshot.location, columns, theme));
+  addLine(contextLine(snapshot, theme));
+  for (const line of compactionLines(snapshot.compactions, theme)) addLine(line);
+  addLine(quotaLine(snapshot, theme));
+
+  const groups = agentGroups(snapshot.agents);
+  if (!groups.length) return { lines, controls };
+  if (!state.historyExpanded) {
+    addLine(compactHistoryLine(groups, theme), { kind: 'history', startColumn: 0, endColumn: 1 });
+    return { lines, controls };
+  }
+  const finishedCount = groups.reduce((count, group) => count + group.agents.length, 0);
+  addLine(`▾ History (${finishedCount})`, { kind: 'history', startColumn: 0, endColumn: 1 });
+  for (const group of groups) {
+    const expanded = state.view === 'details' || state.expandedGroups.has(group.key);
+    const collidingAlias = groups.some(other => other.identifier !== group.identifier && other.model === group.model);
+    const label = collidingAlias ? group.identifier : group.model;
+    const summary = `${expanded ? '▾' : '▸'} ${colorAgentModel(group.identifier, label, theme)}${footerSeparator(theme)}${thinkingGauge(group.effort)}${footerSeparator(theme)}${aggregateMetrics(group).join(footerSeparator(theme))}`;
+    addLine(`  ${summary}`, { kind: 'group', startColumn: 2, endColumn: 3, groupKey: group.key });
+    if (expanded) for (const line of agentDetailLines(group, theme)) addLine(line);
+  }
+  return { lines, controls };
+}
+
+export function renderPiFooter(snapshot: FooterSnapshot, width: number, theme: FooterTheme, view: FooterView = 'summary'): string[] {
+  return renderPiFooterLayout(snapshot, width, theme, {
+    view,
+    historyExpanded: true,
+    expandedGroups: new Set<string>(),
+  }).lines;
 }

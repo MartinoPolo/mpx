@@ -137,13 +137,18 @@ ordinary-folder fallback behavior to an unidentified repository. `mpx project co
 returns the same resolved metadata as the launcher, allowing workflows to use local overrides without
 writing them into a repository.
 
-Pi starts with the expanded operational footer and collapsed agent history. Click its disclosure arrow
-in fullscreen mode, use `Ctrl+Alt+F`, or run `/footer` to toggle the single-line footer. That compact
-line contains session, model, effort, context usage, and quota percentages with reset countdowns.
-`/footer details` shows bounded finished-agent details; `/footer compact` collapses everything. Agent
-names and the main model follow contrasting tier colors: Astra green, Sol blue, Luna yellow, and Terra orange. History groups agents
-by model and effort, sorts priced groups by estimated cost
-and unpriced groups by tokens, and omits unavailable prices. The live-agent widget disappears when idle.
+Pi starts with the operational footer and closed agent details beneath model-and-effort summaries.
+The History disclosure collapses only agent history to one count, cost, and model-count line; each model
+summary independently shows up to ten agents ranked by peak per-request input. Agent rows show that
+peak with a fixed-width elapsed-time field. Model groups show the known peak sum; multi-agent groups
+also show the largest member peak in parentheses, including agents beyond the detail limit.
+Partial aggregates are marked known. These values include cached input,
+exclude output, and are not simultaneous context usage. Cost remains the lifetime total. Click disclosure glyphs in fullscreen mode;
+`Ctrl+Alt+F` or `/footer` toggles the full single-line footer while preserving history expansion,
+and `/footer compact` selects it directly. `/footer details` opens every agent group and `/footer summary` restores closed group
+summaries. Partial costs are marked as known cost rather than shown as complete totals. Agent names and
+the main model use contrasting tier colors: Astra green, Sol blue, Luna yellow, and Terra orange. The
+live-agent widget disappears when idle.
 Runtime sync disables the upstream widget and fleet view to avoid duplicate displays; project
 `.pi/subagents.json` overrides should retain `"widgetMode": "off"` and `"fleetView": false`.
 

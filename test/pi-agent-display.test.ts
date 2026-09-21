@@ -11,13 +11,13 @@ const saved = {
   lifetimeUsage: { input: 10, output: 20, cacheWrite: 30, cacheRead: 40, cost: 0.25 },
 };
 
-test('saved history restores exact model, effort, cache-inclusive tokens and known price', () => {
+test('saved history restores exact model, effort, lifetime cost, and leaves peak input unknown', () => {
   assert.deepEqual(finishedAgentFromRecord(saved, 'parent'), {
     id: 'one', type: 'Explore', status: 'completed', model: 'gpt-5.6-luna', effort: 'high',
-    elapsedMs: 500, tokens: 100, cost: 0.25,
+    elapsedMs: 500, cost: 0.25,
   });
   const withoutUsage = finishedAgentFromRecord({ ...saved, invocation: undefined, lifetimeUsage: undefined }, 'parent');
-  assert.equal(withoutUsage?.tokens, undefined);
+  assert.equal(withoutUsage?.peakInputTokens, undefined);
   assert.equal(withoutUsage?.cost, undefined);
   assert.equal(withoutUsage?.model, undefined);
   for (const cost of [undefined, 0, -1, Infinity, NaN]) {

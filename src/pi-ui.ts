@@ -8,6 +8,7 @@ import { createPiFooterComponent, type PiFooterComponent } from './pi-footer-run
 import type { FooterRepository } from './pi-footer-data.js';
 import type { FooterAgent } from './pi-footer.js';
 import { LIVE_AGENT_WIDGET, renderLiveAgents, savedFinishedAgents, type LiveAgent } from './pi-agent-display.js';
+import { readPeakInputTokens } from './pi-agent-usage.js';
 
 export const PI_ACTIVITY_EVENT = 'mpx:pi-ui:activity';
 export const PI_ACTIVITY_REQUEST_EVENT = 'mpx:pi-ui:activity:request';
@@ -48,6 +49,7 @@ export interface PiUiOptions {
   readCompactionSettings?: typeof import('./pi-footer-settings.js').readFooterCompactionSettings;
   requestQuota?: typeof import('./pi-footer-quota.js').requestFooterQuota;
   loadRepository?: (cwd: string) => Promise<FooterRepository>;
+  readPeakInputTokens?: (transcriptUrl: string, signal: AbortSignal) => Promise<number | undefined>;
 }
 
 interface Timer {
@@ -309,9 +311,7 @@ export function finishedAgentFromLifecycle(payload: unknown): FinishedAgent | un
   const source = record(payload);
   const id = nonempty(source?.id);
   if (!source || !id) return undefined;
-  const tokenSource = record(source.tokens);
   const usage = record(source.usage);
-  const tokens = finiteNonNegative(usage?.totalTokens) ?? finiteNonNegative(tokenSource?.total);
   const cost = finiteNonNegative(record(usage?.cost)?.total);
   return {
     id,
@@ -320,7 +320,6 @@ export function finishedAgentFromLifecycle(payload: unknown): FinishedAgent | un
     ...(finiteNonNegative(source.durationMs) === undefined
       ? {}
       : { elapsedMs: finiteNonNegative(source.durationMs) }),
-    ...(tokens === undefined ? {} : { tokens }),
     ...(cost !== undefined && cost > 0 ? { cost } : {}),
   };
 }
@@ -358,7 +357,7 @@ export function mergeFinishedAgentToolResult(
     ...(elapsedMs === undefined && existing?.elapsedMs === undefined
       ? {}
       : { elapsedMs: elapsedMs ?? existing?.elapsedMs }),
-    ...(existing?.tokens === undefined ? {} : { tokens: existing.tokens }),
+    ...(existing?.peakInputTokens === undefined ? {} : { peakInputTokens: existing.peakInputTokens }),
     ...(finiteNonNegative(source.cost) !== undefined && Number(source.cost) > 0
       ? { cost: Number(source.cost) } : existing?.cost === undefined ? {} : { cost: existing.cost }),
     ...(existing?.url === undefined ? {} : { url: existing.url }),
@@ -562,6 +561,75 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
   const terminalSubagents = new Set<string>();
   const reservedSubagentResults = new Set<string>();
   const diagnosedReservations = new Set<string>();
+  const peakReader = options.readPeakInputTokens ?? readPeakInputTokens;
+  const agentRunTokens = new Map<string, number>();
+  const peakScanIdentities = new Map<string, string>();
+  const peakResults = new Map<string, number | undefined>();
+  const peakControllers = new Map<string, AbortController>();
+  type PeakReadTask = { id: string; url: string; generation: number; runToken: number; identity: string };
+  const peakQueue: PeakReadTask[] = [];
+  let peakGeneration = 0;
+  let activePeakReads = 0;
+
+  const isCurrentPeakTask = (task: PeakReadTask): boolean => task.generation === peakGeneration
+    && task.runToken === (agentRunTokens.get(task.id) ?? 0)
+    && peakScanIdentities.get(task.id) === task.identity;
+  const pumpPeakQueue = (): void => {
+    while (activePeakReads < 2 && peakQueue.length) {
+      const task = peakQueue.shift();
+      if (!task) break;
+      if (!isCurrentPeakTask(task)) continue;
+      const controller = new AbortController();
+      peakControllers.set(task.id, controller);
+      activePeakReads++;
+      void peakReader(task.url, controller.signal).then(peakInputTokens => {
+        if (controller.signal.aborted || !isCurrentPeakTask(task)) return;
+        const validPeak = finiteNonNegative(peakInputTokens);
+        peakResults.set(task.identity, validPeak);
+        if (validPeak === undefined) return;
+        const current = finished.get(task.id);
+        if (!current) return;
+        finished.set(task.id, { ...current, peakInputTokens: validPeak });
+        requestRender();
+      }).catch(() => { /* Transcript usage is optional display enrichment. */ }).finally(() => {
+        if (peakControllers.get(task.id) === controller) peakControllers.delete(task.id);
+        activePeakReads--;
+        pumpPeakQueue();
+      });
+    }
+  };
+  const schedulePeakRead = (agent: FinishedAgent): void => {
+    if (!agent.url) return;
+    const runToken = agentRunTokens.get(agent.id) ?? 0;
+    const identity = `${agent.id}\u0000${runToken}\u0000${agent.url}`;
+    if (peakResults.has(identity)) {
+      const cachedPeak = peakResults.get(identity);
+      if (cachedPeak !== undefined) finished.set(agent.id, { ...agent, peakInputTokens: cachedPeak });
+      return;
+    }
+    if (peakScanIdentities.get(agent.id) === identity) return;
+    peakControllers.get(agent.id)?.abort();
+    peakScanIdentities.set(agent.id, identity);
+    peakQueue.push({ id: agent.id, url: agent.url, generation: peakGeneration, runToken, identity });
+    pumpPeakQueue();
+  };
+  const invalidateAgentPeak = (id: string): void => {
+    agentRunTokens.set(id, (agentRunTokens.get(id) ?? 0) + 1);
+    peakScanIdentities.delete(id);
+    peakControllers.get(id)?.abort();
+    peakControllers.delete(id);
+  };
+  const invalidatePeakReads = (clearRunTokens = false): void => {
+    peakGeneration++;
+    peakQueue.length = 0;
+    peakScanIdentities.clear();
+    for (const controller of peakControllers.values()) controller.abort();
+    peakControllers.clear();
+    if (clearRunTokens) {
+      agentRunTokens.clear();
+      peakResults.clear();
+    }
+  };
 
   const emitActivity = (snapshot: Readonly<PiActivitySnapshot>): void => {
     const envelope: PiActivityEnvelope = {
@@ -687,6 +755,7 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
     }));
   };
   const beginChildRun = (id: string, payload: unknown, status: LiveAgent['status']): void => {
+    invalidateAgentPeak(id);
     terminalSubagents.delete(id);
     finished.delete(id);
     const source = record(payload);
@@ -737,12 +806,14 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
       if (!native) diagnoseHeldReservation(agent.id, 'is unavailable');
     }
     const prior = finished.get(agent.id);
-    finished.set(agent.id, {
+    const enrichedAgent = {
       ...prior, ...agent,
       model: native?.model ?? prior?.model,
       effort: native?.effort ?? prior?.effort,
       url: native?.url ?? prior?.url,
-    });
+    };
+    finished.set(agent.id, enrichedAgent);
+    schedulePeakRead(enrichedAgent);
     aggregate?.finishChild(agent.id);
     liveAgents.delete(agent.id);
     refreshLiveWidget();
@@ -772,8 +843,12 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
     const global = globalThis as GlobalWithOwner;
     if (global[PROCESS_OWNER] === undefined) global[PROCESS_OWNER] = token;
     ownsProcess = global[PROCESS_OWNER] === token;
-    if (!ownsProcess) return;
+    if (!ownsProcess) {
+      invalidatePeakReads(true);
+      return;
+    }
 
+    invalidatePeakReads(true);
     currentContext = ctx;
     footer?.dispose();
     footer = undefined;
@@ -787,7 +862,10 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
       Math.min(2_000, Math.max(0, options.settleDelayMs ?? DEFAULT_SETTLE_DELAY_MS)),
     );
     finished.clear();
-    for (const agent of savedFinishedAgents(ctx.sessionManager.getBranch(), activitySessionId)) finished.set(agent.id, agent);
+    for (const agent of savedFinishedAgents(ctx.sessionManager.getBranch(), activitySessionId)) {
+      finished.set(agent.id, agent);
+      schedulePeakRead(agent);
+    }
     liveAgents.clear();
     refreshLiveWidget();
     knownSubagents.clear();
@@ -843,10 +921,14 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
   });
   pi.on('session_tree', (_event, ctx) => {
     if (!own()) return;
+    invalidatePeakReads();
     currentContext = ctx;
     finished.clear();
     for (const agent of savedFinishedAgents(ctx.sessionManager.getBranch(), activitySessionId)) {
-      if (!liveAgents.has(agent.id)) finished.set(agent.id, agent);
+      if (!liveAgents.has(agent.id)) {
+        finished.set(agent.id, agent);
+        schedulePeakRead(agent);
+      }
     }
     footer?.update(ctx, true);
   });
@@ -953,12 +1035,14 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
     if (native?.status === 'running' || native?.status === 'queued') return;
     liveAgents.delete(merged.id);
     refreshLiveWidget();
-    finished.set(merged.id, {
+    const enrichedAgent = {
       ...merged,
       model: native?.model ?? merged.model,
       effort: native?.effort ?? merged.effort,
       url: native?.url ?? merged.url,
-    });
+    };
+    finished.set(merged.id, enrichedAgent);
+    schedulePeakRead(enrichedAgent);
     requestRender();
   });
 
@@ -975,12 +1059,15 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
   });
 
   pi.on('session_before_switch', () => {
-    if (own()) abortTitle();
+    if (!own()) return;
+    abortTitle();
+    invalidatePeakReads();
   });
 
   pi.on('session_shutdown', () => {
     if (!own()) return;
     abortTitle();
+    invalidatePeakReads(true);
     footer?.dispose();
     footer = undefined;
     liveAgents.clear();
