@@ -32,11 +32,13 @@ Run from Git Bash in your project:
 | `mpx resume --list` | List resumable native sessions |
 | `mpx status` | Inspect MPX resources and conflicts |
 | `mpx sync --preview` | Preview account-resource synchronization |
-| `mpx project setup --preview` | Preview optional project setup |
+| `mpx project setup . --preview` | Preview optional project setup |
 | `mpx project config <directory>` | Inspect resolved project configuration |
 
-`mpx` and the account launchers use the installed MPX checkout. Preview sync/setup before allowing
-writes; preserve unrelated native and project files. For a narrower sync preview:
+The account shortcuts require MPX's `bin/` to precede native launchers on `PATH`. Check with
+`type -a pi`; use `mpx launch pi personal` to bypass a shadowed `pi` shortcut.
+Preview sync/setup before allowing writes; preserve unrelated native and project files.
+For a narrower sync preview:
 
 ```bash
 mpx sync --runtime-only --account personal --harness pi --preview
