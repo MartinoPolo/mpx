@@ -66,6 +66,7 @@ Every rule below is fixed. Do not re-litigate them per run.
 
 - **Slides, one feature per slide.** A feature is one new/changed function, or one tightly coupled group (a parser and its private helper). Never two unrelated features on a slide.
 - **Two-column slide:** code left (sticky), notes/demo right. Collapse to one column on narrow viewports (about 860px).
+- **One notes group per snippet, always adjacent to it.** When a slide carries more than one snippet, pair each snippet with the notes that explain it as a self-contained unit — one code-left / notes-right split per snippet, stacked — so a note sits beside (wide) or directly under (narrow) the exact snippet it annotates. Never pool every snippet into one sticky column with all notes beside them; scrolling then drifts a note away from its code. Diagrams, playgrounds, and example boxes are slide- or segment-level and may sit above/below a snippet's group or on their own slide, but must never displace a note from its snippet.
 - **Vocabulary is the opening exception:** use a readable glossary layout rather than one function and a code panel. Split across consecutive opening slides if needed; do not omit important terms to fit.
 - **No outline, no navigation sidebar, no contents rail.** Slides plus keyboard navigation are the only navigation. This is deliberate — a rail reads as distracting here.
 - **Use the full viewport width;** do not cap the deck at reading width.
@@ -79,6 +80,7 @@ Every rule below is fixed. Do not re-litigate them per run.
 - One function per slide by default; combine only genuinely coupled functions.
 - Each function slide answers three things: what the function does, why it exists (the constraint), and the one non-obvious decision inside it. Never fabricate behaviour or outputs.
 - Vocabulary entries cite representative identifiers and their source locations; they do not require code blocks or hover-link chips. On function slides, tie every prose claim to exact line ranges with a `.ref` chip (e.g. `L51-53`, en-dash between numbers); those chips drive the linking, so the numbers must match the code shown in that slide's block.
+- **Never annotate a line the slide does not display.** Every `.ref` must fall inside a code block present on the same slide. If a note cites lines outside every block shown, either add the snippet that contains them (its own card, beside its own note per the layout rule above) or move the note to the slide that shows that code. A ref with no on-slide code is a defect, not an acceptable dangling link — the runtime silently drops it and the reader sees an explanation for code that is not there.
 
 **Interaction**
 
