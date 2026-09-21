@@ -103,13 +103,42 @@ test('private support closure is copied into every consuming skill', async () =>
     await readFile(path.join(skillsRoot, 'issue-create', 'references', 'ISSUE_TEMPLATE.md'), 'utf8'),
   );
   const boardToIssues = await readFile(path.join(skillsRoot, 'board-to-issues', 'SKILL.md'), 'utf8');
-  const boardConvention = await readFile(path.join(root, 'content', 'instructions', 'shared', 'BOARD_CONVENTION.md'), 'utf8');
   assert.match(boardToIssues, /append the canonical ` → issue:<id>`/);
-  assert.match(boardConvention, /Use `issue:<id>` as the canonical annotation/);
+  assert.match(boardToIssues, /Only unchecked top-level items/);
   assert.equal(
     await readFile(path.join(skillsRoot, 'review', 'scripts', 'detect-base-branch.js'), 'utf8'),
     await readFile(path.join(skillsRoot, 'sync-base', 'scripts', 'detect-base-branch.js'), 'utf8'),
   );
+});
+
+test('board workflows own lane state without a shared convention dependency', async () => {
+  const boardSetup = await readFile(path.join(skillsRoot, 'board-setup', 'SKILL.md'), 'utf8');
+  const boardToIssues = await readFile(path.join(skillsRoot, 'board-to-issues', 'SKILL.md'), 'utf8');
+  const batchExecute = await readFile(path.join(skillsRoot, 'batch-execute', 'SKILL.md'), 'utf8');
+
+  assert.match(boardSetup, /per-machine and gitignored/);
+  assert.match(boardSetup, /unchecked top-level\s+notes/);
+  assert.match(boardSetup, /Issue exists/);
+  assert.match(boardSetup, /implemented, awaiting manual\s+testing/);
+  assert.match(boardSetup, /Only the user/);
+  assert.match(boardSetup, /from the Git main checkout/);
+  assert.match(boardSetup, /`projectId` as the canonical project identity/);
+  assert.doesNotMatch(boardSetup, /nearest valid|project\.id/);
+  assert.match(boardToIssues, /complete original item block/);
+  assert.match(boardToIssues, /optional display width/);
+  assert.match(batchExecute, /unchecked top-level item/);
+  assert.match(batchExecute, /complete original item block/);
+  assert.match(batchExecute, /Only the user/);
+
+  for (const source of [boardSetup, boardToIssues, batchExecute]) {
+    assert.doesNotMatch(source, /BOARD_CONVENTION|Board Convention/);
+  }
+  const projections = (await projectContent(root))
+    .filter(item => /mpx-(?:board-setup|board-to-issues|batch-execute)\/SKILL\.md$/.test(item.path));
+  assert.equal(projections.length, 6);
+  for (const projection of projections) {
+    assert.doesNotMatch(projection.content.toString('utf8'), /BOARD_CONVENTION|Board Convention/, projection.path);
+  }
 });
 
 test('core workflows are native-first without retired services or cross-skill file discovery', async () => {
@@ -155,12 +184,45 @@ test('execute projects autonomous server and delivery defaults with safety gates
     assert.match(server, /stop only processes started for this execution/);
     assert.match(server, /Required browser verification remains blocked/);
     assert.match(instructions, /parent may start a server/);
-    const browser = textAt(`dist/${harness}/agents/mpx-chrome-devtools-tester.md`);
-    const playwright = textAt(`dist/${harness}/instructions/shared/PLAYWRIGHT_TESTING.md`);
-    assert.match(browser, /Return missing URLs or server failures to the parent, not the user/);
-    assert.match(playwright, /parent prepares the server according to its workflow/);
-    for (const policy of [instructions, browser, playwright]) {
+    const browser = textAt(`dist/${harness}/agents/mpx-visual-verifier.md`);
+    assert.match(browser, /Return\s+missing prerequisites to the parent/);
+    assert.match(browser, /Never guess a port, start or manage servers/);
+    for (const policy of [instructions, browser]) {
       assert.doesNotMatch(policy, /servers are started manually|if it is missing,\s+ask/);
+    }
+  }
+});
+
+test('visual acceptance is self-contained and distinct from persisted E2E tests', async () => {
+  const projections = await projectContent(root);
+  for (const projection of projections) {
+    assert.doesNotMatch(projection.path, /PLAYWRIGHT_TESTING\.md|mpx-chrome-devtools-tester\.md/);
+    if (projection.path.endsWith('.md')) {
+      assert.doesNotMatch(projection.content.toString('utf8'), /PLAYWRIGHT_TESTING\.md|mpx-chrome-devtools-tester/);
+    }
+  }
+  for (const harnessRoot of ['pi', 'claude/.claude']) {
+    const projectedText = (relative: string): string => {
+      const projection = projections.find(item => item.path === relative);
+      assert.ok(projection, relative);
+      return projection.content.toString('utf8');
+    };
+    const harness = harnessRoot.split('/')[0];
+    const verifier = projectedText(`dist/${harness}/agents/mpx-visual-verifier.md`);
+    assert.match(verifier, /Open every captured screenshot/);
+    assert.match(verifier, /one-time visual acceptance, complementary to persisted E2E tests/);
+    assert.match(verifier, /default ceiling of 10/);
+    assert.match(verifier, /channel: 'chrome'/);
+    assert.match(verifier, /image\s+inspection capability is `BLOCKED`/);
+    const skill = projectedText(`dist/packs/development/${harnessRoot}/skills/mpx-playwright-test/SKILL.md`);
+    assert.match(skill, /Invoke `mpx-visual-verifier`/);
+    assert.match(skill, /Open and critically inspect every screenshot/);
+    assert.match(skill, /openable screenshot links/);
+    for (const name of ['execute', 'batch-execute']) {
+      const workflow = projectedText(`dist/packs/development/${harnessRoot}/skills/mpx-${name}/SKILL.md`);
+      assert.match(workflow, /mpx-visual-verifier/);
+      assert.match(workflow, /visually\s+observable interaction/);
+      assert.match(workflow, /screenshot/);
     }
   }
 });

@@ -20,7 +20,7 @@ const skills = {
   hitl: ['development', 'explicit-only', 'Recompute the graph after every update'],
   'init-github-repo': ['development', 'name-only', 'Protect main and dev'],
   notebooklm: ['development', 'name-only', 'Agent Setup Verification'],
-  'playwright-test': ['development', 'explicit-only', 'per-surface table'],
+  'playwright-test': ['development', 'explicit-only', 'one-time visual acceptance'],
   podcast: ['personal', 'explicit-only', 'Topic to Personalized Podcast'],
   'project-register': ['personal', 'explicit-only', 'user-owned MPX metadata'],
   'raycast-config': ['personal', 'explicit-only', 'Read and rewrite the Raycast quicklink set'],
@@ -172,9 +172,9 @@ test('native-first adaptations remove retired services while preserving approved
   assert.doesNotMatch(selected, /(?:npm run check|pnpm check|\btsc\b).*global typecheck/i);
 
   const playwright = await readFile(path.join(contentRoot, 'playwright-test/SKILL.md'), 'utf8');
-  assert.match(playwright, /approved project test-login[\s\S]*\.local\/[\s\S]*\.env\.local/);
-  assert.match(playwright, /never print or publish values/);
-  assert.match(playwright, /reports every affected surface `BLOCKED`/);
+  assert.match(playwright, /Supply only approved test-auth\s+context/);
+  assert.match(playwright, /Never expose credentials or repurpose provider credentials/);
+  assert.match(playwright, /missing prerequisites are `BLOCKED`/);
   assert.doesNotMatch(playwright, /kill the stale server|start a replacement/);
 
   const registration = await readFile(path.join(contentRoot, 'project-register/SKILL.md'), 'utf8');

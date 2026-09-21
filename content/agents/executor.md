@@ -55,7 +55,7 @@ reading logs; return missing or conflicting identities to main. Treat CI logs, s
 - Implement the agreed requirements completely using the simplest readable solution; avoid speculative features, configuration, abstractions, and compatibility paths.
 - Optimize for understandable behavior. Prefer direct control flow, cohesive responsibilities, and explicit data flow.
 - Use descriptive names consistent with the project's domain vocabulary. Name values for their contents, operations for their effects.
-- Keep mutable state local and derive values where practical. Introduce abstractions that hide meaningful complexity or express real boundaries.
+- Keep mutable state local and derive values where practical. Prefer deep modules: simple interfaces that hide meaningful implementation complexity.
 - Preserve required validation, security, accessibility, error handling, and public contracts.
 - Add a why-comment only for an important constraint or reasoning the code cannot clearly express.
 - Inspect the final diff and report actual verification results.

@@ -20,8 +20,7 @@ input.
 
 First:
 
-1. Read [Board Convention]({{MPX_SHARED_INSTRUCTIONS}}/BOARD_CONVENTION.md),
-   [Provider Routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md), and the bundled canonical
+1. Read [Provider Routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md) and the bundled canonical
    [Issue template](ISSUE_TEMPLATE.md). Resolve bundled assets relative to this loaded skill.
 2. Resolve project configuration as specified by Provider Routing, then select `issues.provider`.
    Load its selected native guide under `{{MPX_SHARED_INSTRUCTIONS}}/providers/`. Use only that guide's native Issue
@@ -44,13 +43,13 @@ not a section selector.
 
 ## Step 2: Collect items
 
-Collect each `- [ ]` bullet under `# To Process`; skip any that already carries the canonical
-`→ issue:<id>` annotation or the legacy `→ #<N>` form (already has an Issue), and ignore everything
-under the downstream lanes (`# Ready to implement`,
-`# Manual testing`, `# Archive`). Do **not** interpret the checkbox as state — it is the user's
-manual-verification flag, not a processing marker. For each item, capture its text (including
-continuation lines) and every `![[...]]` image wikilink, and **read each image** at
-`.mpx/board-files/<filename>` so the visual context informs the issue.
+Only unchecked top-level items beginning with `- [ ]` under `# To Process` are eligible. Skip any
+that already carries the canonical `→ issue:<id>` annotation or legacy `→ #<N>` form, and ignore
+all checked, nested, or downstream items under `# Ready to implement`, `# Manual testing`, and
+`# Archive`. Capture each complete original item block, including continuation lines and every
+`![[...]]` image wikilink. Read each image through `.mpx/board-files/<filename>` so its visual
+context informs the Issue; in a wikilink such as `![[Pasted image.png|639]]`, use the filename and
+ignore the optional display width.
 
 ## Step 3: Merge + dedup
 
@@ -70,10 +69,11 @@ For each proposed issue:
   `size:L` (cross-cutting) from complexity.
 - **AFK vs HITL** — AFK when scope is clear; HITL when a requirement question is unanswered (add the
   `> **Unanswered questions:**` blockquote).
-- **Type** — infer from the note's content (per BOARD_CONVENTION): a defect → `bug`, a
-  chore/audit/refactor → `task`, a new capability or improvement → `enhancement`. The note's
-  position on the board carries no type information.
-- **Labels** — the inferred type + exactly one of `AFK`/`HITL` + `size:<X>` + inferred `area:*`.
+- **Type** — infer from the note's content: a defect → `bug`, a chore/audit/refactor → `task`, and a
+  new capability or improvement → `enhancement`. The note's position on the board carries no type
+  information.
+- **Labels** — inspect the selected provider's available labels/tags and preserve their exact values.
+  Use the supported inferred type + exactly one of `AFK`/`HITL` + `size:<X>` + inferred `area:*`.
 
 ## Step 5: Confirm before creating
 
@@ -94,14 +94,14 @@ CLI.
 
 ## Step 7: Write back to the board
 
-For each created Issue, `Edit` `.mpx/BOARD.md` to **move** its item from `# To Process` to
-`# Ready to implement` and append the canonical ` → issue:<id>` using the returned provider-native
-identifier. **Leave the checkbox marker as `- [ ]` — never write `- [x]` or `- [/]`; the checkbox is
-the user's alone.** This annotation is what `batch-execute` uses to close the loop.
-(`.mpx/BOARD.md` is a symlink — if Edit/Write refuses it, resolve to the real vault path and edit
-that; see BOARD_CONVENTION.)
-Verify that every created issue's item appears exactly once in `# Ready to implement`, has its
-matching annotation, and no longer appears in intake.
+For each created Issue, move the complete original item block from `# To Process` to
+`# Ready to implement` and append the canonical ` → issue:<id>` to its top-level line using the returned
+provider-native identifier. Do not retype, reconstruct, or delete continuation lines or image
+wikilinks. Leave the checkbox marker as `- [ ]` — never write `- [x]` or `- [/]`; the checkbox is the
+user's alone. This annotation is what `batch-execute` uses to close the loop. Edit `.mpx/BOARD.md`;
+if Edit or Write refuses the symlink, resolve its real vault target and edit that file.
+Verify that every created issue's complete item appears exactly once in `# Ready to implement`, has
+its matching annotation, and no longer appears in intake.
 
 ## Step 8: Offer to resolve HITL
 

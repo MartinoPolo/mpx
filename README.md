@@ -1,12 +1,29 @@
 # MPX
 
-MPX is the shared agent configuration for Pi and Claude Code. It provides account-aware launchers,
-project-selected skill packs, native safeguards, session resume, and a deterministic Claude/Pi content
-build. Native harnesses continue to own authentication, settings, packages, and conversation history.
+Shared skills, account-aware launchers, and project configuration for Pi and Claude Code.
+
+## Development
+
+Requirements: Node 22.20 or newer, pnpm, and Git Bash on Windows. From this repository:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm run typecheck
+pnpm build
+pnpm test
+pnpm status
+```
+
+- Edit skills, agents, and instructions in `content/`; runtime code in `src/`; Pi adapters in `extensions/`.
+- Run `pnpm build` after content changes and before launching a harness or running content tests.
+  Generated `dist/` files are ignored: never edit or commit them.
+- Keep retired content in its `archived/` directory and incomplete skills in `content/skills/unfinished/`;
+  these are excluded from the build.
+- Contributor guidance: [AGENTS.md](AGENTS.md). Design rationale: [DECISIONS.md](DECISIONS.md).
 
 ## Daily commands
 
-Run these from Git Bash:
+Run from Git Bash in your project:
 
 | Command | Purpose |
 | --- | --- |
@@ -15,39 +32,42 @@ Run these from Git Bash:
 | `mpx resume --list` | List resumable native sessions |
 | `mpx status` | Inspect MPX resources and conflicts |
 | `mpx sync --preview` | Preview account-resource synchronization |
-| `mpx sync --runtime-only --account personal --harness pi --preview` | Preview one account/harness runtime scope |
-| `mpx sync --orca-hooks-only --harness pi --preview` | Preview only Orca-owned Pi extension mirroring |
 | `mpx project setup --preview` | Preview optional project setup |
-| `mpx project config <directory>` | Inspect `mpxconfig.json` or its local override |
+| `mpx project config <directory>` | Inspect resolved project configuration |
 
-Bare `mpx` and the account commands use the MPX installation. Legacy recovery and suffixed launchers
-are removed. PowerShell and the Windows `mpx.cmd` shim explicitly select Git Bash rather than the
-Windows/WSL `bash` executable. Reopen existing terminals after migration to discard cached routing.
+`mpx` and the account launchers use the installed MPX checkout. Preview sync/setup before allowing
+writes; preserve unrelated native and project files. For a narrower sync preview:
 
-Pi launchers leave the startup overview at its native compact default rather than forcing verbose
-output. Pass `pi --verbose` or `piw --verbose` when expanded resource paths are useful.
+```bash
+mpx sync --runtime-only --account personal --harness pi --preview
+mpx sync --orca-hooks-only --harness pi --preview
+```
 
-## Execution and delivery skills
+Launch warnings require Enter to continue; Ctrl+C or Escape cancels. They never switch accounts.
+Use `mpx launch-preview pi personal` to inspect without launching, or `pi --verbose` for expanded
+startup details.
+
+## Delivery skills
 
 Use `/skill:mpx-<name>` in Pi or `/mpx-<name>` in Claude Code:
 
-| Skill | Endpoint |
+| Skill | Purpose |
 | --- | --- |
-| `execute` | Implement and verify; work stops at green CI with an open PR/MR, personal continues through merge and safe base synchronization |
-| `commit` | Local commit only |
+| `execute` | Implement and verify an Issue; work stops at green CI with an open PR/MR, personal continues through merge and safe base synchronization |
+| `commit` | Commit locally |
 | `commit-push` | Commit and push |
-| `pr` | Commit, push, create/update a draft PR/MR, and monitor CI |
-| `ship` | Confirmed merge; `--no-auto-merge` stops at green CI |
+| `pr` | Create/update a draft PR/MR and monitor CI, including commit and push |
+| `ship` | Confirm and merge; `--no-auto-merge` stops at green CI |
+| `playwright-test` | Standalone visual acceptance for `uncommitted`, `review:<id>`, or a feature description |
 
-`execute --no-tdd` skips creating tests during implementation, not running existing tests.
-`--full-review` adds specialist review axes; `--no-auto-merge` leaves the PR/MR open. Inline work
-commits locally without hosted delivery. Shipping stops after its shared retry budget is exhausted.
-Base synchronization requires an identified idle checkout, clean Git state, correct upstream, and
-a fast-forward-only update. A confirmed merge and blocked synchronization are reported separately.
+For `execute`, inline work commits locally without hosted delivery. `--no-tdd` skips creating tests,
+not running existing tests; `--full-review` adds specialist reviews; `--no-auto-merge` leaves the PR/MR open.
+Visual changes in `execute` and `batch-execute` also receive browser verification and a screenshot
+gallery, even with `--no-tdd`. Screenshots and temporary runners are not committed or uploaded automatically.
 
 ## Project configuration
 
-A repository may define `mpxconfig.json`:
+Add `mpxconfig.json` to the repository root (linked worktrees share the main checkout's configuration):
 
 ```json
 {
@@ -59,150 +79,38 @@ A repository may define `mpxconfig.json`:
 }
 ```
 
-Repository and Issue providers are independent and optional. Ordinary folders can use a minimal
-`mpxconfig.json` such as `{ "projectId": "personal/assets" }`, without inventing a repository or tracker.
-A provider-dependent workflow still requires its corresponding role. Supported repository providers
-are GitHub, GitLab, and Gerrit; supported Issue providers are GitHub and KanbanFlow. An explicit empty `packs` array
-loads no MPX global packs while retaining native project and account resources. Linked worktrees use
-the main checkout's configuration.
+- Only `projectId` is required. Ordinary folders can use `{ "projectId": "personal/assets" }`.
+- Repository providers: GitHub, GitLab, Gerrit. Issue providers: GitHub, KanbanFlow. Configure each
+  independently when its workflows need it.
+- `packs: []` disables MPX global packs, not native project/account resources.
+- Optional `fast_checks` and `full_checks` arrays override discovered checks by category, including
+  empty arrays. Entries look like `{ "command": "pnpm test", "cwd": "." }`, relative to the repository
+  root. Full verification runs both; put only deferred checks in `full_checks`.
 
-Optional `fast_checks` and `full_checks` arrays contain `{ "command": "pnpm test", "cwd": "." }`
-entries. Working directories are relative to the repository root. Each explicit array overrides its
-discovery category, including an empty array. Complete verification runs both arrays; `full_checks`
-contains deferred checks rather than a duplicate of fast checks. Explicit configuration takes
-precedence over deterministic script discovery, with unresolved discovery investigated by the checker.
-Formatting runs before parallel checks/review and may write files; other checks must not repair code.
-The bundled detector accepts `node "<detector>" "<checkout>" "<package-manager-or-empty>" "<config-json-file>"`
-when resolved main-checkout configuration or machine-local overrides must be supplied. Pass only the
-resolved `config` object, not the surrounding `mpx project config` result. Detector `cwd` values are
-relative to the checkout passed to it.
+### Machine-local configuration
 
-User configuration lives at `$APPDATA/mpx/config.json` and maps personal/work Pi and Claude roots,
-recursive domain roots, optional default packs, executable overrides, and local project overrides.
-Domain ownership and project configuration are independent: a personal folder can still have missing
-or invalid project metadata. MPX never copies credentials or conversation history between profiles. Claude's explicitly configured native permission mode,
-including Auto, is preserved; Orca's Manual launch option means no bypass flag, not a forced Claude
-permission mode.
-
-### Launch warnings
-
-Launchers display all warnings before starting the native UI and wait for one explicit acknowledgement.
-Enter continues; Ctrl+C or Escape cancels. Warnings never expire automatically. Prepared Orca
-resurrection commands use the same acknowledgement before executing the native process. A noninteractive launch cannot
-acknowledge warnings; use `mpx launch-preview pi personal` to inspect without starting a session.
-
-| Situation | Color |
-| --- | --- |
-| Personal account opening a work folder | Red |
-| Work account opening a personal folder | Orange |
-| Folder outside recognized account domains | Yellow |
-| Missing project configuration | Yellow |
-| Invalid or unreadable project configuration | Orange |
-| Git project discovery failed | Orange |
-| Requested packs unavailable, or fallback packs unavailable | Orange |
-
-Domain checks consider the current directory and the Git main checkout, including resolved filesystem
-links. A work location takes precedence when a worktree and its main checkout have different ownership.
-Warnings do not switch accounts or prohibit a launch after acknowledgement. Missing executables or
-unusable account configuration can still prevent startup.
-
-### Machine-local project configuration
-
-For repositories where committing MPX metadata is inappropriate, add a `projectOverrides` entry to
-user configuration. These settings stay on the machine; no parent-directory `mpxconfig.json` is inherited.
+`$APPDATA/mpx/config.json` holds account roots, account domains, default packs, and local overrides.
+To avoid committing project metadata, add:
 
 ```json
 {
   "projectOverrides": [
-    {
-      "path": "${MPX_WORK}/example",
-      "config": {
-        "projectId": "example",
-        "repository": { "provider": "gitlab", "remote": "origin" },
-        "issues": { "provider": "kanbanflow", "metadata": { "boardId": "example" } }
-      }
-    },
+    { "path": "${MPX_WORK}/example", "config": { "projectId": "example" } },
     { "path": "${MPX_AI_GENERATED}", "omitConfig": true }
   ]
 }
 ```
 
-Use either `config` or `omitConfig: true`, not both. An existing repository manifest remains
-authoritative, including its validation errors; a local entry cannot silently replace a broken file.
-`omitConfig` explicitly accepts absent metadata, rather than inventing providers for an ordinary folder.
-Repository entries match their Git main checkout, so linked worktrees share the same configuration.
-An ordinary-folder entry can cover its subfolders but does not supply metadata to nested Git repositories.
-Account domains still determine which account warnings appear. Git discovery failures do not grant
-ordinary-folder fallback behavior to an unidentified repository. `mpx project config <directory>`
-returns the same resolved metadata as the launcher, allowing workflows to use local overrides without
-writing them into a repository.
+Use either `config` or `omitConfig: true` (accept missing metadata). An existing `mpxconfig.json`
+always takes precedence, even if invalid. Repository overrides cover linked worktrees; folder
+overrides cover subfolders but not nested repositories. Account-domain warnings still apply.
+Inspect the result with `mpx project config <directory>`.
 
-Pi starts with the operational footer and closed agent details beneath model-and-effort summaries.
-The History disclosure collapses only agent history to one count, cost, and model-count line; each model
-summary independently shows up to ten agents ranked by peak per-request input. Agent rows show that
-peak with a fixed-width elapsed-time field. Model groups show the known peak sum; multi-agent groups
-also show the largest member peak in parentheses, including agents beyond the detail limit.
-Partial aggregates are marked known. These values include cached input,
-exclude output, and are not simultaneous context usage. Cost remains the lifetime total. Click disclosure glyphs in fullscreen mode;
-`Ctrl+Alt+F` or `/footer` toggles the full single-line footer while preserving history expansion,
-and `/footer compact` selects it directly. `/footer details` opens every agent group and `/footer summary` restores closed group
-summaries. Partial costs are marked as known cost rather than shown as complete totals. Agent names and
-the main model use contrasting tier colors: Astra green, Sol blue, Luna yellow, and Terra orange. The
-live-agent widget disappears when idle.
-Runtime sync disables the upstream widget and fleet view to avoid duplicate displays; project
-`.pi/subagents.json` overrides should retain `"widgetMode": "off"` and `"fleetView": false`.
+## Safety and troubleshooting
 
-Both Claude accounts load the main and subagent status lines from
-[`src/claude-statusline/`](src/claude-statusline/README.md). Their existing layout is retained without
-legacy script links, credential-file reads, port-manager dependencies, or generated editor launchers.
+Pi and Claude Code own authentication, settings, and history; MPX does not copy credentials or
+conversations between accounts. Orca owns worktrees, terminals, servers, and desktop notifications.
+MPX safeguards prevent accidents; they are not a security sandbox.
 
-## Development
-
-Requirements: Node 22.20 or newer, pnpm, and Git Bash on Windows.
-
-```bash
-pnpm install --frozen-lockfile
-pnpm build
-pnpm run typecheck
-pnpm test
-pnpm status
-```
-
-Author canonical resources under `content/`, then run `pnpm build` from the repository root.
-Keep retired skills in `content/skills/archived/` and incomplete skills in
-`content/skills/unfinished/`; both trees are excluded from build validation and distribution.
-Keep retired agents in `content/agents/archived/`, also excluded from build validation and distribution.
-Use `{{include:relative/path.md}}` for build-time instruction inclusion, resolved from the authored
-file. Includes expand transitively; cycles and paths outside `content/` fail the build. Deferred
-Markdown links remain references: the compiler bundles their transitive dependencies inside each
-consuming skill and rewrites links locally. Keep operational agent instructions inline.
-
-The compiler writes ignored, reproducible projections under `dist/`; do not edit or commit them.
-Build after a fresh checkout and after content changes before launching a harness or running tests.
-Runtime code is under `src/`, native Pi adapters
-are under `extensions/`, and migration/recovery utilities are under `migration/`.
-
-Orca can prepare a worktree before dependencies are installed:
-
-```bash
-ORCA_ROOT_PATH=/path/to/root ORCA_WORKTREE_PATH=/path/to/worktree \
-  node /path/to/mpx/scripts/prepare-worktree.mjs
-```
-
-The helper copies only missing files under `.vscode`, `.cursor`, and `.local`; these trees may contain
-private configuration. Root-level environment files are excluded. It does not create worktrees,
-install packages, configure permissions, allocate ports, or start servers.
-
-## Ownership and safety
-
-- **MPX:** canonical skills/instructions, account launchers, project metadata, native safeguards,
-  formatting adapters, and native resume preparation.
-- **Pi and Claude Code:** authentication, models, settings, packages, and transcripts.
-- **Orca:** worktrees, terminals, development-server visibility, status, and desktop attention.
-
-Synchronizing or project setup can write user/project resources. Preview first and preserve unrelated
-native or project-authored files. Safeguards are accident prevention, not a security sandbox.
-
-Durable design rationale is in [DECISIONS.md](DECISIONS.md). Current migration status and recovery are
-in [migration/HANDOFF.md](migration/HANDOFF.md) and
-[migration/ACCOUNT_ROLLOUT.md](migration/ACCOUNT_ROLLOUT.md).
+For migration and recovery, see [HANDOFF.md](migration/HANDOFF.md) and
+[ACCOUNT_ROLLOUT.md](migration/ACCOUNT_ROLLOUT.md).

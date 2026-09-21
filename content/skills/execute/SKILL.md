@@ -116,15 +116,33 @@ are allowed and preferred; include resulting changes in verification and review.
 deferred checks and independent reviewers against stable source. Do not run simultaneous writers
 or parallel checks sharing mutable fixtures or servers.
 
+After implementation, simplification, and final formatting leave stable source, dispatch one
+`mpx-visual-verifier` using its declared model settings when the change affects
+rendered appearance or visually observable interaction. This one-time visual acceptance is
+independent of persistent E2E results, `--no-tdd`, and review selection; skip it for nonvisual
+changes. Supply the latest requirements, Design Mapping, affected feature, states, and viewports,
+checkout identity, main's verified URL, only explicitly approved project test-auth context, and an
+artifact location outside tracked content. Main owns the server and source; the verifier must not
+start, stop, or modify either.
+
+The verifier uses the project's raw Playwright by default and both captures and inspects screenshots
+in the same worker; do not dispatch a separate analyzer. Usually capture two to five representative
+screenshots covering the default state plus materially distinct affected edge or responsive states,
+with ten as the default maximum rather than a quota or exhaustive matrix. It returns concise
+per-requirement and per-state `PASS`, `FAIL`, or `BLOCKED` findings, actual versus expected behavior,
+labeled screenshot paths, and omitted states or uncertainty. Main evaluates those findings without
+routinely loading every image. Use advanced reasoning only through a supported model override for
+ambiguous visual reasoning, never as a parallel routine analyst. Visual failure or blockage stops
+publication unless resolved through the existing repair gate. After repairs, including CI repairs,
+rerun affected states and regenerate screenshots made stale by the repair.
+
 Default reviewers are `mpx-reviewer-code-quality`, `mpx-reviewer-best-practices`,
 `mpx-reviewer-spec-alignment`, and `mpx-reviewer-test-quality`; add `mpx-reviewer-security`,
 `mpx-reviewer-performance`, and `mpx-reviewer-error-handling` for `--full-review`. Give each the
-context, acceptance criteria, Design Mapping constraints, branch, and changed files. Prefer
-Playwright for meaningful browser verification. Use `mpx-chrome-devtools-tester` where UI
-interaction lacks adequate E2E coverage. For authenticated browser verification, it may read
-explicitly approved project test-auth context according to repository instructions; this is
-distinct from provider credential routing. Never expose or commit the values, and never repurpose
-provider credentials.
+context, acceptance criteria, Design Mapping constraints, branch, and changed files. Keep
+persistent E2E regression testing separate; prefer Playwright for meaningful browser verification.
+For authenticated verification, never expose or commit approved test-auth values, and never
+repurpose provider credentials.
 
 Evaluate supplied findings and contradictory advice before accepting repairs. Use a fresh executor
 for each repair, never a resumed one. Include the selected test mode, relevant requirements,
@@ -164,7 +182,9 @@ For CI repairs, supply the validated repository, PR, branch, commit, and failing
 
 The final user report comes after delivery and includes actual acceptance and delivery evidence,
 verification results, material choices and uncertainty, unresolved issues, and any blocked merge
-or base synchronization. Durable decisions go into DECISIONS only after confirmation.
+or base synchronization. When visual acceptance ran, include a small representative gallery of
+openable links to the final screenshots; do not commit them or automatically upload or publish them
+through CI. Durable decisions go into DECISIONS only after confirmation.
 
 ## Flags
 

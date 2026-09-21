@@ -17,7 +17,7 @@ const qualityGuidance = [
   'Implement the agreed requirements completely using the simplest readable solution; avoid speculative features, configuration, abstractions, and compatibility paths.',
   'Optimize for understandable behavior. Prefer direct control flow, cohesive responsibilities, and explicit data flow.',
   "Use descriptive names consistent with the project's domain vocabulary. Name values for their contents, operations for their effects.",
-  'Keep mutable state local and derive values where practical. Introduce abstractions that hide meaningful complexity or express real boundaries.',
+  'Keep mutable state local and derive values where practical. Prefer deep modules: simple interfaces that hide meaningful implementation complexity.',
   'Preserve required validation, security, accessibility, error handling, and public contracts.',
   'Add a why-comment only for an important constraint or reasoning the code cannot clearly express.',
   'Inspect the final diff and report actual verification results.',
@@ -121,7 +121,11 @@ test('retired diagnosis agents remain archived without active workflow dependenc
     const skill = (name: string) => projectedText(projections, `dist/packs/development/${skillRoot}/mpx-${name}/SKILL.md`);
     assert.ok(skill('bug-report').includes('Use a general-purpose agent for a bounded read-only investigation of each bug. For multiple bugs, launch those agents in parallel and keep their evidence separate. Do not edit source, publish, or change provider state during investigation.'));
     for (const name of ['check-fix', 'batch-execute']) {
-      assert.ok(skill(name).includes('Main evaluates checker and reviewer results, distinguishes root causes from symptoms, and resolves contradictory advice before authorizing repairs. Preserve uncertainty and missing evidence rather than guessing.'), name);
+      const workflow = skill(name);
+      assert.match(workflow, /Main evaluates checker(?: and reviewer results|, reviewer, and visual findings)/, name);
+      assert.match(workflow, /distinguishes root causes from symptoms/, name);
+      assert.match(workflow, /resolves contradictory advice before authorizing repairs/, name);
+      assert.match(workflow, /Preserve uncertainty and missing evidence\s+rather than guessing/, name);
     }
     for (const name of ['execute', 'batch-execute', 'pr', 'ship']) {
       const workflow = skill(name);

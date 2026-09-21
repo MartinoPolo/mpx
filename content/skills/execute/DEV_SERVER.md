@@ -23,8 +23,9 @@ explicit project restrictions and the execution environment's process permission
 4. Observe startup output, resolve the actual URL, and confirm readiness with a bounded wait and a
    request to the intended application route. A running process or guessed localhost URL is not
    readiness evidence. Pass the verified URL, working directory, and relevant configuration to
-   `mpx-chrome-devtools-tester` and server-dependent checks. If the test runner manages its own
-   server, use that configuration instead of starting a competing process.
+   `mpx-visual-verifier` and server-dependent checks. The verifier never manages server processes or
+   modifies source. If the test runner manages its own server, use that configuration instead of
+   starting a competing process.
 
 ## Recovery and cleanup
 

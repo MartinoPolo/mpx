@@ -27,10 +27,8 @@ the boundary instead of internals.
 
 Before starting, read these complete inputs:
 
-1. [deep modules]({{MPX_SHARED_INSTRUCTIONS}}/deep-modules.md) — deep versus shallow module evaluation.
-2. [interface design]({{MPX_SHARED_INSTRUCTIONS}}/interface-design.md) — interface design rules for testability.
-3. [reference](REFERENCE.md) — dependency categories and the Issue template.
-4. [provider routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md) and the selected native provider guide —
+1. [reference](REFERENCE.md) — dependency categories and the Issue template.
+2. [provider routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md) and the selected native provider guide —
    Issue-provider resolution and commands.
 
 ## Process

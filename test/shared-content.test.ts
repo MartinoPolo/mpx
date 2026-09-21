@@ -9,7 +9,7 @@ import { projectContent } from '../src/compiler.js';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const content = path.join(root, 'content');
 const specialistMetadata = {
-  'chrome-devtools-tester': ['advanced', 'high', ['read', 'search', 'shell', 'browser']],
+  'visual-verifier': ['standard', 'high', ['read', 'search', 'shell', 'browser']],
   'context7-docs-fetcher': ['mechanical', 'xhigh', ['read', 'context']],
   executor: ['advanced', 'high', ['read', 'search', 'shell', 'write']],
   'issue-finder': ['mechanical', 'high', ['read', 'search', 'shell']],
@@ -41,17 +41,13 @@ test('shared instruction, provider, rule, output-style, and helper closure is ca
     'claude/CLAUDE.md',
     'pi/APPEND_SYSTEM.md',
     'shared/AGENTS.md',
-    'shared/BOARD_CONVENTION.md',
     'shared/COMPACT.md',
-    'shared/PLAYWRIGHT_TESTING.md',
     'shared/PROJECT_DOC_TEMPLATES.md',
     'shared/PROVIDER_ROUTING.md',
     'shared/REVIEWER_PROTOCOL.md',
     'shared/SENTRY.md',
     'shared/WRITING_FOR_AGENTS.md',
-    'shared/deep-modules.md',
     'shared/detect-check-scripts.mjs',
-    'shared/interface-design.md',
     'shared/providers/GERRIT.md',
     'shared/providers/GITHUB.md',
     'shared/providers/GITLAB.md',
@@ -77,12 +73,6 @@ test('shared instruction, provider, rule, output-style, and helper closure is ca
     'projects/sveltekit-paths.md',
   ]);
   assert.deepEqual(await filesBelow(path.join(content, 'output-styles')), ['mpx-terse.md']);
-
-  const helpers = await Promise.all(['deep-modules.md', 'interface-design.md']
-    .map(name => readFile(path.join(content, 'instructions/shared', name), 'utf8')));
-  for (const needle of ['Deep modules', 'Interface Design for Testability']) {
-    assert.ok(helpers.some(source => source.includes(needle)), needle);
-  }
 });
 
 test('reporting links are self-contained in native presentation instructions', async () => {
@@ -250,6 +240,7 @@ test('agent model and effort defaults project consistently across harnesses', as
     'context7-docs-fetcher': ['mechanical', 'xhigh'],
     'issue-finder': ['mechanical', 'high'],
     'reviewer-test-quality': ['standard', 'high'],
+    'visual-verifier': ['standard', 'high'],
     'reviewer-security': ['standard', 'high'],
     'reviewer-performance': ['standard', 'high'],
     'reviewer-error-handling': ['standard', 'high'],
@@ -273,7 +264,7 @@ test('agent model and effort defaults project consistently across harnesses', as
 
 test('specialists have compiler metadata and preserve their workflow contracts', async () => {
   const semanticNeedles: Record<keyof typeof specialistMetadata, string[]> = {
-    'chrome-devtools-tester': ['Browser actions may mutate', 'take_snapshot', 'Browser Test Report'],
+    'visual-verifier': ['Open every captured screenshot', 'raw Playwright', 'Visual Acceptance Report'],
     'context7-docs-fetcher': ['Resolve Library ID', 'Check Version', 'Answer from Docs Only'],
     executor: ['Implement the assigned scope', 'Implementation Quality', 'Coverage Changes'],
     'issue-finder': ['Prefer precision over recall', 'instant match', 'candidates` contains at most three'],
@@ -347,7 +338,7 @@ test('compiler resolves native commands and every added local Markdown dependenc
   assert.match(byPath.get('dist/pi/instructions/shared/AGENTS.md')!, /\/skill:mpx-<name>/);
   assert.match(byPath.get('dist/claude/instructions/shared/AGENTS.md')!, /\/mpx-<name>/);
   assert.match(byPath.get('dist/pi/agents/mpx-executor.md')!, /Use meaningful end-to-end tests for user-facing behavior/);
-  assert.match(byPath.get('dist/claude/agents/mpx-chrome-devtools-tester.md')!, /Playwright Testing — Reliability Contract/);
+  assert.match(byPath.get('dist/claude/agents/mpx-visual-verifier.md')!, /one-time visual acceptance/);
   assert.ok(byPath.has('dist/pi/rules/projects/storybook.md'));
   assert.ok(byPath.has('dist/claude/output-styles/mpx-terse.md'));
 });

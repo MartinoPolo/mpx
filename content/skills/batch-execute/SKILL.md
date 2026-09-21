@@ -37,9 +37,12 @@ range/list/label. Keep `AFK`; before filtering, route `HITL` or `design needed` 
 unless that exact label was explicitly selected. Parse `## Blocking Relationships`/body links and
 drop Issues with open blockers. Apply size last while preserving provider order.
 
-In board-direct mode, read `.mpx/BOARD.md`; select every item under `# To Process` regardless of
-checkbox and read linked files under `.mpx/board-files/`. In Issue mode board entries live under
-`# Ready to implement`. Create a visible progress entry for every selected and skipped item using
+In board-direct mode, read `.mpx/BOARD.md` and select only unchecked top-level items beginning with
+`- [ ]` under `# To Process`; ignore checked, nested, annotated, and downstream items. Capture each
+complete original item block, including continuation lines and image wikilinks. Read each linked
+image through `.mpx/board-files/<filename>`; use the filename and ignore an optional display width
+such as `|639` in the wikilink. In Issue mode board entries live under `# Ready to implement`.
+Create a visible progress entry for every selected and skipped item using
 the runtime task facility when available; mark each selected item in progress before its worker
 starts and completed only after its commit is confirmed, while skipped items retain their recorded
 reason.
@@ -81,20 +84,50 @@ its permitted formatting edits finish before dispatching the default four review
 checks in parallel; add security/performance/error-handling for `--full-review`; use no reviewers
 for `--no-review` but still run checks/tests. Design reasonable, proportional test coverage from the
 requirements, important failure modes, and known regressions; prefer existing coverage and add or
-update tests only when they meaningfully verify changed behavior. E2E and assertion-based browser
-verification apply to changed user-facing surfaces, with server-freshness/checkout sanity first and
-explicit PASS/FAIL per surface. Main evaluates checker and reviewer results, distinguishes root causes from symptoms, and resolves contradictory advice before authorizing repairs. Preserve uncertainty and missing evidence rather than guessing.
-Send every accepted repair to a fresh `mpx-executor` with the selected test mode, relevant
-requirements, failures, acceptance criteria, a precise repair objective, and file pointers;
-instruct it to inspect the current `git diff` and relevant files itself. Route unresolved findings to
-`mpx-unresolved-issue-tracker`; blockers stop publication. Re-dispatch affected checks/reviewers and
-require a fresh complete local verification before publication.
+update tests only when they meaningfully verify changed behavior. Persistent E2E regression testing
+applies to changed user-facing surfaces.
+
+When live verification is needed, main discovers the relevant app and command from repository
+instructions and project configuration, reuses only a URL confirmed for this checkout, or starts and
+verifies the server while keeping logs and artifacts outside tracked content. Main owns its
+lifecycle, stops only processes it started, and preserves user-owned processes.
+
+After final formatting leaves stable source, dispatch one `mpx-visual-verifier` using its
+declared model settings when the batch changes rendered appearance or visually
+observable interaction. This one-time visual acceptance is independent of persistent E2E results,
+`--no-tdd`, and `--no-review`; skip it for nonvisual changes. Supply the latest requirements, Design
+Mapping, affected feature, states, and viewports, checkout identity, main's verified URL, only
+explicitly approved project test-auth context, and an artifact location outside tracked content.
+The verifier never manages server processes or source. It uses the project's raw Playwright by
+default and captures and inspects screenshots in the same worker; do not dispatch a separate
+analyzer.
+
+Usually capture two to five representative screenshots covering the default state plus materially
+distinct affected edge or responsive states, with ten as the default maximum rather than a quota or
+exhaustive matrix. Require concise per-requirement and per-state `PASS`, `FAIL`, or `BLOCKED`
+findings, actual versus expected behavior, labeled screenshot paths, and omitted states or
+uncertainty. Main evaluates findings without routinely loading every image. Use advanced reasoning only
+through a supported model override for ambiguous visual reasoning, never as a parallel routine
+analyst. Visual failure or blockage stops publication unless resolved through the existing repair
+gate.
+
+Main evaluates checker, reviewer, and visual findings, distinguishes root causes from symptoms, and
+resolves contradictory advice before authorizing repairs. Preserve uncertainty and missing evidence
+rather than guessing. Send every accepted repair to a fresh `mpx-executor` with the selected test
+mode, relevant requirements, failures, acceptance criteria, a precise repair objective, and file
+pointers; instruct it to inspect the current `git diff` and relevant files itself. Route unresolved
+findings to `mpx-unresolved-issue-tracker`; blockers stop publication. Re-dispatch affected
+checks/reviewers, rerun affected visual states after local or CI repairs, regenerate stale
+screenshots, and require a fresh complete local verification before publication.
 
 ## Board writeback
 
-Move every successful item to `# Manual testing`, creating the heading if needed. Leave `- [ ]`;
-only the user marks manual verification. Match Issue-mode entries by their native `issue:<id>`
-annotation or body link and board-direct entries by exact text. Do not lose attached image links.
+Move every successful complete original item block to `# Manual testing`, creating the heading if
+needed. Preserve continuation lines and image wikilinks. Leave the checkbox unchanged as `- [ ]`.
+Only the user marks manual verification and moves verified work to `# Archive`. Match Issue-mode
+entries by the exact canonical `issue:<id>` annotation or body link and board-direct entries by exact original
+text. Edit `.mpx/BOARD.md`; if Edit or Write refuses the symlink, resolve its real vault target and
+edit that file.
 
 ## Publish
 
@@ -112,4 +145,6 @@ explicit PR before completing publication. The `pr` endpoint remains unmerged.
 For CI repairs, supply the validated repository, PR, branch, commit, and failing run/job identities.
 
 Report Issue→commit mappings, skips and gate decisions, exact checks, review fixes/findings, visual
-PASS/FAIL per surface, board moves, PR ID/URL, CI, merge state, and blockers.
+`PASS`/`FAIL`/`BLOCKED` per requirement and state, board moves, PR ID/URL, CI, merge state, and
+blockers. When visual acceptance ran, include a small representative gallery of openable links to
+final screenshots; do not commit them or automatically upload or publish them through CI.

@@ -8,8 +8,9 @@
   `/mpx-<name>`. Preserve project resources and native discovery precedence.
 - Current product branding, configuration, and registrations use MPX naming. Native account roots,
   credentials, historical backups, Git history, and saved transcripts are not renamed or rewritten.
-- Keep the retained source checkout and protected backups until its sessions stop and replacement
-  restart/resurrection acceptance passes. Agents must not move a running checkout or create worktrees.
+- Preserve unique source history, private configuration, and recovery data through replacement
+  restart/resurrection acceptance. Historical sessions need not be cleaned or rewritten for retirement;
+  follow [the cleanup checklist](../CLEANUP.md) for retained locations.
 - Personal Claude authentication is an accepted exception while its subscription is inactive.
   Recheck authenticated fresh/resume behavior if the subscription returns.
 - `mpx-ports` and `mpx-worktrees` remain outside this retirement scope.
@@ -23,8 +24,8 @@ owned Windows Terminal profile. Configuration lives at `$APPDATA/mpx/config.json
 and loaded code until restarted; they are not evidence of fresh-launch routing.
 
 Legacy installed MPX and direct `l*` recovery routes remain removed. `bin/xpi` is the native-only
-launcher, not a legacy installation. Protected transaction pointers in canonical `.local/` identify
-both the retained source checkout and recovery artifacts; see [account recovery](ACCOUNT_ROLLOUT.md).
+launcher, not a legacy installation. Protected transaction pointers were moved out of canonical
+`.local/` into private backup storage; see [account recovery](ACCOUNT_ROLLOUT.md) for their location.
 Do not replay historical transactions against current paths without reviewing their targets.
 
 ## Remaining acceptance
@@ -35,8 +36,9 @@ Do not replay historical transactions against current paths without reviewing th
 3. Save work, restart Orca, and restore representative personal/work sessions. Separately coordinate
    a Windows reboot and repeat restoration. Verify account, project, conversation, model, and
    recoverable effort; record unavailable state explicitly.
-4. Stop sessions using the retained source checkout before moving or archiving it. Audit active
-   routes and restore entries before retirement; keep protected backups through acceptance.
+4. Audit active routes and preserve unique local data before archiving retained source folders.
+   Legacy profiles may remain broken; keep protected backups through acceptance. Grovekeeper is
+   deliberately excluded from active-project rule-link migration.
 
 Saved transcripts and Orca restore entries can legitimately retain their original working directory.
 Verify an explicit native resume at the new location or start a fresh session; never silently

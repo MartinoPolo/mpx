@@ -15,17 +15,19 @@ metadata:
 # board-setup
 
 One-time setup that creates this project's Obsidian **board** and links it into the repo, so
-`board-to-issues` and `batch-execute` can read requirements and pasted images. Read
-[Board Convention]({{MPX_SHARED_INSTRUCTIONS}}/BOARD_CONVENTION.md) now.
+`board-to-issues` and `batch-execute` can read requirements and pasted images.
 
 ## Step 1: Resolve paths
 
-- **Repo root** — `git rev-parse --show-toplevel`.
-- **Project and board identity** — read the nearest valid `mpxconfig.json`; use `projectId` as the
-  canonical project identity. When `issues.provider` is `kanbanflow`, read required `boardId` and optional `boardName` from
-  `issues.metadata` as the board selection; never infer a board from the repository name or
-  account defaults. For the Obsidian filename, use `boardName` when present, otherwise the final
-  segment of `project.id`. Stop if required configuration is missing or ambiguous.
+- **Repo root** — `git rev-parse --show-toplevel` for the current checkout.
+- **Project and board identity** — resolve `mpxconfig.json` from the Git main checkout. Only when the manifest is
+  absent may a matching explicit machine-local project override supply the same fields; do not
+  search parent directories for another manifest. Stop when configuration is missing, invalid, or
+  lacks a required field. Use `projectId` as the canonical project identity. When `issues.provider`
+  is `kanbanflow`, require `issues.metadata.boardId` and use optional `issues.metadata.boardName`;
+  never infer a board
+  from the repository name or account defaults. For the Obsidian filename, use `boardName` when
+  present, otherwise the final segment of `projectId`.
 - **Vault root** — the `[vault-root]` argument if given; else resolve `MPX_OBSIDIAN_VAULT` from the
   environment; else ask the user for the absolute Obsidian vault path (and suggest they set
   `MPX_OBSIDIAN_VAULT` so future projects skip this prompt). Never guess a machine path.
@@ -49,6 +51,12 @@ The script is idempotent and:
   symlink → the board;
 - appends `.mpx/BOARD.md` and `.mpx/board-files/` to `.gitignore`, inserting a line break first when
   the existing file has no final newline.
+
+Both links are per-machine and gitignored. The lanes are the workflow state: unchecked top-level
+notes enter `# To Process`; `# Ready to implement` means a provider Issue exists;
+`# Manual testing` means implemented, awaiting manual
+testing. Only the user moves verified work to `# Archive`. The checkbox belongs to the user, and
+workflows leave it unchanged.
 
 Without Windows Developer Mode the direct symlink call fails; the script then retries that single op
 in an elevated child process (`Start-Process -Verb RunAs`), which raises a UAC prompt. Tell the user

@@ -58,6 +58,10 @@ conventions belong in `AGENTS.md`; rollout evidence and recovery belong in `migr
   alone cannot establish that another session is not using it.
 - **Treat tests as evidence of requirements.** New acceptance criteria take priority over obsolete
   tests. `--no-tdd` excludes test creation during implementation, not existing verification.
+- **Separate visual acceptance from persisted E2E coverage.** Visual changes receive a one-time
+  raw-Playwright check against the latest requirements and a user-facing screenshot gallery. One
+  standard-class verifier captures and inspects evidence to avoid duplicate context and handoffs;
+  escalate only ambiguous visual reasoning. Passing E2E tests does not establish visual acceptance.
 
 ## Configuration and accounts
 

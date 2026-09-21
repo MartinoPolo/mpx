@@ -1,8 +1,7 @@
 ---
 name: playwright-test
 description:
-  'Verifies UI changes with raw Playwright over a defined scope and reports a per-surface PASS/FAIL
-  table...'
+  'Runs one-time visual acceptance of the latest UI requirements and returns findings with an inspected screenshot gallery.'
 metadata:
   author: MartinoPolo
   version: '0.5'
@@ -13,74 +12,66 @@ metadata:
     defaultExposure: explicit-only
 ---
 
-# mpx-playwright-test
+# Visual Acceptance with Playwright
 
-Run reliable browser verification over a defined scope. This skill owns **scope → surfaces** and
-orchestration. Read the canonical compiled-relative `{{MPX_SHARED_INSTRUCTIONS}}/PLAYWRIGHT_TESTING.md` now — the
-reliability rules (sanity-gate, assert-don't-eyeball, programmatic auth, never `networkidle`) live
-there and are followed verbatim. Also read `{{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md`; after selecting the
-repository provider, read its linked native repository guide. Resolve each reference relative to
-this loaded skill first. If projection relocation makes that impossible, read
-`MPX_ACTIVE_CONTENT_ROOT`, require an absolute path, resolve the referenced projection-relative file
-beneath it, and verify the literal result exists and remains contained by that root. Stop if
-validation fails; do not search ordered roots or guess an installation checkout. the invocation
-input
+Verify that the finished UI satisfies the latest visual requirements. This skill owns scope and
+orchestration; `mpx-visual-verifier` captures and inspects the evidence. This complements persisted
+E2E tests and does not create or replace them. Do not fix implementation defects during this skill.
 
-## Rules
+## 1. Resolve scope and requirements
 
-- **Raw Playwright only** — the project's installed `playwright` dep, run as a Node script. Browser
-  MCP work belongs to the exploratory `mpx-chrome-devtools-tester` agent, not this reliability path.
-- **Verify only** — assert and screenshot, leaving source untouched.
-- This skill encodes **policy**; the runner command, dev-server port, auth endpoint, and seed users
-  come from the project's `AGENTS.md` / memory, not from here.
+Parse the invocation input:
 
-## Step 1: Resolve scope
+- `uncommitted` or empty: inspect `git diff --name-only HEAD` and relevant untracked files.
+- `review:<id>`: follow [Provider Routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md) and the
+  selected repository guide to obtain the explicit review's requirements, source revision, and
+  changed files. Confirm the checkout being verified matches that revision; stop on ambiguity.
+- Otherwise: use the supplied description of the feature and its latest requirements.
 
-Parse `the invocation input`:
+Read the agreed requirements and linked design context, then identify changes to rendered
+appearance or visually observable interaction. Do not infer expected results solely from the
+implementation. Ask about material ambiguity. If no visual changes exist, report the reason and
+skip browser work; passing E2E tests is not a reason to skip visual acceptance.
 
-- `uncommitted` (or empty) → **working-tree mode**: `git diff --name-only HEAD` (+ untracked).
-- `review:<id>` → **PR mode**: resolve the repository provider from `mpxconfig.json`, use its
-  canonical native PR command against the explicit repository target in the native authenticated environment, retain the returned source
-  revision and changed-file metadata, and stop for clarification when no explicit PR ID is supplied.
-  Never invent a cross-provider facade command.
-- anything else → **verbal mode**: treat the text as a description of the app area to test.
+## 2. Prepare the application
 
-## Step 2: Map scope → surfaces
+Read repository instructions, `package.json`, and referenced configuration for the relevant app,
+installed Playwright helper, server command, and approved test-auth setup. Use a supplied URL only
+when it serves the intended checkout. Otherwise, if project policy permits, start the documented
+local dev or Storybook command, retain its process identity, and verify readiness with a bounded
+wait. Do not guess a port, disturb user-owned servers, or install missing tooling automatically.
+Report blocked prerequisites rather than claiming successful verification.
 
-- **working-tree / PR mode** — from the changed file list, keep UI-affecting files (routes,
-  components, styles, layouts). Resolve each to the route(s) that render it. Drop pure backend/logic
-  changes: they have **no visual surface** and are out of scope for this skill.
-- **verbal mode** — translate the described area into the concrete route(s) and interactions to
-  exercise (run a quick `Explore` if the routes are not obvious).
+The orchestrator owns server preparation and cleanup; the verifier receives a verified URL and
+returns server failures to it. Stop only processes started by this invocation on completion or
+failure. Never expose credentials or repurpose provider credentials. Supply only approved test-auth
+context; authentication should be programmatic unless login itself is the changed feature.
 
-If mapping yields zero UI surfaces, stop and report that there is nothing to visually verify.
+## 3. Delegate visual acceptance
 
-## Step 3: Discover project specifics
+Invoke `mpx-visual-verifier` with the requirements, design constraints, affected routes and states,
+checkout identity, verified URL, project runner/auth details, and an untracked task-local artifact
+directory. Use its declared model settings; reserve an advanced override for unresolved visual
+reasoning, not routine capture. Give it these acceptance expectations:
 
-Per `{{MPX_SHARED_INSTRUCTIONS}}/PLAYWRIGHT_TESTING.md` § _Discover project specifics_, read the project's `AGENTS.md`
-/ `repository instructions` / memory for: the Playwright runner/helper (e.g. `scripts/shot.mjs`),
-the parent-provided server URL, the sign-in API + seed users, and the approved project test-login
-credential locations (`.local/`, `.env.local`). Preserve this project-owned credential reading and
-never print or publish values. If no runner script exists, the verifier writes a minimal one from
-the shared skeleton.
+- Use raw project Playwright with isolated Chrome contexts; missing prerequisites are `BLOCKED`,
+  not permission to switch to MCP or a personal browser. MCP diagnostics require an explicit request.
+- Prove checkout freshness before accepting evidence. Use explicit waits and approved test data.
+- Capture the default state and materially different affected edge/responsive states. Usually
+  2–5 screenshots, at most 10 by default across the run; this is a ceiling, not a quota.
+- Open and critically inspect every screenshot against the requirements: layout, colors, typography,
+  spacing, clipping, content, and required values. Supplement images with geometry or style/state
+  measurements when useful, without arbitrary CSS assertions or one-assertion-per-surface limits.
+- Return per-requirement/state `PASS` / `FAIL` / `BLOCKED`, expected versus observed defects, labeled
+  screenshot paths, and omitted states. Continue independent checks after individual failures.
 
-## Step 4: Verify in a sub-agent
+The verifier may create a temporary runner and evidence, but must not edit application source,
+create persistent tests, manage servers, or automatically commit/upload artifacts or publish CI.
 
-Spawn a read-only runtime sub-agent with the standard model class to run the verification. Give it:
-the surface list (with the route + what changed for each), the discovered runner/server-URL/auth details,
-and the instruction to Read `{{MPX_SHARED_INSTRUCTIONS}}/PLAYWRIGHT_TESTING.md` and follow it exactly —
-**stale-worktree sanity-gate FIRST**, then programmatic auth, explicit waits (never `networkidle`),
-one measured assertion per surface, a screenshot per surface under `test-results/`. It verifies
-every surface even if one fails, and returns the PASS/FAIL table — it does not fix anything.
+## 4. Report
 
-The sanity-gate is load-bearing: if the supplied server does not reflect the code under test, the
-sub-agent reports every affected surface `BLOCKED` with freshness evidence. Project servers are
-started and managed manually in Orca or a project terminal; this skill never kills, starts,
-restarts, or replaces one.
-
-## Step 5: Report
-
-Relay the sub-agent's per-surface table: surface, `PASS`/`FAIL`/`BLOCKED`, measured value vs
-expected, and the screenshot path. Call out any surface where the sanity-gate had to restart the
-server. Failures are reported, not fixed — hand them back to the caller (or to `mpx execute`) to
-resolve.
+Evaluate the verifier's concise findings; do not routinely load every screenshot into main context.
+Return visual acceptance results and a representative labeled gallery of openable screenshot links
+for the user, including relevant edge states and limitations. Keep artifacts available after server
+cleanup. Hand defects and blockers back to the caller for repair. Any later repair requires fresh
+verification of affected states and replacement of stale screenshots before reporting final success.
