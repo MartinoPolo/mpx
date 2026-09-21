@@ -85,7 +85,8 @@ checks in parallel; add security/performance/error-handling for `--full-review`;
 for `--no-review` but still run checks/tests. Design reasonable, proportional test coverage from the
 requirements, important failure modes, and known regressions; prefer existing coverage and add or
 update tests only when they meaningfully verify changed behavior. Persistent E2E regression testing
-applies to changed user-facing surfaces.
+applies to changed user-facing surfaces. Reviewers must run in sessions distinct from the
+author/executor; request fresh review of changed scope when the reviewed diff changes.
 
 When live verification is needed, main discovers the relevant app and command from repository
 instructions and project configuration, reuses only a URL confirmed for this checkout, or starts and

@@ -44,7 +44,6 @@ test('shared instruction, provider, rule, output-style, and helper closure is ca
     'shared/COMPACT.md',
     'shared/PROJECT_DOC_TEMPLATES.md',
     'shared/PROVIDER_ROUTING.md',
-    'shared/REVIEWER_PROTOCOL.md',
     'shared/SENTRY.md',
     'shared/WRITING_FOR_AGENTS.md',
     'shared/detect-check-scripts.mjs',
@@ -282,11 +281,46 @@ test('specialists have compiler metadata and preserve their workflow contracts',
   }
 });
 
+test('reviewers inline their read-only contract without provider guides', async () => {
+  const projections = await projectContent(root);
+  const reviewerNames = (await readdir(path.join(content, 'agents')))
+    .filter(name => name.startsWith('reviewer-') && name.endsWith('.md'));
+  assert.ok(reviewerNames.length > 0);
+  for (const harness of ['pi', 'claude']) {
+    for (const name of reviewerNames) {
+      const destination = `dist/${harness}/agents/mpx-${name}`;
+      const projection = projections.find(item => item.path === destination);
+      assert.ok(projection, destination);
+      const text = projection.content.toString('utf8');
+      assert.match(text, /do not edit files, run mutating commands, or\s+publish comments/);
+      assert.match(text, /report only actionable,\s+high-confidence issues/);
+      assert.match(text, /Identify the reviewed revision or diff/);
+      assert.match(text, /give severity, file:line, and the concrete consequence/);
+      assert.doesNotMatch(text, /REVIEWER_PROTOCOL|PROVIDER_ROUTING|# Provider Routing|Native Guide|\{\{include:/);
+      assert.doesNotMatch(text, /accept an empty report|An empty report is success/);
+      assert.match(text, name === 'reviewer-security.md'
+        ? /Critical\|High\|Medium/ : /Critical\|Important\|Minor/);
+    }
+  }
+  assert.ok(!projections.some(item => item.path.endsWith('/REVIEWER_PROTOCOL.md')));
+  for (const harnessRoot of ['pi', 'claude/.claude']) {
+    for (const name of ['execute', 'batch-execute', 'review', 'code-clean', 'check-fix']) {
+      const destination = `dist/packs/development/${harnessRoot}/skills/mpx-${name}/SKILL.md`;
+      const projection = projections.find(item => item.path === destination);
+      assert.ok(projection, destination);
+      const text = projection.content.toString('utf8');
+      const normalized = text.replace(/\s+/g, ' ');
+      assert.match(normalized, /Reviewers must run in sessions distinct from the author\/executor/);
+      assert.match(normalized, /request fresh review of changed scope when the reviewed diff changes/);
+    }
+  }
+});
+
 test('native-first content has stable projected dependencies and no retired runtime dependency', async () => {
   const relevant = [
     ...Object.keys(specialistMetadata).map(name => path.join(content, 'agents', `${name}.md`)),
     ...(await filesBelow(path.join(content, 'instructions')))
-      .filter(name => !['shared/COMPACT.md', 'shared/REVIEWER_PROTOCOL.md'].includes(name))
+      .filter(name => name !== 'shared/COMPACT.md')
       .map(name => path.join(content, 'instructions', name)),
     path.join(content, 'output-styles/mpx-terse.md'),
   ];

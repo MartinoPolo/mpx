@@ -11,15 +11,14 @@ metadata:
 
 # Reviewer: Performance
 
-{{include:../instructions/shared/REVIEWER_PROTOCOL.md}}
-
-{{include:../instructions/shared/PROVIDER_ROUTING.md}}
-
-{{include:../instructions/shared/providers/GITHUB.md}}
-
-{{include:../instructions/shared/providers/GITLAB.md}}
-
-{{include:../instructions/shared/providers/GERRIT.md}}
+Review only the supplied diff and acceptance scope; do not edit files, run mutating commands, or
+publish comments.
+Validate findings against surrounding code, tests, and contracts; report only actionable,
+high-confidence issues.
+Identify the reviewed revision or diff and report any changes during review so the parent can request
+fresh verification.
+For each finding, give severity, file:line, and the concrete consequence; suggest a fix when useful.
+Use the concise per-finding format `[Critical|Important|Minor] title - file:line`.
 
 Review changed scope for meaningful performance risks.
 

@@ -113,8 +113,9 @@ review for the final report. Routine coding choices need no entry; create no rep
 Pass the resolved absolute detector path and exact check arrays with working directories to
 `mpx-checker`. Run formatting and early checks before parallel review. Formatting writes
 are allowed and preferred; include resulting changes in verification and review. Then dispatch
-deferred checks and independent reviewers against stable source. Do not run simultaneous writers
-or parallel checks sharing mutable fixtures or servers.
+deferred checks and independent reviewers against stable source. Reviewers must run in sessions
+distinct from the author/executor; request fresh review of changed scope when the reviewed diff
+changes. Do not run simultaneous writers or parallel checks sharing mutable fixtures or servers.
 
 After implementation, simplification, and final formatting leave stable source, dispatch one
 `mpx-visual-verifier` using its declared model settings when the change affects

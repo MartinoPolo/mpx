@@ -40,7 +40,9 @@ imply installing/enabling it globally.
 Dispatch `mpx-checker` with the ordered fast commands, working directories, and resolved absolute
 detector path. Formatting writes are allowed and preferred;
 finish formatting before parallel reviewers inspect stable source. Include resulting changes in
-final verification/review. Avoid unsafe parallel checks sharing mutable fixtures or servers.
+final verification/review. Reviewers must run in sessions distinct from the author/executor;
+request fresh review of changed scope when the reviewed diff changes. Avoid unsafe parallel checks
+sharing mutable fixtures or servers.
 
 Main evaluates checker and reviewer results, distinguishes root causes from symptoms, and resolves contradictory advice before authorizing repairs. Preserve uncertainty and missing evidence rather than guessing.
 

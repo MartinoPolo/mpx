@@ -42,7 +42,9 @@ Rules:
 ### Step 2: Spawn Review Subagents per Group
 
 For each file group, spawn the named `mpx-reviewer-code-quality` agent using its declared review
-model policy (finding duplication and judging risk needs judgment).
+model policy (finding duplication and judging risk needs judgment). Reviewers must run in sessions
+distinct from the author/executor; request fresh review of changed scope when the reviewed diff
+changes.
 
 Use this exact review prompt shape:
 

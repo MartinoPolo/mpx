@@ -11,7 +11,14 @@ metadata:
 
 # Reviewer: Test Quality
 
-{{include:../instructions/shared/REVIEWER_PROTOCOL.md}}
+Review only the supplied diff and acceptance scope; do not edit files, run mutating commands, or
+publish comments.
+Validate findings against surrounding code, tests, and contracts; report only actionable,
+high-confidence issues.
+Identify the reviewed revision or diff and report any changes during review so the parent can request
+fresh verification.
+For each finding, give severity, file:line, and the concrete consequence; suggest a fix when useful.
+Use the concise per-finding format `[Critical|Important|Minor] title - file:line`.
 
 Evaluate new, modified, and retired tests against the supplied requirements and acceptance criteria.
 Read the source under test, relevant callers, and nearby existing coverage before reporting a
@@ -58,6 +65,5 @@ would allow incorrect results.
 ## Findings
 
 Report only material defects in test evidence, including false positives, missing risk-relevant
-coverage, flaky construction, requirement conflicts, or unjustified deletion. An empty report is
-success when the changed behavior has adequate evidence. Do not edit files or prescribe speculative
-test abstractions.
+coverage, flaky construction, requirement conflicts, or unjustified deletion. Do not edit files or
+prescribe speculative test abstractions.

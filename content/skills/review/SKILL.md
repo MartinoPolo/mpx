@@ -67,8 +67,9 @@ Partial coverage runs the first four.
 2. Inspect relevant callers, tests, error paths, security boundaries, compatibility impact, and
    repository contracts—not only changed lines.
 3. Spawn the selected reviewers in parallel with the diff, files, task or specification, acceptance
-   criteria, conventions, and scope. Accept high-confidence findings only and reconcile each result
-   once.
+   criteria, conventions, and scope. Reviewers must run in sessions distinct from the author/executor;
+   request fresh review of changed scope when the reviewed diff changes. Accept high-confidence
+   findings only and reconcile each result once.
 4. When useful and permitted, run focused repository checks. Existing CI state may be used as
    evidence; fetch failed-check details only when needed. Do not require CI watching, polling, or
    review loops.
