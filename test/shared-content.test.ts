@@ -142,6 +142,31 @@ test('retired design pipeline is excluded from source and projections', async ()
   }
 });
 
+test('runtime profiles enforce the Claude model floor without changing Pi Codex routing', async () => {
+  const profiles = JSON.parse(await readFile(path.join(content, 'runtime-profiles.json'), 'utf8'));
+  assert.deepEqual(profiles.models.claude, {
+    mechanical: 'sonnet',
+    exploration: 'sonnet',
+    standard: 'sonnet',
+    advanced: 'opus',
+    frontier: 'fable',
+  });
+  assert.deepEqual(profiles.models.pi, {
+    mechanical: 'openai-codex/gpt-5.6-luna',
+    exploration: 'openai-codex/gpt-5.6-luna',
+    standard: 'openai-codex/gpt-5.6-terra',
+    advanced: 'openai-codex/gpt-5.6-sol',
+    frontier: 'openai-codex/gpt-6-astra',
+  });
+
+  const claudeAgents = (await projectContent(root)).filter(projection =>
+    projection.path.startsWith('dist/claude/agents/mpx-') && projection.path.endsWith('.md'));
+  assert.ok(claudeAgents.length > 0);
+  for (const projection of claudeAgents) {
+    assert.doesNotMatch(String(frontmatter(projection.content.toString('utf8')).model), /haiku/i, projection.path);
+  }
+});
+
 test('agent model and effort defaults project consistently across harnesses', async () => {
   const expectedDefaults = {
     executor: ['advanced', 'high'],

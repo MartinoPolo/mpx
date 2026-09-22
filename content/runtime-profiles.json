@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "models": {
     "claude": {
-      "mechanical": "haiku",
+      "mechanical": "sonnet",
       "exploration": "sonnet",
       "standard": "sonnet",
       "advanced": "opus",
