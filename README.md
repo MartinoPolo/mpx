@@ -55,7 +55,7 @@ Use `/skill:mpx-<name>` in Pi or `/mpx-<name>` in Claude Code:
 
 | Skill | Purpose |
 | --- | --- |
-| `execute` | Implement and verify an Issue; work stops at green CI with an open PR/MR, personal continues through merge and safe base synchronization |
+| `execute` | Implement and verify an Issue; work stops at green CI with an open PR/MR, personal continues through confirmed merge |
 | `commit` | Commit locally |
 | `commit-push` | Commit and push |
 | `pr` | Create/update a draft PR/MR and monitor CI, including commit and push |

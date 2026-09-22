@@ -1,6 +1,6 @@
 ---
 name: ship
-description: Ship intended work through commit, push, native PR, CI, authorized merge, and safe base sync
+description: Ship intended work through commit, push, native PR, CI, and authorized merge
 argument-hint: '[base-branch] [--no-auto-merge]'
 metadata:
   author: MartinoPolo
@@ -19,10 +19,7 @@ Prepare a substantive summary of the intended change before delivery. Read
 [Provider Routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md). Publication requires a valid
 configured `repository.provider`; resolve it and load only its selected native guide. Invocation
 authorizes merge unless `--no-auto-merge` is present. Resolve the current source branch and pass it
-explicitly to `mpx-shipper`. Before the initial shipper invocation, if base synchronization is
-requested, identify an existing target-branch checkout and obtain trustworthy availability evidence
-or user confirmation; if unavailable, omit synchronization and preserve distinct merge and base-sync
-statuses. Invoke `mpx-shipper` with endpoint `merge`, the explicit intended paths, summary and
+explicitly to `mpx-shipper`. Invoke `mpx-shipper` with endpoint `merge`, the explicit intended paths, summary and
 `the invocation input`, actual target branch when supplied, configured remote and validated
 repository target, verified Issue identity/link when any, existing immutable PR/change and CI
 identities, repository merge policy, merge authorization, and `no_auto_merge` state.
@@ -48,12 +45,8 @@ repair before invoking the shipper again. The shipper never repairs.
 For CI repairs, supply the validated repository, PR, branch, commit, and failing run/job identities.
 
 Without `--no-auto-merge`, completion requires provider-confirmed merge. With it, completion is green
-CI with the explicit PR still open. After confirmed merge, have the shipper perform safe base
-synchronization only for the pre-identified existing target checkout in the same repository. Require
-a clean index and worktree, the correct branch and upstream, and no in-progress Git operation, but
-do not treat clean Git state as evidence of concurrent availability. If availability or another
-safety condition is missing, report **merged with base sync blocked**, not a failed merge.
+CI with the explicit PR still open.
 
 Report actual results after delivery, including completed stage, commit/branch/repository/PR/run
-identities, CI and merge state, base synchronization separately, excluded artifacts, attempts,
+identities, CI and merge state, excluded artifacts, attempts,
 remaining work, and blockers.

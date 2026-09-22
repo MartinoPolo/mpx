@@ -18,7 +18,7 @@ metadata:
 Main owns issue/specification analysis, evaluates results, approves repairs, and consolidates
 decisions. After analysis, delegate implementation, checks, reviews, simplification, publication,
 and CI monitoring. Invocation authorizes delivery: work repositories stop at green CI with an
-unmerged PR/MR; personal repositories require confirmed merge plus safe base update.
+unmerged PR/MR; personal repositories require confirmed merge.
 `--no-auto-merge` stops at green CI with the PR/MR open. Inline work commits locally without push,
 PR, or CI. Establish personal/work ownership from the resolved account/domain context; ask if it
 is unavailable or contradictory. Do not infer ownership from the Git host.
@@ -171,19 +171,15 @@ or Issue identity. Only provider Issue work uses `pr` for work repositories or `
 otherwise personal provider Issue work uses `merge`. For provider Issue delivery, supply the
 configured remote and validated repository target, independently verified Issue identity and
 canonical link, source and actual target branches, existing immutable PR/run identities, merge
-authorization, and repository merge policy. For personal base synchronization, identify an
-existing target-branch checkout and confirm it is idle; require clean index/worktree, correct
-upstream, no in-progress Git operation, and fast-forward only. Git status alone does not prove
-availability. Do not switch, create, or remove checkouts. Report confirmed merge and blocked base
-synchronization separately; do not claim the full personal endpoint when synchronization is blocked. Three shipping attempts total: initial attempt plus two repair/retry attempts. Do not
+authorization, and repository merge policy.
+Three shipping attempts total: initial attempt plus two repair/retry attempts. Do not
 reset this budget between stages or via goal continuation. Main evaluates shipping failures,
 delegates accepted repairs to a fresh executor, verifies again, and invokes the
 shipper with completed-stage evidence so it does not repeat completed operations.
 For CI repairs, supply the validated repository, PR, branch, commit, and failing run/job identities.
 
 The final user report comes after delivery and includes actual acceptance and delivery evidence,
-verification results, material choices and uncertainty, unresolved issues, and any blocked merge
-or base synchronization. When visual acceptance ran, include a small representative gallery of
+verification results, material choices and uncertainty, unresolved issues, and any blocked merge. When visual acceptance ran, include a small representative gallery of
 openable links to the final screenshots; do not commit them or automatically upload or publish them
 through CI. Durable decisions go into DECISIONS only after confirmation.
 

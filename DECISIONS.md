@@ -54,10 +54,11 @@ conventions belong in `AGENTS.md`; rollout evidence and recovery belong in `migr
   and authorizes repairs under a shared attempt budget that survives continuation.
 - **Make delivery intent explicit.** `pr` publishes a draft for human-controlled readiness. Execute
   leaves work PRs unmerged and autonomously merges personal work when authorized and verified.
-  Base synchronization requires an identified idle checkout and safe fast-forward; clean Git state
-  alone cannot establish that another session is not using it.
+  Post-merge base updates are manual so checkout-availability prompts cannot block completed delivery.
 - **Treat tests as evidence of requirements.** New acceptance criteria take priority over obsolete
   tests. `--no-tdd` excludes test creation during implementation, not existing verification.
+  Content tests cover compiler transformations, metadata, paths, and executable behavior—not authored
+  instruction wording or prose snapshots, which must remain freely editable.
 - **Separate visual acceptance from persisted E2E coverage.** Visual changes receive a one-time
   raw-Playwright check against the latest requirements and a user-facing screenshot gallery. One
   standard-class verifier captures and inspects evidence to avoid duplicate context and handoffs;
