@@ -365,6 +365,34 @@ test('default history shows every closed model-effort group with honest aggregat
   assert.doesNotMatch(text.join('\n'), /running|more groups/);
 });
 
+test('history summary columns align by terminal width across mixed models and metrics', () => {
+  const agents = [
+    ...Array.from({ length: 12 }, (_, index) => ({
+      id: `sol-${index}`, type: 'Worker', status: 'done', model: 'gpt-5.6-sol',
+      effort: 'high', peakInputTokens: 20_000, cost: 0.1,
+    })),
+    { id: 'terra', type: 'Worker', status: 'done', model: 'gpt-5.6-terra', effort: 'medium', peakInputTokens: 900, cost: 0.01 },
+    { id: 'wide', type: 'Worker', status: 'done', model: '模型', effort: 'unknown' },
+    { id: 'old', type: 'Worker', status: 'done', model: 'gpt-5.6-luna', effort: 'low', cost: 0 },
+    { id: 'new', type: 'Worker', status: 'done', model: 'gpt-6-luna', effort: 'low', peakInputTokens: 1000 },
+  ];
+  for (const view of ['summary', 'details'] as const) {
+    const rows = plain(renderPiFooter(snapshot({ agents }), 180, theme, view))
+      .filter(line => /^  [▸▾] /.test(line));
+    assert.equal(rows.length, 5);
+    const separatorColumns = rows.map(row => [...row.matchAll(/ · /g)]
+      .map(match => visibleWidth(row.slice(0, match.index))));
+    assert.equal(separatorColumns[0]!.length, 4);
+    for (const columns of separatorColumns) assert.deepEqual(columns, separatorColumns[0]);
+    assert.ok(rows.some(row => /Sol +·/.test(row)));
+    assert.ok(rows.some(row => /gpt-5\.6-luna/.test(row)));
+    assert.ok(rows.some(row => /×12 · 240\.0k \(20\.0k\) · \$1\.200$/.test(row)));
+    assert.ok(rows.some(row => /×1 +· 900 +· \$0\.010$/.test(row)));
+    assert.ok(rows.every(row => row === row.trimEnd()));
+    for (const width of [3, 20, 45]) assertBounded(renderPiFooter(snapshot({ agents }), width, theme, view), width);
+  }
+});
+
 test('history never merges distinct model versions sharing a short display alias', () => {
   const agents = [
     { id: 'one', type: 'Explore', status: 'completed', model: 'gpt-5.6-luna', effort: 'high', peakInputTokens: 100 },

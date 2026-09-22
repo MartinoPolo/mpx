@@ -470,11 +470,20 @@ export function renderPiFooterLayout(
   }
   const finishedCount = groups.reduce((count, group) => count + group.agents.length, 0);
   addLine(`▾ History (${finishedCount})`, { kind: 'history', startColumn: 0, endColumn: 1 });
-  for (const group of groups) {
-    const expanded = state.view === 'details' || state.expandedGroups.has(group.key);
+  const summaryRows = groups.map(group => {
     const collidingAlias = groups.some(other => other.identifier !== group.identifier && other.model === group.model);
     const label = collidingAlias ? group.identifier : group.model;
-    const summary = `${expanded ? '▾' : '▸'} ${colorAgentModel(group.identifier, label, theme)}${footerSeparator(theme)}${thinkingGauge(group.effort)}${footerSeparator(theme)}${aggregateMetrics(group).join(footerSeparator(theme))}`;
+    return [colorAgentModel(group.identifier, label, theme), thinkingGauge(group.effort), ...aggregateMetrics(group)];
+  });
+  const columnWidths = summaryRows[0]!.map((_, column) =>
+    Math.max(...summaryRows.map(fields => visibleWidth(fields[column]!))),
+  );
+  for (const [index, group] of groups.entries()) {
+    const expanded = state.view === 'details' || state.expandedGroups.has(group.key);
+    const fields = summaryRows[index]!.map((field, column, row) =>
+      column === row.length - 1 ? field : field + ' '.repeat(columnWidths[column]! - visibleWidth(field)),
+    );
+    const summary = `${expanded ? '▾' : '▸'} ${fields.join(footerSeparator(theme))}`;
     addLine(`  ${summary}`, { kind: 'group', startColumn: 2, endColumn: 3, groupKey: group.key });
     if (expanded) for (const line of agentDetailLines(group, theme)) addLine(line);
   }
