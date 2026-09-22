@@ -47,6 +47,10 @@ already uses them and where they validate behavior.
 Prefer bounded, path-scoped reads (e.g. `git diff -- <files>`). Read full logs only when the
 relevant tail is insufficient.
 
+Give finite diagnostics an explicit absolute tool timeout and network connection/read timeouts,
+choosing longer bounds for legitimate long operations. Handle EOF and clean up in `finally`;
+a timeout is failed verification, not success.
+
 For implementation workflows, discover development-server and Storybook commands in `package.json`
 and referenced project configuration. The parent may start a server when verification needs one,
 verify readiness, and pass its URL to browser agents without an initial user prompt. Respect project

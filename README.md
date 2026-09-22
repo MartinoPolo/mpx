@@ -114,5 +114,10 @@ Pi and Claude Code own authentication, settings, and history; MPX does not copy 
 conversations between accounts. Orca owns worktrees, terminals, servers, and desktop notifications.
 MPX safeguards prevent accidents; they are not a security sandbox.
 
+For agent Bash calls without `timeout`, MPX supplies a 120-second default through Pi's tool-call
+hook. Explicit timeouts and native execution/settings remain unchanged; choose a longer timeout
+for long operations. This does not guarantee descendant cleanup. See
+[scope and limitations](extensions/README.md#agent-bash-timeout-default).
+
 For migration and recovery, see [HANDOFF.md](migration/HANDOFF.md) and
 [ACCOUNT_ROLLOUT.md](migration/ACCOUNT_ROLLOUT.md).

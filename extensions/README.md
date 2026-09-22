@@ -11,6 +11,7 @@ worktree service, or notification fallback.
 | Context | `pi-context.ts` | Shared instructions, style, machine-root context, and compaction guidance |
 | Safeguards | `pi-safeguards.ts` | Native transport for dangerous-command, Git, package-manager, staged-secret, and Fallow policy |
 | Formatting | `pi-format.ts` | Awaited, bounded project formatter execution after native file changes |
+| Bash | `pi-bash.ts` | Default timeout for agent Bash calls that omit it |
 | UI | `pi-ui.ts` | Native lifecycle state, footer data, title fallback, and terminal-specific behavior |
 | Runtime | `pi-runtime.ts` | Activation guard and component composition |
 
@@ -46,6 +47,25 @@ Review discovery runs at footer startup, after branch changes, and approximately
 does not run while rendering or on ordinary session updates. Use Pi's `/reload` after changing the
 extension code; changing branches or waiting for the periodic refresh is enough for review state.
 Launch-provided `GH_CONFIG_DIR` and `GLAB_CONFIG_DIR` bindings are inherited unchanged.
+
+## Agent Bash timeout default
+
+`pi-bash.ts` uses Pi's supported mutable `tool_call` input to set `timeout: 120` only when a `bash`
+call omits it. Explicit values are untouched and remain subject to Pi's native validation. There is
+no additional override ceiling, tool replacement, settings reload, output cap, or subprocess backend.
+Native tool selection, shell settings, output, and cancellation/cleanup mechanisms remain intact.
+Previously unbounded calls now reach native timeout cleanup after the default deadline; successful
+background launches receive no additional cleanup. Choose an explicit longer timeout for long operations.
+
+The hook applies where the MPX extension is loaded, including non-isolated children loading it;
+not extension-disabled/isolated agents, direct SDK execution, other tools, or human `!`/`!!` commands.
+Another extension can modify arguments later, and a custom Bash implementation may ignore `timeout`.
+This is a missing-deadline safeguard, not guaranteed containment: native Windows tree cleanup remains
+best-effort, with no new guarantee of bounded cleanup or recovery after a hard parent exit.
+
+Keep network timeouts and normal EOF/finally cleanup in diagnostics. Output does not reset the native
+timeout; silence alone is not failure. Service lifetimes and join cancellation remain separate from
+a command deadline. No core/subagent patch or service manager is added.
 
 ## Native cancellation
 

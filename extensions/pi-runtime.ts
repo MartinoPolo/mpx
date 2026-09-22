@@ -6,6 +6,7 @@ import { readUserConfig } from '../src/config.js';
 import { resolveFooterRepository } from '../src/pi-footer-data.js';
 import { isMpxRuntimeSelected } from '../src/runtime-selection.js';
 import { createPiUiExtension } from './pi-ui.js';
+import bashTimeout from './pi-bash.js';
 import context from './pi-context.js';
 import safeguards from './pi-safeguards.js';
 import formatting from './pi-format.js';
@@ -15,6 +16,7 @@ export default async function mpx(pi: ExtensionAPI): Promise<void> {
   if (!(await isMpxRuntimeSelected(fileURLToPath(new URL('../', import.meta.url))))) return;
   context(pi);
   safeguards(pi);
+  bashTimeout(pi);
   formatting(pi);
   const config = process.env.APPDATA ? await readUserConfig(path.join(process.env.APPDATA, 'mpx/config.json')).catch(() => undefined) : undefined;
   createPiUiExtension({
