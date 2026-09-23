@@ -4,8 +4,9 @@ description: 'Verifies the latest visual requirements with one-time browser chec
 metadata:
   mpx:
     schemaVersion: 1
-    modelClass: standard
-    thinking: high
+    modelClass: reviewer
+    thinking: medium
+    thinkingOverrides: { claude: high }
     capabilities: [read, search, shell, browser]
 ---
 

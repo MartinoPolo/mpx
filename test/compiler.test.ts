@@ -6,7 +6,7 @@ import test from 'node:test';
 import { parse } from 'yaml';
 import { build, checkOutput, projectContent } from '../src/compiler.js';
 
-const CLASSES = ['mechanical', 'exploration', 'standard', 'advanced', 'frontier'] as const;
+const CLASSES = ['mechanical', 'exploration', 'standard', 'reviewer', 'advanced', 'frontier'] as const;
 const CAPABILITIES = ['read', 'search', 'shell', 'write', 'browser', 'context', 'web'] as const;
 const temporaryRoots: string[] = [];
 async function temporaryRoot(prefix: string): Promise<string> {
@@ -188,6 +188,49 @@ test('projects deterministic native metadata while preserving bodies and support
     model: 'claude/exploration',
     name: 'mpx-explorer',
     tools: 'read-tool, search-tool',
+  });
+});
+
+test('projects harness-specific thinking overrides before the shared default', async () => {
+  const root = await fixture();
+  const profiles = path.join(root, 'content/runtime-profiles.json');
+  await writeFile(profiles, (await readFile(profiles, 'utf8')).replace('pi/exploration', 'openai-codex/luna'));
+  const agent = path.join(root, 'content/agents/explorer.md');
+  await writeFile(agent, (await readFile(agent, 'utf8')).replace(
+    'thinking: high\n    capabilities:',
+    'thinking: medium\n    thinkingOverrides: { pi: max }\n    capabilities:',
+  ));
+  const projected = new Map((await projectContent(root))
+    .filter(item => item.path.endsWith('/agents/mpx-explorer.md'))
+    .map(item => [item.path, frontmatter(item.content)]));
+  assert.equal(projected.get('dist/pi/agents/mpx-explorer.md')?.thinking, 'max');
+  assert.equal(projected.get('dist/claude/agents/mpx-explorer.md')?.effort, 'medium');
+});
+
+test('rejects invalid thinking overrides and Pi Luna effort below high', async (t) => {
+  for (const [name, override, expected] of [
+    ['unknown harness', '{ codex: high }', /thinkingOverrides.*unknown field.*codex/],
+    ['unknown level', '{ pi: extreme }', /thinkingOverrides\.pi is unknown/],
+  ] as const) await t.test(name, async () => {
+    const root = await fixture();
+    const agent = path.join(root, 'content/agents/explorer.md');
+    await writeFile(agent, (await readFile(agent, 'utf8')).replace(
+      'thinking: high\n    capabilities:',
+      `thinking: high\n    thinkingOverrides: ${override}\n    capabilities:`,
+    ));
+    await assert.rejects(projectContent(root), expected);
+  });
+
+  await t.test('Luna floor uses effective Pi override', async () => {
+    const root = await fixture();
+    const profiles = path.join(root, 'content/runtime-profiles.json');
+    await writeFile(profiles, (await readFile(profiles, 'utf8')).replace('pi/exploration', 'openai-codex/luna'));
+    const agent = path.join(root, 'content/agents/explorer.md');
+    await writeFile(agent, (await readFile(agent, 'utf8')).replace(
+      'thinking: high\n    capabilities:',
+      'thinking: high\n    thinkingOverrides: { pi: medium }\n    capabilities:',
+    ));
+    await assert.rejects(projectContent(root), /Pi Luna.*high, xhigh, or max/);
   });
 });
 

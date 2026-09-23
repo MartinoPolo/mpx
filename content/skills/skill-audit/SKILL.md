@@ -33,7 +33,7 @@ With `the invocation input`, audit only the named skill or path; without it, aud
    or script, relevant repository configuration and compiler contracts, and the runtime profiles that translate its metadata. Prefer a
    named existing audit agent when its documented role matches the assigned checks. Otherwise use
    the documented runtime `general-purpose` built-in: inspect the existing runtime profiles, resolve
-   the standard class to a concrete model that is actually available, and pass that resolved value
+   the reviewer class to a concrete model that is actually available, and pass that resolved value
    through the runtime's real `model` argument with medium effort; `model="advanced"` and other
    prose class names are not executable model values. Batch three to five skills per parallel
    sub-agent, keep repository-wide checks in the main session, assign every selected file exactly

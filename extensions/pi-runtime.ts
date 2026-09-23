@@ -10,6 +10,7 @@ import bashTimeout from './pi-bash.js';
 import context from './pi-context.js';
 import safeguards from './pi-safeguards.js';
 import formatting from './pi-format.js';
+import modelRouting from './pi-model-routing.js';
 
 /** MPX-owned composition only; native-account MCP/web/question packages remain native. */
 export default async function mpx(pi: ExtensionAPI): Promise<void> {
@@ -31,6 +32,7 @@ export default async function mpx(pi: ExtensionAPI): Promise<void> {
     return '';
   });
   pi.on('before_agent_start', event => instructions ? { systemPrompt: `${event.systemPrompt}\n\n${instructions}` } : undefined);
+  await modelRouting(pi);
   const entry = new URL('../node_modules/@tintinweb/pi-subagents/src/index.ts', import.meta.url).href;
   const upstream = await import(entry);
   await upstream.default(pi);

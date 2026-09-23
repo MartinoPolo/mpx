@@ -4,8 +4,9 @@ description: 'Stages, commits, pushes, publishes a PR, monitors CI, merges when 
 metadata:
   mpx:
     schemaVersion: 1
-    modelClass: standard
-    thinking: medium
+    modelClass: mechanical
+    thinking: high
+    thinkingOverrides: { claude: medium }
     capabilities: [shell]
 ---
 

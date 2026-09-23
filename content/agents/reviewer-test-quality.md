@@ -4,7 +4,7 @@ description: 'Reviews whether tests provide correct, durable, proportional evide
 metadata:
   mpx:
     schemaVersion: 1
-    modelClass: standard
+    modelClass: reviewer
     thinking: high
     capabilities: [read, search, shell]
 ---

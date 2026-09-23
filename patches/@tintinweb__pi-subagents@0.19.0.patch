@@ -627,19 +627,29 @@ index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15
      if (pi) {
        // Prune any orphaned git worktrees (crash recovery). Detached: dispose runs
 diff --git a/src/agent-runner.ts b/src/agent-runner.ts
-index 6752eca0269ce30853a5cf5a3afd0d4bd463614c..d51d64ba6358b3a57259209a8de6465e110ffca8 100644
+index 6752eca0269ce30853a5cf5a3afd0d4bd463614c..5bdd030fa856bd3e178ba761c4427ead827952f2 100644
 --- a/src/agent-runner.ts
 +++ b/src/agent-runner.ts
-@@ -4,7 +4,7 @@
+@@ -4,8 +4,8 @@
  
  import { readFileSync } from "node:fs";
  import { homedir } from "node:os";
 -import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+-import type { Model } from "@earendil-works/pi-ai";
 +import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
- import type { Model } from "@earendil-works/pi-ai";
++import { getSupportedThinkingLevels, type Model } from "@earendil-works/pi-ai";
  import type { ExtensionContext, LoadExtensionsResult } from "@earendil-works/pi-coding-agent";
  import {
-@@ -46,6 +46,98 @@ export const SUBAGENT_TOOL_NAMES = {
+   type AgentSession,
+@@ -23,6 +23,7 @@ import { buildParentContext, extractText } from "./context.js";
+ import { DEFAULT_AGENTS } from "./default-agents.js";
+ import { detectEnv } from "./env.js";
+ import { buildMemoryBlock, buildReadOnlyMemoryBlock } from "./memory.js";
++import { isLunaModel, resolveFamilyModel } from "./model-resolver.js";
+ import { createNestedSubagentTools, getMaxSubagentDepth, type NestedAgentManager } from "./nested-tools.js";
+ import { buildAgentPrompt, type PromptExtras } from "./prompts.js";
+ import { preloadSkills } from "./skill-loader.js";
+@@ -46,6 +47,98 @@ export const SUBAGENT_TOOL_NAMES = {
  
  /** Names of tools registered by this extension that subagents must NOT inherit. */
  const EXCLUDED_TOOL_NAMES: string[] = Object.values(SUBAGENT_TOOL_NAMES);
@@ -738,7 +748,7 @@ index 6752eca0269ce30853a5cf5a3afd0d4bd463614c..d51d64ba6358b3a57259209a8de6465e
  
  /**
   * Canonical name of an extension for `extensions: [...]` allowlist matching.
-@@ -245,16 +337,18 @@ export function installExtensionToolScope(
+@@ -245,16 +338,18 @@ export function installExtensionToolScope(
       * seeded from `toolNames`.
       */
      readmitToolNames: Set<string>;
@@ -759,7 +769,7 @@ index 6752eca0269ce30853a5cf5a3afd0d4bd463614c..d51d64ba6358b3a57259209a8de6465e
      const optInActive = extNames.size > 0;
      for (const extension of loader.getExtensions().extensions) {
        const canons = extensionCanonicalNames(extension.path);
-@@ -264,7 +358,7 @@ export function installExtensionToolScope(
+@@ -264,7 +359,7 @@ export function installExtensionToolScope(
        const narrowed = canons.map((c) => narrowing.get(c)).find(Boolean);
        for (const name of extension.tools.keys()) {
          if (narrowed && !narrowed.has(name)) continue;
@@ -768,7 +778,7 @@ index 6752eca0269ce30853a5cf5a3afd0d4bd463614c..d51d64ba6358b3a57259209a8de6465e
          keep.add(name);
        }
      }
-@@ -273,7 +367,9 @@ export function installExtensionToolScope(
+@@ -273,7 +368,9 @@ export function installExtensionToolScope(
      // the renarrow keeps them in the active set and beforeToolCall doesn't
      // block them. Already vetted against `disallowed_tools` by the caller,
      // which is the only place that knows which kind may be taken back.
@@ -779,7 +789,7 @@ index 6752eca0269ce30853a5cf5a3afd0d4bd463614c..d51d64ba6358b3a57259209a8de6465e
      return keep;
    };
  
-@@ -308,6 +404,13 @@ export function installExtensionToolScope(
+@@ -308,6 +405,13 @@ export function installExtensionToolScope(
    };
  }
  
@@ -793,7 +803,7 @@ index 6752eca0269ce30853a5cf5a3afd0d4bd463614c..d51d64ba6358b3a57259209a8de6465e
  /** Default max turns. undefined = unlimited (no turn limit). */
  let defaultMaxTurns: number | undefined;
  
-@@ -323,16 +426,20 @@ export function getDefaultMaxTurns(): number | undefined { return defaultMaxTurn
+@@ -323,16 +427,20 @@ export function getDefaultMaxTurns(): number | undefined { return defaultMaxTurn
  export function setDefaultMaxTurns(n: number | undefined): void { defaultMaxTurns = normalizeMaxTurns(n); }
  
  /**
@@ -818,7 +828,17 @@ index 6752eca0269ce30853a5cf5a3afd0d4bd463614c..d51d64ba6358b3a57259209a8de6465e
  }
  
  /**
-@@ -405,6 +512,8 @@ export interface RunOptions {
+@@ -367,6 +475,9 @@ export function resolveDefaultModel(
+   configModel?: string,
+ ): Model<any> | undefined {
+   if (configModel) {
++    const family = resolveFamilyModel(configModel, registry);
++    if (typeof family === "string") throw new Error(family);
++    if (family) return family;
+     const slashIdx = configModel.indexOf("/");
+     if (slashIdx !== -1) {
+       const provider = configModel.slice(0, slashIdx);
+@@ -405,6 +516,8 @@ export interface RunOptions {
    isolated?: boolean;
    inheritContext?: boolean;
    thinkingLevel?: ThinkingLevel;
@@ -827,7 +847,7 @@ index 6752eca0269ce30853a5cf5a3afd0d4bd463614c..d51d64ba6358b3a57259209a8de6465e
    /**
     * Reopen this pi session file rather than starting an empty conversation.
     * `createAgentSession` seeds itself from whatever its SessionManager holds,
-@@ -638,10 +747,11 @@ export async function runAgent(
+@@ -638,10 +751,11 @@ export async function runAgent(
    // isolation is an intentional override, not a misconfiguration.
    const excludeExtensions = options.isolated ? undefined : config.excludeExtensions;
    const skills = options.isolated ? false : config.skills;
@@ -840,7 +860,7 @@ index 6752eca0269ce30853a5cf5a3afd0d4bd463614c..d51d64ba6358b3a57259209a8de6465e
      if (loaded.length > 0) {
        extras.skillBlocks = loaded;
      }
-@@ -687,6 +797,7 @@ export async function runAgent(
+@@ -687,6 +801,7 @@ export async function runAgent(
    const noSkills = skills === false || Array.isArray(skills);
  
    const agentDir = getAgentDir();
@@ -848,7 +868,7 @@ index 6752eca0269ce30853a5cf5a3afd0d4bd463614c..d51d64ba6358b3a57259209a8de6465e
  
    // Extension loading:
    // - true  → all default-discovered extensions
-@@ -724,7 +835,8 @@ export async function runAgent(
+@@ -724,7 +839,8 @@ export async function runAgent(
    // It's only needed when we're neither loading everything without excludes
    // (`extensions: true` or a `"*"` wildcard) nor nothing (`noExtensions`).
    const loadAll = extensions === true || extensionsSpec?.wildcard === true;
@@ -858,7 +878,7 @@ index 6752eca0269ce30853a5cf5a3afd0d4bd463614c..d51d64ba6358b3a57259209a8de6465e
    // Pre-filter discovered set, captured by the override — the exclude-typo warning
    // must compare against this, not the surviving set (absence from survivors is
    // an exclude *succeeding*).
-@@ -748,7 +860,9 @@ export async function runAgent(
+@@ -748,7 +864,9 @@ export async function runAgent(
      cwd: configCwd,
      agentDir,
      noExtensions,
@@ -869,7 +889,21 @@ index 6752eca0269ce30853a5cf5a3afd0d4bd463614c..d51d64ba6358b3a57259209a8de6465e
      extensionsOverride,
      noSkills,
      noPromptTemplates: true,
-@@ -839,11 +953,12 @@ export async function runAgent(
+@@ -834,16 +952,25 @@ export async function runAgent(
+   );
+ 
+   // Resolve thinking level: explicit option > agent config > undefined (inherit)
+-  const thinkingLevel = options.thinkingLevel ?? agentConfig?.thinking;
++  let thinkingLevel = options.thinkingLevel ?? agentConfig?.thinking;
++  if (isLunaModel(model)) {
++    if (!model?.reasoning || !getSupportedThinkingLevels(model).includes("high")) {
++      throw new Error(`Model ${model?.provider}/${model?.id} cannot meet Luna's high thinking minimum`);
++    }
++    if (thinkingLevel !== "high" && thinkingLevel !== "xhigh" && thinkingLevel !== "max") {
++      thinkingLevel = "high";
++    }
++  }
+ 
    const disallowedSet = agentConfig?.disallowedTools
      ? new Set(agentConfig.disallowedTools)
      : undefined;
@@ -886,7 +920,7 @@ index 6752eca0269ce30853a5cf5a3afd0d4bd463614c..d51d64ba6358b3a57259209a8de6465e
    const effectiveMaxDepth = options.nestedRuntime?.maxSubagentDepth ?? getMaxSubagentDepth();
    // At (or past) the cap this agent can never spawn, so it can never own a child
    // to fetch from or steer either — inject nothing rather than three tools whose
-@@ -852,16 +967,18 @@ export async function runAgent(
+@@ -852,16 +979,18 @@ export async function runAgent(
    const nestedRuntime = options.nestedRuntime && options.nestedRuntime.depth < effectiveMaxDepth
      ? options.nestedRuntime
      : undefined;
@@ -908,7 +942,7 @@ index 6752eca0269ce30853a5cf5a3afd0d4bd463614c..d51d64ba6358b3a57259209a8de6465e
      : [];
    const nestedToolNames = new Set(nestedTools.map(tool => tool.name));
  
-@@ -872,6 +989,7 @@ export async function runAgent(
+@@ -872,6 +1001,7 @@ export async function runAgent(
    const structuredCapture = options.structuredOutput ? createStructuredCapture() : undefined;
    const structuredTools = options.structuredOutput && structuredCapture
      ? [createStructuredOutputTool(options.structuredOutput, structuredCapture)]
@@ -916,7 +950,7 @@ index 6752eca0269ce30853a5cf5a3afd0d4bd463614c..d51d64ba6358b3a57259209a8de6465e
      : [];
    const structuredToolNames = new Set(structuredTools.map(tool => tool.name));
    // Re-admitted together at every gate below. Kept as one set so a new injected
-@@ -914,7 +1032,9 @@ export async function runAgent(
+@@ -914,7 +1044,9 @@ export async function runAgent(
    //
    // `noExtensions`/`isolated` keeps the historical static allowlist: nothing
    // async can appear there, and a hard registry gate is the correct boundary.
@@ -927,7 +961,7 @@ index 6752eca0269ce30853a5cf5a3afd0d4bd463614c..d51d64ba6358b3a57259209a8de6465e
  
    let sessionTools: string[] | undefined;
    let sessionExcludeTools: string[] | undefined;
-@@ -923,7 +1043,9 @@ export async function runAgent(
+@@ -923,7 +1055,9 @@ export async function runAgent(
      // tools (whose names would otherwise be dropped as EXCLUDED_TOOL_NAMES).
      sessionTools = [
        ...toolNames.filter(
@@ -938,7 +972,7 @@ index 6752eca0269ce30853a5cf5a3afd0d4bd463614c..d51d64ba6358b3a57259209a8de6465e
        ),
        ...[...nestedToolNames].filter((t) => !disallowedSet?.has(t)),
        // Not filtered through `disallowedSet`, unlike the nested tools above:
-@@ -949,10 +1071,19 @@ export async function runAgent(
+@@ -949,10 +1083,19 @@ export async function runAgent(
          if (!structuredToolNames.has(name)) denyTools.add(name);
        }
      }
@@ -959,7 +993,20 @@ index 6752eca0269ce30853a5cf5a3afd0d4bd463614c..d51d64ba6358b3a57259209a8de6465e
    const configuredSessionDir = resolveConfiguredSessionDir(agentConfig?.sessionDir, effectiveCwd);
    const defaultSessionDir = process.env.PI_CODING_AGENT_SESSION_DIR ?? settingsManager.getSessionDir?.();
    // Frontmatter wins when it says anything; otherwise the project default,
-@@ -1039,9 +1170,11 @@ export async function runAgent(
+@@ -1006,6 +1149,12 @@ export async function runAgent(
+   }
+ 
+   const { session } = await runInChildSessionContext(() => createAgentSession(sessionOpts));
++  try {
++    enforceLunaSessionThinking(session);
++  } catch (error) {
++    session.dispose();
++    throw error;
++  }
+ 
+   const baseSessionName = agentConfig?.name ?? type;
+   session.setSessionName(
+@@ -1039,9 +1188,11 @@ export async function runAgent(
        extNames,
        narrowing,
        readmitToolNames,
@@ -971,6 +1018,34 @@ index 6752eca0269ce30853a5cf5a3afd0d4bd463614c..d51d64ba6358b3a57259209a8de6465e
    options.onSessionCreated?.(session);
  
    // Track turns for graceful max_turns enforcement
+@@ -1151,6 +1302,19 @@ export async function runAgent(
+ /**
+  * Send a new prompt to an existing session (resume).
+  */
++function enforceLunaSessionThinking(session: AgentSession): void {
++  if (!isLunaModel(session.model)) return;
++  if (!session.model?.reasoning || !session.getAvailableThinkingLevels().includes("high")) {
++    throw new Error(`Model ${session.model?.provider}/${session.model?.id} cannot meet Luna's high thinking minimum`);
++  }
++  if (session.thinkingLevel !== "high" && session.thinkingLevel !== "xhigh" && session.thinkingLevel !== "max") {
++    session.setThinkingLevel("high");
++  }
++  if (session.thinkingLevel !== "high" && session.thinkingLevel !== "xhigh" && session.thinkingLevel !== "max") {
++    throw new Error(`Model ${session.model.provider}/${session.model.id} cannot meet Luna's high thinking minimum`);
++  }
++}
++
+ export async function resumeAgent(
+   session: AgentSession,
+   prompt: string,
+@@ -1161,6 +1325,7 @@ export async function resumeAgent(
+     signal?: AbortSignal;
+   } = {},
+ ): Promise<{ text: string; failure?: string }> {
++  enforceLunaSessionThinking(session);
+   // Boundary for the history fallback: the session already holds prior turns,
+   // so only assistant text produced by THIS resume prompt counts as its output
+   // — a failed resume must not surface the previous turn's answer (#144).
 diff --git a/src/custom-agents.ts b/src/custom-agents.ts
 index aa84c1411be875eee9d8aa80c3ab2a46aa56da1e..a5d7537b27353e8b0f1e2b1c0f574a71b9de68c7 100644
 --- a/src/custom-agents.ts
@@ -1009,10 +1084,10 @@ index aa84c1411be875eee9d8aa80c3ab2a46aa56da1e..a5d7537b27353e8b0f1e2b1c0f574a71
  
  /**
 diff --git a/src/index.ts b/src/index.ts
-index 4989968c98e186b3c94194ae8c05c7651374fcb6..23e9bbb4e386a70c1538c0ad6fa8e920617c070c 100644
+index 4989968c98e186b3c94194ae8c05c7651374fcb6..6907b0f9f6b148bd0b99dbabe1bc5d4dbcece259 100644
 --- a/src/index.ts
 +++ b/src/index.ts
-@@ -24,7 +24,6 @@ import { BUILTIN_TOOL_NAMES, getAgentConfig, getAllTypes, getAvailableTypes, get
+@@ -24,11 +24,10 @@ import { BUILTIN_TOOL_NAMES, getAgentConfig, getAllTypes, getAvailableTypes, get
  import { inChildSessionContext } from "./child-context.js";
  import { type RpcHandle, registerRpcHandlers } from "./cross-extension-rpc.js";
  import { loadCustomAgents } from "./custom-agents.js";
@@ -1020,6 +1095,11 @@ index 4989968c98e186b3c94194ae8c05c7651374fcb6..23e9bbb4e386a70c1538c0ad6fa8e920
  import { isolationParam, resolveAgentInvocationConfig, resolveJoinMode } from "./invocation-config.js";
  import { describeMention, handleBase, isReservedHandle, parseMention, resolveHandleToType, stripAgentPrefix } from "./mention.js";
  import { runMentionClone } from "./mention-clone.js";
+-import { describeModel, type ModelRegistry, resolveModel } from "./model-resolver.js";
++import { describeModel, isFamilyModelReference, type ModelRegistry, resolveModel } from "./model-resolver.js";
+ import { checkModelScope, isScopeModelsEnabled, setScopeModelsEnabled } from "./model-scope.js";
+ import { getMaxSubagentDepth, setMaxSubagentDepth } from "./nested-tools.js";
+ import { createOutputFilePath, ensureOutputFile, getOutputTranscriptDefault, sessionTaskDir, setOutputTranscriptDefault, streamToOutputFile, writeInitialEntry } from "./output-file.js";
 @@ -70,6 +69,7 @@ import { extractMeta, type WorkflowMeta, workflowCallName } from "./workflow/met
  import { elapsedMs } from "./workflow/progress.js";
  import { runWorkflow } from "./workflow/runtime.js";
@@ -1384,6 +1464,17 @@ index 4989968c98e186b3c94194ae8c05c7651374fcb6..23e9bbb4e386a70c1538c0ad6fa8e920
          }),
        ),
        resume: Type.Optional(
+@@ -1812,8 +1675,8 @@ Terse command-style prompts produce shallow, generic work.
+       if (resolvedConfig.modelInput) {
+         const resolved = resolveModel(resolvedConfig.modelInput, ctx.modelRegistry);
+         if (typeof resolved === "string") {
+-          if (resolvedConfig.modelFromParams) return textResult(resolved);
+-          // config-specified: silent fallback to parent
++          if (resolvedConfig.modelFromParams || isFamilyModelReference(resolvedConfig.modelInput)) return textResult(resolved);
++          // Unrelated config models retain the native parent fallback.
+         } else {
+           model = resolved;
+         }
 @@ -1969,12 +1832,30 @@ Terse command-style prompts produce shallow, generic work.
  
        // Resume existing agent
@@ -1641,8 +1732,75 @@ index 09344ce287e151ebf35e8facffb06232cfea8d74..0b42cc894064d5afdb39ebfafa0f4a33
    };
  }
  
+diff --git a/src/model-resolver.ts b/src/model-resolver.ts
+index fa7cd383e9085d1e44288c1f6873bfac0b513bfa..8cb497d96e4a435c44320e44023d998f90f547db 100644
+--- a/src/model-resolver.ts
++++ b/src/model-resolver.ts
+@@ -14,6 +14,52 @@ export interface ModelRegistry {
+   getAvailable?(): any[];
+ }
+ 
++const FAMILY = "(?:luna|sol|terra|astra)";
++const familyReference = new RegExp(`^([^/]+)/(${FAMILY})$`, "i");
++const versionedFamily = new RegExp(`^gpt-(\\d+(?:\\.\\d+)*)-(${FAMILY})$`, "i");
++
++export function isFamilyModelReference(input: string): boolean {
++  const slash = input.indexOf("/");
++  return familyReference.test(input) || (slash > 0 && versionedFamily.test(input.slice(slash + 1)));
++}
++
++export function isLunaModel(model: { id: string } | undefined): boolean {
++  return !!model && /^gpt-\d+(?:\.\d+)*-luna$/i.test(model.id);
++}
++
++/** Handles only provider-qualified family references and exact family pins. */
++export function resolveFamilyModel(
++  input: string,
++  registry: Pick<ModelRegistry, "find" | "getAvailable">,
++): any | string | undefined {
++  const alias = familyReference.exec(input);
++  const slash = input.indexOf("/");
++  const pinned = slash > 0 ? versionedFamily.exec(input.slice(slash + 1)) : null;
++  if (!alias && !pinned) return undefined;
++  const provider = input.slice(0, slash);
++  const available = registry.getAvailable?.() ?? [];
++  if (pinned) {
++    const exact = available.find(model => model.provider === provider && model.id === input.slice(slash + 1));
++    return exact ? registry.find(exact.provider, exact.id) ?? `Model unavailable: ${input}` : `Model unavailable: ${input}`;
++  }
++  const family = alias![2].toLowerCase();
++  const candidates = available.filter(model =>
++    model.provider === provider && versionedFamily.exec(model.id)?.[2].toLowerCase() === family,
++  );
++  candidates.sort((left, right) => {
++    const version = (model: { id: string }) => versionedFamily.exec(model.id)![1].split(".").map(Number);
++    const leftVersion = version(left);
++    const rightVersion = version(right);
++    for (let index = 0; index < Math.max(leftVersion.length, rightVersion.length); index++) {
++      const difference = (rightVersion[index] ?? 0) - (leftVersion[index] ?? 0);
++      if (difference) return difference;
++    }
++    return 0;
++  });
++  const best = candidates[0];
++  return best ? registry.find(best.provider, best.id) ?? `Model unavailable: ${input}` : `Model unavailable: ${input}`;
++}
++
+ /**
+  * Both display forms of a model. The short one goes on tight rows (the widget,
+  * the Agent tool result), the canonical one where there is room to disambiguate
+@@ -41,6 +87,9 @@ export function resolveModel(
+   input: string,
+   registry: ModelRegistry,
+ ): any | string {
++  const family = resolveFamilyModel(input, registry);
++  if (family !== undefined) return family;
++
+   // Available models (those with auth configured)
+   const all = (registry.getAvailable?.() ?? registry.getAll()) as ModelEntry[];
+   const availableSet = new Set(all.map(m => `${m.provider}/${m.id}`.toLowerCase()));
 diff --git a/src/nested-tools.ts b/src/nested-tools.ts
-index ce568e8018011cc37b0df289f24d5cf8ea9c8845..2caad09539146da06bc34ee27b5a026f04050c8a 100644
+index ce568e8018011cc37b0df289f24d5cf8ea9c8845..ff8776e8dce12081b7e8708c77b68ba5775485a2 100644
 --- a/src/nested-tools.ts
 +++ b/src/nested-tools.ts
 @@ -7,7 +7,6 @@ import {
@@ -1653,6 +1811,15 @@ index ce568e8018011cc37b0df289f24d5cf8ea9c8845..2caad09539146da06bc34ee27b5a026f
  import {
    buildAgentRegistry,
    getAgentConfigIn,
+@@ -17,7 +16,7 @@ import {
+ } from "./agent-types.js";
+ import { loadCustomAgents } from "./custom-agents.js";
+ import { isolationParam, resolveAgentInvocationConfig } from "./invocation-config.js";
+-import { resolveModel } from "./model-resolver.js";
++import { isFamilyModelReference, resolveModel } from "./model-resolver.js";
+ import { checkModelScope } from "./model-scope.js";
+ import {
+   createOutputFilePath,
 @@ -67,6 +66,8 @@ interface NestedSpawnOptions {
    maxSubagentDepth: number;
    configCwd?: string;
@@ -1698,6 +1865,15 @@ index ce568e8018011cc37b0df289f24d5cf8ea9c8845..2caad09539146da06bc34ee27b5a026f
          return resumed
            ? textResult(formatRecord(resumed, "inline"), resumed.status === "error")
            : textResult(`Failed to resume nested agent "${params.resume}".`, true);
+@@ -232,7 +246,7 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
+       if (invocation.modelInput) {
+         const resolvedModel = resolveModel(invocation.modelInput, ctx.modelRegistry);
+         if (typeof resolvedModel === "string") {
+-          if (invocation.modelFromParams) return textResult(resolvedModel, true);
++          if (invocation.modelFromParams || isFamilyModelReference(invocation.modelInput)) return textResult(resolvedModel, true);
+         } else {
+           model = resolvedModel;
+         }
 @@ -293,6 +307,7 @@ export function createNestedSubagentTools(context: NestedToolContext): ToolDefin
          maxSubagentDepth: context.maxSubagentDepth,
          configCwd: context.configCwd,
@@ -1909,6 +2085,49 @@ index 0000000000000000000000000000000000000000..7000e9efd54f66a4087e47d413aaa145
 +    }
 +  }
 +}
+diff --git a/src/schedule.ts b/src/schedule.ts
+index da72638511254caef5a42491d8a3a6d6e29fb0d2..54563a7efac97049bcd61b6a4118b55b37921074 100644
+--- a/src/schedule.ts
++++ b/src/schedule.ts
+@@ -21,7 +21,7 @@ import { nanoid } from "nanoid";
+ import type { AgentManager } from "./agent-manager.js";
+ import { normalizeMaxTurns } from "./agent-runner.js";
+ import { resolveSpawnType } from "./agent-types.js";
+-import { resolveModel } from "./model-resolver.js";
++import { isFamilyModelReference, resolveModel } from "./model-resolver.js";
+ import type { ScheduleStore } from "./schedule-store.js";
+ import type { IsolationMode, ScheduledSubagent, SubagentType, ThinkingLevel } from "./types.js";
+ 
+@@ -229,17 +229,20 @@ export class SubagentScheduler {
+ 
+     store.update(id, { lastStatus: "running" });
+ 
+-    // Resolve model at fire time — registry contents may have changed since the
+-    // job was created (auth added/removed). Fall back silently to spawn-default
+-    // if resolution fails; the spawn path handles undefined model gracefully.
+-    let resolvedModel: any | undefined;
+-    if (job.model) {
+-      const r = resolveModel(job.model, ctx.modelRegistry);
+-      if (typeof r !== "string") resolvedModel = r;
+-    }
+-
+     let agentId: string;
+     try {
++      // Resolve against the fire-time registry. Only unrelated missing models
++      // retain the historical spawn-default fallback.
++      let resolvedModel: any | undefined;
++      if (job.model) {
++        const resolved = resolveModel(job.model, ctx.modelRegistry);
++        if (typeof resolved === "string") {
++          if (isFamilyModelReference(job.model)) throw new Error(resolved);
++        } else {
++          resolvedModel = resolved;
++        }
++      }
++
+       // Re-resolve at fire time against the registry as it stands. This does not
+       // reload from disk (the scheduler has no reason to rebuild process-global
+       // state from a timer), so it catches changes that went through /agents or
 diff --git a/src/session-record.ts b/src/session-record.ts
 new file mode 100644
 index 0000000000000000000000000000000000000000..07952a5568e86e64f73c4df91ccca1f362d3e252
@@ -1987,3 +2206,25 @@ index 3b7f262bdfc154d8454c1b0be67bcd14587029de..ce3763ba15be829ca617d01c92d1aec0
    /** Steering messages queued before the session was ready. */
    pendingSteers?: string[];
    /** Worktree info if the agent is running in an isolated worktree. */
+diff --git a/src/workflow/host.ts b/src/workflow/host.ts
+index 821649769170b75d92e49a7b90d82ce6288c24df..fce833be17aa8ad200cc581a18131fce369ec4f6 100644
+--- a/src/workflow/host.ts
++++ b/src/workflow/host.ts
+@@ -36,7 +36,7 @@ import { existsSync } from "node:fs";
+ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+ import type { AgentManager } from "../agent-manager.js";
+ import { getAgentConfig, resolveSpawnType } from "../agent-types.js";
+-import { resolveModel } from "../model-resolver.js";
++import { isFamilyModelReference, resolveModel } from "../model-resolver.js";
+ import { checkModelScope } from "../model-scope.js";
+ import type { AgentRecord, ThinkingLevel } from "../types.js";
+ import { getLifetimeTotal } from "../usage.js";
+@@ -207,7 +207,7 @@ export function createWorkflowHost(deps: WorkflowHostOptions): WorkflowHost {
+       if (modelInput !== undefined) {
+         const resolved = resolveModel(modelInput, ctx.modelRegistry);
+         if (typeof resolved === "string") {
+-          if (request.model !== undefined) return { ok: false, error: resolved };
++          if (request.model !== undefined || isFamilyModelReference(modelInput)) return { ok: false, error: resolved };
+         } else {
+           model = resolved;
+         }

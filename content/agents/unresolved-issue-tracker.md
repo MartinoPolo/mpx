@@ -6,8 +6,9 @@ description:
 metadata:
   mpx:
     schemaVersion: 1
-    modelClass: standard
-    thinking: low
+    modelClass: mechanical
+    thinking: high
+    thinkingOverrides: { claude: low }
     capabilities: [read, search, shell]
 ---
 

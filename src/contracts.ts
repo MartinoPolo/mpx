@@ -1,7 +1,7 @@
 export type Harness = 'pi' | 'claude';
 export type Account = 'personal' | 'work';
 export type Exposure = 'normal' | 'name-only' | 'explicit-only';
-export type ModelClass = 'mechanical' | 'exploration' | 'standard' | 'advanced' | 'frontier';
+export type ModelClass = 'mechanical' | 'exploration' | 'standard' | 'reviewer' | 'advanced' | 'frontier';
 export type Thinking = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export type Capability = 'read' | 'search' | 'shell' | 'write' | 'browser' | 'context' | 'web';
 
@@ -15,6 +15,7 @@ export interface AgentMetadata {
   schemaVersion: 1;
   modelClass: ModelClass;
   thinking: Thinking;
+  thinkingOverrides?: Partial<Record<Harness, Thinking>>;
   capabilities: Capability[];
 }
 export interface RuntimeProfiles {

@@ -4,7 +4,7 @@ description: 'Reviews changed code for high-confidence security risks.'
 metadata:
   mpx:
     schemaVersion: 1
-    modelClass: standard
+    modelClass: reviewer
     thinking: high
     capabilities: [read, search, shell]
 ---

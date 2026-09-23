@@ -13,10 +13,12 @@ import type {
   SkillMetadata,
   Thinking,
 } from './contracts.js';
+import { LUNA_ALLOWED_THINKING } from './pi-model-routing.js';
 
 const HARNESSES: readonly Harness[] = ['pi', 'claude'];
-const MODEL_CLASSES: readonly ModelClass[] = ['mechanical', 'exploration', 'standard', 'advanced', 'frontier'];
+const MODEL_CLASSES: readonly ModelClass[] = ['mechanical', 'exploration', 'standard', 'reviewer', 'advanced', 'frontier'];
 const THINKING_LEVELS: readonly Thinking[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+const PI_LUNA_MODEL = 'openai-codex/luna';
 const CAPABILITIES: readonly Capability[] = ['read', 'search', 'shell', 'write', 'browser', 'context', 'web'];
 const EXPOSURES: readonly Exposure[] = ['normal', 'name-only', 'explicit-only'];
 const OUTPUT_ROOTS = ['dist/packs', 'dist/pi', 'dist/claude'] as const;
@@ -52,6 +54,10 @@ function isMapping(value: unknown): value is Mapping {
 function requireMapping(value: unknown, where: string): Mapping {
   if (!isMapping(value)) throw new Error(`${where} must be a mapping`);
   return value;
+}
+
+function isThinking(value: unknown): value is Thinking {
+  return typeof value === 'string' && THINKING_LEVELS.some((level) => level === value);
 }
 
 function assertExactKeys(value: Mapping, keys: readonly string[], where: string): void {
@@ -143,10 +149,22 @@ function agentMetadata(data: Mapping, filename: string, where: string): AgentMet
   if (data.name !== filename) throw new Error(`${where} name must match its filename`);
   if (typeof data.description !== 'string' || data.description.trim() === '') throw new Error(`${where} description is required`);
   const { mpx } = metadataBlock(data, where);
-  assertExactKeys(mpx, ['schemaVersion', 'modelClass', 'thinking', 'capabilities'], `${where} metadata.mpx`);
+  assertExactKeys(mpx, ['schemaVersion', 'modelClass', 'thinking', 'thinkingOverrides', 'capabilities'], `${where} metadata.mpx`);
   if (mpx.schemaVersion !== 1) throw new Error(`${where} metadata.mpx.schemaVersion must be 1`);
   if (!MODEL_CLASSES.includes(mpx.modelClass as ModelClass)) throw new Error(`${where} modelClass is unknown`);
-  if (!THINKING_LEVELS.includes(mpx.thinking as Thinking)) throw new Error(`${where} thinking is unknown`);
+  if (!isThinking(mpx.thinking)) throw new Error(`${where} thinking is unknown`);
+  let thinkingOverrides: Partial<Record<Harness, Thinking>> | undefined;
+  if (mpx.thinkingOverrides !== undefined) {
+    const rawOverrides = requireMapping(mpx.thinkingOverrides, `${where} thinkingOverrides`);
+    assertExactKeys(rawOverrides, HARNESSES, `${where} thinkingOverrides`);
+    thinkingOverrides = {};
+    for (const harness of HARNESSES) {
+      const override = rawOverrides[harness];
+      if (override === undefined) continue;
+      if (!isThinking(override)) throw new Error(`${where} thinkingOverrides.${harness} is unknown`);
+      thinkingOverrides[harness] = override;
+    }
+  }
   if (!Array.isArray(mpx.capabilities)) throw new Error(`${where} capabilities must be an array`);
   const capabilities = mpx.capabilities.map((capability) => {
     if (!CAPABILITIES.includes(capability as Capability)) throw new Error(`${where} capability ${String(capability)} is unknown`);
@@ -155,7 +173,8 @@ function agentMetadata(data: Mapping, filename: string, where: string): AgentMet
   return {
     schemaVersion: 1,
     modelClass: mpx.modelClass as ModelClass,
-    thinking: mpx.thinking as Thinking,
+    thinking: mpx.thinking,
+    ...(thinkingOverrides === undefined ? {} : { thinkingOverrides }),
     capabilities,
   };
 }
@@ -575,8 +594,13 @@ function nativeAgent(data: Mapping, metadata: AgentMetadata, profiles: RuntimePr
   const native = canonicalNativeMetadata(data);
   for (const field of ['model', 'tools', 'thinking', 'effort']) delete native[field];
   native.name = `${MPX_PREFIX}${String(data.name)}`;
-  native.model = profiles.models[harness][metadata.modelClass];
-  native[harness === 'pi' ? 'thinking' : 'effort'] = metadata.thinking;
+  const model = profiles.models[harness][metadata.modelClass];
+  const thinking = metadata.thinkingOverrides?.[harness] ?? metadata.thinking;
+  if (harness === 'pi' && model === PI_LUNA_MODEL && !LUNA_ALLOWED_THINKING.includes(thinking)) {
+    throw new Error(`${String(data.name)} Pi Luna thinking must be high, xhigh, or max`);
+  }
+  native.model = model;
+  native[harness === 'pi' ? 'thinking' : 'effort'] = thinking;
   const tools = metadata.capabilities.flatMap((capability) => profiles.tools[harness][capability]);
   native.tools = [...new Set(tools)].join(', ');
   return native;

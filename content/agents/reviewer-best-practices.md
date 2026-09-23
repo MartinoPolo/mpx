@@ -4,7 +4,7 @@ description: 'Reviews changed code for language and framework best practices.'
 metadata:
   mpx:
     schemaVersion: 1
-    modelClass: standard
+    modelClass: reviewer
     thinking: medium
     capabilities: [read, search, shell]
 ---

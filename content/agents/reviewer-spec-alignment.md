@@ -4,7 +4,7 @@ description: 'Reviews implementation for specification alignment and scope contr
 metadata:
   mpx:
     schemaVersion: 1
-    modelClass: standard
+    modelClass: reviewer
     thinking: medium
     capabilities: [read, search, shell]
 ---

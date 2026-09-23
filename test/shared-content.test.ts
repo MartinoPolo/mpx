@@ -9,14 +9,14 @@ import { projectContent } from '../src/compiler.js';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const content = path.join(root, 'content');
 const specialistMetadata = {
-  'visual-verifier': ['standard', 'high', ['read', 'search', 'shell', 'browser']],
+  'visual-verifier': ['reviewer', 'medium', ['read', 'search', 'shell', 'browser'], { claude: 'high' }],
   'context7-docs-fetcher': ['mechanical', 'xhigh', ['read', 'context']],
   executor: ['advanced', 'high', ['read', 'search', 'shell', 'write']],
   'issue-finder': ['mechanical', 'high', ['read', 'search', 'shell']],
-  shipper: ['standard', 'medium', ['shell']],
+  shipper: ['mechanical', 'high', ['shell'], { claude: 'medium' }],
   simplifier: ['advanced', 'high', ['read', 'search', 'shell', 'write']],
   'ui-variant-generator': ['advanced', 'medium', ['read', 'search', 'shell', 'write']],
-  'unresolved-issue-tracker': ['standard', 'low', ['read', 'search', 'shell']],
+  'unresolved-issue-tracker': ['mechanical', 'high', ['read', 'search', 'shell'], { claude: 'low' }],
 } as const;
 
 async function filesBelow(directory: string, relative = ''): Promise<string[]> {
@@ -142,21 +142,23 @@ test('retired design pipeline is excluded from source and projections', async ()
   }
 });
 
-test('runtime profiles enforce the Claude model floor without changing Pi Codex routing', async () => {
+test('runtime profiles use provider-qualified family aliases and a reviewer class', async () => {
   const profiles = JSON.parse(await readFile(path.join(content, 'runtime-profiles.json'), 'utf8'));
   assert.deepEqual(profiles.models.claude, {
     mechanical: 'sonnet',
     exploration: 'sonnet',
     standard: 'sonnet',
+    reviewer: 'sonnet',
     advanced: 'opus',
     frontier: 'fable',
   });
   assert.deepEqual(profiles.models.pi, {
-    mechanical: 'openai-codex/gpt-5.6-luna',
-    exploration: 'openai-codex/gpt-5.6-luna',
-    standard: 'openai-codex/gpt-5.6-terra',
-    advanced: 'openai-codex/gpt-5.6-sol',
-    frontier: 'openai-codex/gpt-6-astra',
+    mechanical: 'openai-codex/luna',
+    exploration: 'openai-codex/luna',
+    standard: 'openai-codex/luna',
+    reviewer: 'openai-codex/sol',
+    advanced: 'openai-codex/sol',
+    frontier: 'openai-codex/astra',
   });
 
   const claudeAgents = (await projectContent(root)).filter(projection =>
@@ -168,43 +170,59 @@ test('runtime profiles enforce the Claude model floor without changing Pi Codex 
 });
 
 test('agent model and effort defaults project consistently across harnesses', async () => {
-  const expectedDefaults = {
-    executor: ['advanced', 'high'],
-    simplifier: ['advanced', 'high'],
-    shipper: ['standard', 'medium'],
-    checker: ['mechanical', 'high'],
-    explorer: ['exploration', 'xhigh'],
-    'context7-docs-fetcher': ['mechanical', 'xhigh'],
-    'issue-finder': ['mechanical', 'high'],
-    'reviewer-test-quality': ['standard', 'high'],
-    'visual-verifier': ['standard', 'high'],
-    'reviewer-security': ['standard', 'high'],
-    'reviewer-performance': ['standard', 'high'],
-    'reviewer-error-handling': ['standard', 'high'],
+  const expectedRouting = {
+    executor: ['advanced', 'high', 'high'],
+    simplifier: ['advanced', 'high', 'high'],
+    shipper: ['mechanical', 'high', 'medium'],
+    checker: ['mechanical', 'high', 'high'],
+    explorer: ['exploration', 'xhigh', 'xhigh'],
+    'context7-docs-fetcher': ['mechanical', 'xhigh', 'xhigh'],
+    'issue-finder': ['mechanical', 'high', 'high'],
+    'reviewer-test-quality': ['reviewer', 'high', 'high'],
+    'visual-verifier': ['reviewer', 'medium', 'high'],
+    'reviewer-security': ['reviewer', 'high', 'high'],
+    'reviewer-performance': ['reviewer', 'high', 'high'],
+    'reviewer-error-handling': ['reviewer', 'high', 'high'],
   } as const;
   const profiles = JSON.parse(await readFile(path.join(content, 'runtime-profiles.json'), 'utf8'));
   const projections = await projectContent(root);
-  for (const [name, [modelClass, effort]] of Object.entries(expectedDefaults)) {
+  for (const [name, [modelClass, piThinking, claudeThinking]] of Object.entries(expectedRouting)) {
     const source = frontmatter(await readFile(path.join(content, 'agents', `${name}.md`), 'utf8'));
     assert.equal(source.metadata.mpx.modelClass, modelClass, name);
-    assert.equal(source.metadata.mpx.thinking, effort, name);
-    for (const harness of ['pi', 'claude']) {
+    assert.equal(source.metadata.mpx.thinking, piThinking, name);
+    for (const [harness, thinking] of [['pi', piThinking], ['claude', claudeThinking]] as const) {
       const destination = `dist/${harness}/agents/mpx-${name}.md`;
       const projection = projections.find(file => file.path === destination);
       assert.ok(projection, destination);
       const native = frontmatter(projection.content.toString('utf8'));
       assert.equal(native.model, profiles.models[harness][modelClass], destination);
-      assert.equal(native[harness === 'pi' ? 'thinking' : 'effort'], effort, destination);
+      assert.equal(native[harness === 'pi' ? 'thinking' : 'effort'], thinking, destination);
     }
   }
 });
 
+test('all reviewer agents use the reviewer model class', async () => {
+  const reviewerNames = (await readdir(path.join(content, 'agents')))
+    .filter(name => name.startsWith('reviewer-') && name.endsWith('.md'));
+  assert.ok(reviewerNames.length > 0);
+  for (const name of reviewerNames) {
+    const data = frontmatter(await readFile(path.join(content, 'agents', name), 'utf8'));
+    assert.equal(data.metadata.mpx.modelClass, 'reviewer', name);
+  }
+});
+
 test('specialists have compiler metadata', async () => {
-  for (const [name, [modelClass, thinking, capabilities]] of Object.entries(specialistMetadata)) {
+  for (const [name, [modelClass, thinking, capabilities, thinkingOverrides]] of Object.entries(specialistMetadata)) {
     const source = await readFile(path.join(content, 'agents', `${name}.md`), 'utf8');
     const data = frontmatter(source);
     assert.equal(data.name, name);
-    assert.deepEqual(data.metadata?.mpx, { schemaVersion: 1, modelClass, thinking, capabilities: [...capabilities] });
+    assert.deepEqual(data.metadata?.mpx, {
+      schemaVersion: 1,
+      modelClass,
+      thinking,
+      ...(thinkingOverrides ? { thinkingOverrides } : {}),
+      capabilities: [...capabilities],
+    });
   }
 });
 
