@@ -1,0 +1,43 @@
+diff --git a/src/index.ts b/src/index.ts
+index cb8382cccb66c770a4dcaca8e3750ddbf587edb7..254ae3c17e14b6529a92d3bef8df86d7ba6cd610 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -335,13 +335,9 @@ function isPromptStartSlashToken(
+ function mergeAutocompleteItems(options: {
+   current: AutocompleteSuggestions | null
+   skillItems: AutocompleteItem[]
+-  preferCommands: boolean
+   prefix: string
+ }): AutocompleteSuggestions {
+-  const currentItems = options.current?.items ?? []
+-  const orderedItems = options.preferCommands
+-    ? [...currentItems, ...options.skillItems]
+-    : [...options.skillItems, ...currentItems]
++  const orderedItems = [...options.skillItems, ...(options.current?.items ?? [])]
+   const seen = new Set<string>()
+   const items = orderedItems.filter((item) => {
+     const key = `${item.label}\u0000${item.value}`
+@@ -406,6 +402,9 @@ function createSlashSkillAutocompleteProvider(
+       const currentLine = lines[cursorLine] ?? ""
+       const textBeforeCursor = currentLine.slice(0, cursorCol)
+       const query = extractSlashSkillPrefix(textBeforeCursor)
+-      if (query === undefined || (query === "" && textBeforeCursor === "/")) {
++      if (
++        query === undefined ||
++        isPromptStartSlashToken(lines, cursorLine, textBeforeCursor, query)
++      ) {
+         return current.getSuggestions(lines, cursorLine, cursorCol, options)
+       }
+@@ -440,12 +439,6 @@ function createSlashSkillAutocompleteProvider(
+       return mergeAutocompleteItems({
+         current: currentSuggestions,
+         skillItems,
+-        preferCommands: isPromptStartSlashToken(
+-          lines,
+-          cursorLine,
+-          textBeforeCursor,
+-          query,
+-        ),
+         prefix: query,
+       })
+     },

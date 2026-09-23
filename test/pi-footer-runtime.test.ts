@@ -96,12 +96,12 @@ test('footer refreshes coalesce, retain valid settings on failure, and fence dis
   pending.shift()!(fallbackFooterRepository(context.cwd));
   await flush();
   assert.equal(loads, 2, 'one coalesced refresh, not one process group per watcher event');
-  assert.ok(component.render(100)[3]!.startsWith('\x1b[38;5;208m50.0k (40%)'), 'color uses the loaded compaction reserve, not the window percentage');
+  assert.ok(component.render(100)[4]!.startsWith('\x1b[38;5;208m50.0k (40%)'), 'color uses the loaded compaction reserve, not the window percentage');
   testContext.mock.timers.tick(1001);
   component.update(context);
   await flush();
   assert.equal(settingsLoads, 2);
-  assert.ok(component.render(100)[3]!.startsWith('\x1b[38;5;208m'), 'transient settings failure preserves the last valid threshold');
+  assert.ok(component.render(100)[4]!.startsWith('\x1b[38;5;208m'), 'transient settings failure preserves the last valid threshold');
   const rendersBeforeDisposal = renders;
   component.dispose();
   branchChanged();
@@ -134,7 +134,9 @@ test('runtime uses structured glyph targets for independent history and model co
   const click = (x: number, y: number): TuiMouseEvent => ({ type: 'click', button: 'left', x, y, screenX: x + 20, screenY: y + 10, width: 120, height: 20, shift: false, alt: false, ctrl: false });
   let text = component.render(120).map(stripTerminalSequences);
   let historyRow = text.indexOf('▾ History (2)');
-  assert.ok(historyRow > 0);
+  assert.ok(historyRow > 1);
+  assert.equal(text[0], '─'.repeat(120));
+  assert.equal(component.handleMouse?.(click(0, 0)), undefined, 'the rule has no disclosure target');
   assert.equal(text.filter(line => /^  ▸ /.test(line)).length, 2, 'details are closed by default');
   assert.equal(component.handleMouse?.(click(1, historyRow)), undefined);
   component.handleMouse?.(click(0, historyRow));
@@ -158,7 +160,7 @@ test('runtime uses structured glyph targets for independent history and model co
   assert.ok(component.render(120).map(stripTerminalSequences).some(line => /^    ✓ reviewer/.test(line)), 'normal data updates preserve model expansion');
 
   component.toggleView();
-  assert.equal(component.render(120).length, 1);
+  assert.equal(component.render(120).length, 2);
   component.toggleView();
   assert.ok(component.render(120).map(stripTerminalSequences).some(line => /^    ✓ reviewer/.test(line)), 'full collapse preserves model expansion');
 

@@ -42,18 +42,18 @@ function assertBounded(lines: string[], width: number): void {
   for (const line of lines) assert.ok(visibleWidth(line) <= width, `${visibleWidth(line)} > ${width}: ${stripTerminalSequences(line)}`);
 }
 
-test('renders the five core lines in order with exact account color and no runtime extras', () => {
+test('renders the rule and five core lines in order with exact account color and no runtime extras', () => {
   const lines = renderPiFooter(snapshot({ account: 'personal' }), 100, theme);
   const text = plain(lines);
-  assert.equal(lines.length, 5);
-  assert.match(text[0]!, /^▾ New session · #12345678 · Personal$/);
-  assert.ok(lines[0]!.includes('\x1b[38;2;71;127;204mPersonal\x1b[0m'));
-  assert.match(text[1]!, /^claude-sonnet-4 · ◆◆◆◆◇◇$/);
-  assert.equal(text[2], 'mpx · feature-tree · footer');
-  assert.match(text[3]!, /42\.1k \(42%\)/);
-  assert.doesNotMatch(text[3]!, /Context/);
-  assert.match(text[3]!, /\$1\.250$/);
-  assert.match(text[4]!, /^5h ██░░░░░░ 23% 1h$/);
+  assert.equal(lines.length, 6);
+  assert.match(text[1]!, /^▾ New session · #12345678 · Personal$/);
+  assert.ok(lines[1]!.includes('\x1b[38;2;71;127;204mPersonal\x1b[0m'));
+  assert.match(text[2]!, /^claude-sonnet-4 · ◆◆◆◆◇◇$/);
+  assert.equal(text[3], 'mpx · feature-tree · footer');
+  assert.match(text[4]!, /42\.1k \(42%\)/);
+  assert.doesNotMatch(text[4]!, /Context/);
+  assert.match(text[4]!, /\$1\.250$/);
+  assert.match(text[5]!, /^5h ██░░░░░░ 23% 1h$/);
   assert.doesNotMatch(text.join('\n'), /port|dirty|ahead|runtime/i);
 });
 
@@ -67,8 +67,8 @@ test('agent model tiers use stable colors', () => {
 
 test('main model uses the same tier color in expanded and compact views', () => {
   const value = snapshot({ model: 'gpt-6-sol' });
-  assert.match(renderPiFooter(value, 120, theme, 'summary')[1]!, /^\x1b\[38;5;39mSol 6/);
-  assert.match(renderPiFooter(value, 120, theme, 'compact')[0]!, /\x1b\[38;5;39mSol 6/);
+  assert.match(renderPiFooter(value, 120, theme, 'summary')[2]!, /^\x1b\[38;5;39mSol 6/);
+  assert.match(renderPiFooter(value, 120, theme, 'compact')[1]!, /\x1b\[38;5;39mSol 6/);
 });
 
 test('versioned family labels retain exact model versions and unknown models stay recognizable', () => {
@@ -80,7 +80,7 @@ test('versioned family labels retain exact model versions and unknown models sta
     ['chatgpt-codex/gpt-5.10-astra', 'Astra 5.10'],
     ['vendor/custom-model-v9', 'custom-model-v9'],
   ]) {
-    assert.ok(plain(renderPiFooter(snapshot({ model }), 120, theme))[1]!.startsWith(`${label} · `));
+    assert.ok(plain(renderPiFooter(snapshot({ model }), 120, theme))[2]!.startsWith(`${label} · `));
   }
 });
 
@@ -93,10 +93,10 @@ test('thinkingGauge implements every original six-slot effort level', () => {
 
 test('unknown and nonfinite metrics are unavailable rather than fabricated zeroes', () => {
   const text = plain(renderPiFooter(snapshot({ account: undefined, contextTokens: Number.NaN, contextPercent: Number.NaN, cost: Infinity, quota: undefined }), 90, theme));
-  assert.equal(text[0], '▾ New session · #12345678');
-  assert.equal(text[3], 'usage unavailable');
-  assert.doesNotMatch(text[3]!, /Context/);
-  assert.equal(text[4], 'unavailable');
+  assert.equal(text[1], '▾ New session · #12345678');
+  assert.equal(text[4], 'usage unavailable');
+  assert.doesNotMatch(text[4]!, /Context/);
+  assert.equal(text[5], 'unavailable');
   assert.doesNotMatch(text.join('\n'), /Personal| · Work$|0%|\$0/);
 });
 
@@ -121,7 +121,7 @@ test('sanitizes terminal text and unsafe links while preserving safe full OSC8 t
 
 test('reserves session id and account while truncating a long session name', () => {
   const text = plain(renderPiFooter(snapshot({ sessionName: 'A very long session name that cannot possibly fit', account: 'work' }), 34, theme));
-  assert.match(text[0]!, /… · #12345678 · Work$/);
+  assert.match(text[1]!, /… · #12345678 · Work$/);
 });
 
 test('caps worktree and branch labels at twenty display cells while preserving complete links', () => {
@@ -134,7 +134,7 @@ test('caps worktree and branch labels at twenty display cells while preserving c
     branchUrl: 'https://example.test/project/tree/feature%2Fa-very-long-footer-branch',
     editorUrl: 'vscode://file/C:/projects/a-complete-worktree-destination',
   };
-  const line = renderPiFooter(snapshot({ location }), 120, theme)[2]!;
+  const line = renderPiFooter(snapshot({ location }), 120, theme)[3]!;
   const fields = stripTerminalSequences(line).split(' · ');
   assert.equal(fields.length, 3);
   assert.equal(fields[0], 'project 󰨞');
@@ -160,22 +160,22 @@ test('keeps review beside effort on the existing model row with full links and n
   }), 60, theme);
   const text = plain(lines);
   assert.equal(lines.length, renderPiFooter(snapshot(), 60, theme).length);
-  assert.equal(text[2]!.includes('PR #4242'), false);
-  assert.match(text[1]!, /◆.* · PR #4242 · 修/);
-  assert.ok(lines[1]!.includes(url));
+  assert.equal(text[3]!.includes('PR #4242'), false);
+  assert.match(text[2]!, /◆.* · PR #4242 · 修/);
+  assert.ok(lines[2]!.includes(url));
   assertBounded(lines, 60);
 
   const narrow = renderPiFooter(snapshot({
     model: 'a-model-name-that-would-otherwise-hide-the-review',
     review: { provider: 'gitlab', number: 42, url: 'https://gitlab.example/group/project/-/merge_requests/42' },
   }), 35, theme);
-  assert.match(plain(narrow)[1]!, /… · ◆.* · MR !42$/);
+  assert.match(plain(narrow)[2]!, /… · ◆.* · MR !42$/);
   assertBounded(narrow, 35);
 });
 
 test('balances location widths and bounds Unicode output at narrow and zero widths', () => {
   const narrow = renderPiFooter(snapshot({ location: { project: '超長項目名稱', worktree: 'another-very-long-worktree', branch: 'feature/extremely-long' } }), 35, theme);
-  const location = plain(narrow)[2]!;
+  const location = plain(narrow)[3]!;
   assert.match(location, /^超.* · another.* · feature/);
   assert.doesNotMatch(location, /Project |Worktree |Branch |P:|W:|B:/);
   assertBounded(narrow, 35);
@@ -198,8 +198,8 @@ test('compactions show their native pre-compaction context count, including afte
     { id: 'manual', timestamp: '2026-09-14T21:36:00', reason: 'manual', tokensBefore: 47_853 },
     { id: 'resumed', timestamp: '2026-09-14T21:37:00', tokensBefore: 12_345 },
   ] }), 100, theme));
-  assert.equal(text[4], '  ├─ manual · 47.9k · 21:36');
-  assert.equal(text[5], '  └─ compacted · 12.3k · 21:37');
+  assert.equal(text[5], '  ├─ manual · 47.9k · 21:36');
+  assert.equal(text[6], '  └─ compacted · 12.3k · 21:37');
 });
 
 test('marks old quota observations stale and reached reset times awaiting update', () => {
@@ -254,8 +254,8 @@ test('agent token columns stay fixed across normal, unknown, and extreme elapsed
 
 test('shortens only provider prefixes and formats valid cost safely', () => {
   const text = plain(renderPiFooter(snapshot({ model: 'vendor/custom-model-v9', cost: 0.004 }), 90, theme));
-  assert.match(text[1]!, /^custom-model-v9 /);
-  assert.match(text[3]!, /\$0\.004/);
+  assert.match(text[2]!, /^custom-model-v9 /);
+  assert.match(text[4]!, /\$0\.004/);
 });
 
 test('wide columns retain title, account, and all location values', () => {
@@ -264,13 +264,13 @@ test('wide columns retain title, account, and all location values', () => {
     location: { project: 'project-name', worktree: 'worktree-name', branch: 'branch-name' },
     agents: [{ id: 'a', type: 'reviewer', status: 'done', model: 'openai/gpt-5', effort: 'max', elapsedMs: 1000 }],
   }), 180, theme));
-  assert.match(text[0]!, /^▾ Footer title · #12345678 · Work$/);
-  assert.match(text[2]!, /^project-name · worktree-name · branch-name/);
+  assert.match(text[1]!, /^▾ Footer title · #12345678 · Work$/);
+  assert.match(text[3]!, /^project-name · worktree-name · branch-name/);
 });
 
 test('project is white and a main checkout leaves only project and branch links', () => {
   const location = { project: 'prejemesi', branch: 'dev', projectUrl: 'file:///C:/projects/prejemesi', branchUrl: 'https://example.test/tree/dev' };
-  const line = renderPiFooter(snapshot({ location }), 100, theme)[2]!;
+  const line = renderPiFooter(snapshot({ location }), 100, theme)[3]!;
   assert.equal(stripTerminalSequences(line), 'prejemesi · dev');
   assert.ok(line.includes('\x1b[38;2;255;255;255mprejemesi\x1b[0m'));
   assert.ok(line.includes(location.projectUrl));
@@ -291,15 +291,15 @@ test('context text and filled cells escalate against compaction trigger, not win
     [49_999, '\x1b[37m'], [50_000, '\x1b[33m'], [69_999, '\x1b[33m'],
     [70_000, '\x1b[38;5;208m'], [89_999, '\x1b[38;5;208m'], [90_000, '\x1b[31m'],
   ] as const) {
-    const line = renderPiFooter(snapshot({ contextTokens: tokens, contextPercent: 40.9 }), 100, theme)[3]!;
+    const line = renderPiFooter(snapshot({ contextTokens: tokens, contextPercent: 40.9 }), 100, theme)[4]!;
     assert.ok(line.startsWith(prefix), String(tokens));
     assert.ok(line.includes(`${prefix}█████`));
     assert.match(stripTerminalSequences(line), /\(40%\)/);
   }
-  const disabled = renderPiFooter(snapshot({ contextTokens: 999, contextPercent: null, compactionTrigger: 0 }), 100, theme)[3]!;
+  const disabled = renderPiFooter(snapshot({ contextTokens: 999, contextPercent: null, compactionTrigger: 0 }), 100, theme)[4]!;
   assert.equal(stripTerminalSequences(disabled), '999 · $1.250');
   for (const contextTokens of [undefined, null, NaN, Infinity, -1]) {
-    const line = stripTerminalSequences(renderPiFooter(snapshot({ contextTokens }), 100, theme)[3]!);
+    const line = stripTerminalSequences(renderPiFooter(snapshot({ contextTokens }), 100, theme)[4]!);
     assert.equal(line, 'usage unavailable · $1.250');
   }
 });
@@ -315,8 +315,8 @@ test('quota bars keep accent used cells and muted empty cells at every utilizati
 
 test('unknown effort and quota reset are explicit', () => {
   const text = plain(renderPiFooter(snapshot({ effort: 'surprise', quota: [{ label: 'day', usedPercent: 10 }] }), 90, theme));
-  assert.match(text[1]!, /<unknown>/);
-  assert.doesNotMatch(text[1]!, /[◆◇]/);
+  assert.match(text[2]!, /<unknown>/);
+  assert.doesNotMatch(text[2]!, /[◆◇]/);
   assert.match(text.at(-1)!, /reset unavailable/);
 });
 
@@ -347,7 +347,7 @@ test('linked agent details retain the elapsed field and stay bounded', () => {
   for (const width of [1, 40, 60, 180]) assertBounded(renderPiFooter(value, width, theme, 'details'), width);
 });
 
-test('compact is one bounded bar-free line with aliases, context, and every quota reset', () => {
+test('compact content is one bounded bar-free line below the rule with aliases, context, and every quota reset', () => {
   const lines = renderPiFooter(snapshot({
     model: 'gpt-6-luna',
     quota: [
@@ -355,9 +355,9 @@ test('compact is one bounded bar-free line with aliases, context, and every quot
       { label: '7d', usedPercent: 42, resetAt: 1_700_007_200_000 },
     ],
   }), 120, theme, 'compact');
-  assert.equal(lines.length, 1);
-  assert.match(plain(lines)[0]!, /^▸ · #12345678 · Luna 6 · ◆◆◆◆◇◇ · 42\.1k \(42%\) · 5h 23% 1h · 7d 42% 2h$/);
-  assert.doesNotMatch(plain(lines)[0]!, /[█░]/);
+  assert.equal(lines.length, 2);
+  assert.match(plain(lines)[1]!, /^▸ · #12345678 · Luna 6 · ◆◆◆◆◇◇ · 42\.1k \(42%\) · 5h 23% 1h · 7d 42% 2h$/);
+  assert.doesNotMatch(plain(lines)[1]!, /[█░]/);
   assertBounded(lines, 120);
 });
 
@@ -496,6 +496,31 @@ test('model summary aggregates every agent peak beyond the visible detail limit'
     const text = plain(renderPiFooter(snapshot({ agents }), 160, theme, view));
     assert.match(text.find(line => /^  [▸▾] Terra/.test(line))!, /×12 · 228\.0k \(30\.0k\) ·/);
     assert.equal(text.filter(line => /^    ✓ /.test(line)).length, view === 'details' ? 10 : 0);
+  }
+});
+
+test('a dim full-width rule precedes both layouts without a blank row or interactive target', () => {
+  const agents = [{ id: 'one', type: 'Explore', status: 'done', model: 'gpt-6-luna', effort: 'low' }];
+  for (const view of ['compact', 'summary', 'details'] as const) {
+    const layout = renderPiFooterLayout(snapshot({ agents }), 12, theme, {
+      view, historyExpanded: true, expandedGroups: new Set(),
+    });
+    assert.equal(layout.lines[0], theme.fg('dim', '─'.repeat(12)));
+    assert.equal(layout.controls.some(control => control.row === 0), false);
+    assert.equal(layout.controls.find(control => control.kind === 'footer')?.row, 1);
+    for (const control of layout.controls) {
+      const disclosure = control.kind === 'group' ? /^  [▸▾] / : control.kind === 'history' ? /^[▸▾] History/ : /^[▸▾]/;
+      assert.match(plain(layout.lines)[control.row]!, disclosure, `${control.kind} target points to its disclosure row`);
+    }
+    assert.ok(layout.lines[1]?.length, 'content immediately follows the rule');
+  }
+  for (const width of [1, 2, 3, 20.8]) {
+    const lines = renderPiFooter(snapshot(), width, theme, 'compact');
+    assert.equal(plain(lines)[0], '─'.repeat(Math.floor(width)));
+    assertBounded(lines, width);
+  }
+  for (const width of [0, -1, NaN, Infinity]) {
+    assert.deepEqual(renderPiFooter(snapshot(), width, theme), []);
   }
 });
 

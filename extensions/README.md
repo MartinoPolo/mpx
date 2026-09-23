@@ -21,9 +21,10 @@ forwarder activates only for an explicitly selected MPX account and checkout.
 
 ## Footer presentation, links and reviews
 
-The footer starts with its operational summary expanded and agent history collapsed. `/footer` or
-`Ctrl+Alt+F` toggles the one-line footer; `/footer details` expands finished-agent details and
-`/footer compact` returns to one line. Agent and model names use stable tier colors: Astra green, Sol
+A dim horizontal rule separates the footer from the editor and autocomplete suggestions, without
+extra blank padding. The footer starts with its operational summary expanded and agent history collapsed.
+`/footer` or `Ctrl+Alt+F` toggles compact mode: one content line beneath the rule. `/footer details`
+expands finished-agent details, and `/footer compact` restores compact mode. Agent and model names use stable tier colors: Astra green, Sol
 blue, Luna yellow, and Terra orange. The main footer model uses the same palette. Versioned family models display as `Terra 5.6`,
 `Sol 6`, or `Luna 6` in the footer and agent rows; canonical identifiers remain available in
 native records.
@@ -72,6 +73,22 @@ best-effort, with no new guarantee of bounded cleanup or recovery after a hard p
 Keep network timeouts and normal EOF/finally cleanup in diagnostics. Output does not reset the native
 timeout; silence alone is not failure. Service lifetimes and join cancellation remain separate from
 a command deadline. No core/subagent patch or service manager is added.
+
+## Inline skill completion
+
+MPX pins `@tifan/pi-inline-skills` with a compatibility patch in `patches/`. Prompt-start completion
+stays native: each skill appears once as `/skill:name`, Enter completes and submits, and Tab only
+completes. Within prose, inline `/name` completion inserts the skill without submitting the prompt.
+The package retains upstream inline skill loading and loaded-skill tracking.
+
+Select the patched local package in the native account's `settings.json` `packages` list using the
+absolute path to this checkout's `node_modules/@tifan/pi-inline-skills`. Replace the existing
+`npm:@tifan/pi-inline-skills` entry rather than loading both. Other accounts remain unchanged.
+`pnpm install --frozen-lockfile` reproduces the patch; restart Pi after switching package sources.
+
+```bash
+pnpm exec tsx --test test/pi-inline-skills.test.ts
+```
 
 ## Native cancellation
 

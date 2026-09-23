@@ -430,13 +430,13 @@ test('footer commands and shortcut toggle compact presentation without sending m
     const component = harness.footerFactory()({ requestRender() {} }, footerTheme, {
       getGitBranch: () => 'main', onBranchChange: () => () => {},
     });
-    assert.ok(component.render(100).length > 1);
+    assert.ok(component.render(100).length > 2);
     const command = harness.commands.get('footer');
     await command.handler('', harness.ctx);
-    assert.equal(component.render(100).length, 1);
-    assert.doesNotMatch(stripVTControlCharacters(component.render(100)[0]), /[█░]/);
+    assert.equal(component.render(100).length, 2);
+    assert.doesNotMatch(stripVTControlCharacters(component.render(100)[1]), /[█░]/);
     await harness.shortcuts.get('ctrl+alt+f').handler(harness.ctx);
-    assert.ok(component.render(100).length > 1);
+    assert.ok(component.render(100).length > 2);
     harness.emitBus('subagents:completed', {
       id: 'command-agent', type: 'Explore', status: 'completed', durationMs: 1000, tokens: { total: 10 },
     });
@@ -770,36 +770,39 @@ test('footer keeps current context tokens, compaction and responsive agents with
   registerPiUi(harness.pi, { settleDelayMs: 0, environment: {} });
   harness.entries.push({ type: 'compaction', id: 'compact-1', timestamp: '2026-09-14T10:00:00Z' });
   harness.entries.push({ type: 'message', message: { role: 'assistant', usage: { input: 9_876_543, cost: { total: 0 } } } });
-  await harness.call('session_start');
+  try {
+    await harness.call('session_start');
 
-  harness.emitBus('subagents:started', { id: 'agent-1', type: 'Explore' });
-  const tui = { requestRender() {} };
-  const footerData = {
-    getGitBranch: () => 'feature/ui',
-    onBranchChange: () => () => {},
-  };
-  const component = harness.footerFactory()(tui, footerTheme, footerData);
-  component.setView('details');
-  assert.equal(component.render(180).length, 6, 'five core rows plus compaction; running agents stay upstream');
+    harness.emitBus('subagents:started', { id: 'agent-1', type: 'Explore' });
+    const tui = { requestRender() {} };
+    const footerData = {
+      getGitBranch: () => 'feature/ui',
+      onBranchChange: () => () => {},
+    };
+    const component = harness.footerFactory()(tui, footerTheme, footerData);
+    component.setView('details');
+    assert.equal(component.render(180).length, 7, 'leading rule, five core rows and compaction; running agents stay upstream');
 
-  harness.emitBus('subagents:completed', {
-    id: 'agent-1', type: 'Explore', status: 'completed', durationMs: 2_000, tokens: { total: 321 },
-  });
-  await harness.call('tool_result', {
-    toolName: 'get_subagent_result',
-    details: {
-      agentId: 'agent-1', subagentType: 'Explore', status: 'completed', modelName: 'luna 6',
-      tags: ['thinking: low'], durationMs: 2_000,
-    },
-  });
-  const rendered = stripVTControlCharacters(component.render(180).join('\n'));
-  assert.match(rendered, /12\.3k \(25%\)/);
-  assert.match(rendered, /compact/);
-  assert.match(rendered, /Explore.*luna 6.*◆◆◇◇◇◇/);
-  assert.doesNotMatch(rendered, /Context|9\.9m|9876543|tokens 321|port|Ctrl\+|Alt\+|\blow\b/i);
+    harness.emitBus('subagents:completed', {
+      id: 'agent-1', type: 'Explore', status: 'completed', durationMs: 2_000, tokens: { total: 321 },
+    });
+    await harness.call('tool_result', {
+      toolName: 'get_subagent_result',
+      details: {
+        agentId: 'agent-1', subagentType: 'Explore', status: 'completed', modelName: 'luna 6',
+        tags: ['thinking: low'], durationMs: 2_000,
+      },
+    });
+    const rendered = stripVTControlCharacters(component.render(180).join('\n'));
+    assert.match(rendered, /12\.3k \(25%\)/);
+    assert.match(rendered, /compact/);
+    assert.match(rendered, /Explore.*luna 6.*◆◆◇◇◇◇/);
+    assert.doesNotMatch(rendered, /Context|9\.9m|9876543|tokens 321|port|Ctrl\+|Alt\+|\blow\b/i);
 
-  assert.ok(harness.emitted.some((event) => event.name === PI_ACTIVITY_EVENT));
-  await harness.call('session_shutdown', { reason: 'quit' });
+    assert.ok(harness.emitted.some((event) => event.name === PI_ACTIVITY_EVENT));
+  } finally {
+    await harness.call('session_shutdown', { reason: 'quit' });
+  }
 });
 
 test('background footer uses resolved native invocation without waiting for a result tool or inventing requested settings', async () => {
@@ -847,28 +850,28 @@ test('footer refreshes native cost, compaction, naming, model and quota without 
     harness.pi.setSessionName('Readable session title');
     await harness.call('message_end');
     harness.entries.push({ type: 'message', message: { role: 'assistant', usage: { cost: { total: 1.25 } } } });
-    assert.match(stripVTControlCharacters(component.render(100)[3]), /\$1\.250/, 'native persistence follows message_end; the next render sees it');
+    assert.match(stripVTControlCharacters(component.render(100)[4]), /\$1\.250/, 'native persistence follows message_end; the next render sees it');
     await harness.call('turn_end');
     await harness.call('after_provider_response', { headers: {
       'x-codex-primary-used-percent': '27', 'x-codex-primary-window-minutes': '300', 'x-codex-primary-reset-after-seconds': '600',
     } });
     let lines = component.render(100).map(stripVTControlCharacters);
-    assert.equal(lines.length, 5);
-    assert.match(lines[0], /Readable session title.*Work/);
-    assert.match(lines[3], /25%.*\$1\.250/);
-    assert.match(lines[4], /^5h.*27%.*\dm/);
-    assert.doesNotMatch(lines[4], /Quota|resets in/);
+    assert.equal(lines.length, 6);
+    assert.match(lines[1], /Readable session title.*Work/);
+    assert.match(lines[4], /25%.*\$1\.250/);
+    assert.match(lines[5], /^5h.*27%.*\dm/);
+    assert.doesNotMatch(lines[5], /Quota|resets in/);
     harness.entries.push({ type: 'compaction', id: 'compact', timestamp: '2026-09-14T10:00:00Z' });
     await harness.call('session_compact', { compactionEntry: { id: 'compact' }, reason: 'threshold' });
     lines = component.render(100).map(stripVTControlCharacters);
-    assert.match(lines[4], /threshold/);
-    assert.match(lines[5], /^5h/);
+    assert.match(lines[5], /threshold/);
+    assert.match(lines[6], /^5h/);
     const changed = { ...harness.ctx, model: { ...harness.ctx.model, provider: 'other', id: 'short-model' }, thinkingLevel: 'max' };
     await harness.call('model_select', {}, changed);
     lines = component.render(100).map(stripVTControlCharacters);
-    assert.match(lines[1], /short-model.*◆◆◆◆◆◆/);
-    assert.doesNotMatch(lines[1], /\bmax\b/);
-    assert.equal(lines[5], 'unavailable');
+    assert.match(lines[2], /short-model.*◆◆◆◆◆◆/);
+    assert.doesNotMatch(lines[2], /\bmax\b/);
+    assert.equal(lines[6], 'unavailable');
     assert.equal(harness.completedCalls.length, 0);
   } finally {
     component.dispose();

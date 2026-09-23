@@ -443,6 +443,7 @@ export function renderPiFooterLayout(
     const retainedColumns = lineWidth <= columns ? columns : Math.max(0, columns - visibleWidth('…'));
     if (control && control.endColumn <= retainedColumns) controls.push({ ...control, row });
   };
+  addLine(theme.fg('dim', '─'.repeat(columns)));
   if (state.view === 'compact') {
     const id = safeText(snapshot.sessionId, '').slice(0, 8) || 'unknown';
     addLine([

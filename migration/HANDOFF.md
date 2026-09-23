@@ -57,5 +57,5 @@ substitute transcript paths. Naming recovery and source-version rollback must be
 - Orca aggregate patches are optional and remain undeployed without a demonstrated live defect;
   see [Orca integration](ORCA_INTEGRATION.md).
 
-Mid-prompt skill autocomplete is a separate follow-up. Port cursor-aware behavior without restoring
-retired runtime infrastructure; distinguish completion from submitted inline skill expansion.
+Inline skill autocomplete uses the checkout-patched native package; see
+[package selection and interaction behavior](../extensions/README.md#inline-skill-completion).
