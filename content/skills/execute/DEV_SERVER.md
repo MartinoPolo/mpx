@@ -11,7 +11,7 @@ Main owns server startup and cleanup. Prepare a server only when verification ne
 - Reuse a server only after confirming its owner, checkout, and configuration. Otherwise start one
   with supported background controls; retain its process handle and keep logs outside tracked files.
 - Use configured ports or framework defaults. Optional MPX port metadata is not required.
-  Leave occupied ports alone; use a supported alternative or report the conflict.
+  Leave occupied ports alone; use a supported isolated alternative or follow section 4's bounded wait.
 - Confirm the intended route is ready and serves the current implementation, not just any response.
   Bound startup to the project limit, default two minutes.
 - Give browser agents the verified URL, relevant app/auth configuration, isolation rules, an artifact
@@ -21,8 +21,9 @@ Main owns server startup and cleanup. Prepare a server only when verification ne
 
 ## Recover and clean up
 
-- Inspect bounded logs and attempt one evidence-based recovery. Ask only for prerequisites that
-  cannot be discovered. Do not invent credentials, weaken authentication, or install arbitrary tools.
+- Inspect bounded logs and recover under section 4's repair limits, including documented local
+  dependencies. Ask only for prerequisites that cannot be safely recovered with existing authorization.
+  Do not invent credentials, weaken authentication, or install arbitrary tools.
 - On success or failure, close owned resources and stop only processes started for this task.
   Never stop user-owned processes or remove another owner's locks.
 - Release leases only after resources are idle. Bound cleanup to the project limit, default one

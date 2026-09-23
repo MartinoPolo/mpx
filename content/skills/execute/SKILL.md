@@ -24,9 +24,10 @@ Give each agent **task context**: its objective, relevant requirements and const
 pointers, and useful findings already established. Read its input contract and supply what the task
 needs. Carry applicable flags, authorization, and remaining time into every dispatch, including repairs. Evaluate their actual changes and evidence before accepting results.
 
-Set phase budgets before dispatch: default to 5 minutes for discovery/diagnosis, 10 for focused
-checks, 30 for the complete gate, and 15 for visual acceptance. Adjust to project needs before
-starting. Enforce timeouts through supported tool controls; do not reset elapsed budgets on retry.
+Set timeouts before dispatch: default to 5 minutes for discovery/diagnosis, 10 for focused
+checks, 30 for the complete gate, and 15 for visual acceptance. Adjust to project needs.
+Enforce timeouts through supported tool controls. Give each repair attempt its own time budget;
+a timed-out check needs diagnosis.
 
 ## 1. Resolve
 
@@ -79,9 +80,13 @@ Main owns the server and supplies the verified URL to agents.
 Finish formatting before review. Do not overlap writers or checks that share mutable resources.
 Use fresh `mpx-executor` sessions for accepted repairs. Retry affected checks during diagnosis;
 after repairs, refresh affected reviews and visual evidence, then rerun the complete gate.
-Allow at most three local repair/review iterations. Diagnose product defects, environment conflicts,
-and shutdown hangs before retrying; require new evidence for an unchanged failing batch.
-Stop and report unresolved failures when the budget is exhausted.
+Always try to resolve blockers to completing the implementation, including environment, fixture,
+and verification failures. Allow up to five repair attempts per distinct failure, not across the
+whole execution; diagnose before retrying rather than repeating an unchanged failing batch.
+Stop recovery only for unsafe actions, missing authorization, or exhausted repair/wait limits.
+When a required resource is occupied, continue independent work and recheck availability every
+five minutes for up to 30 minutes. Confirm ownership and availability before use; never take over
+another run's resources. Waiting does not consume repair attempts or verification time.
 
 ### 4a. Deterministic checks
 
@@ -119,8 +124,7 @@ Recheck acceptance and the selected endpoint. Prepare a substantive change summa
 `mpx-shipper` with task context, explicit intended paths, summary, and verification evidence.
 Supply its required delivery identities and authorization; preserve completed-stage evidence on retry.
 
-Allow three shipping attempts total. Evaluate failures, delegate accepted repairs to a fresh
-executor, and verify again before retrying. Give CI repairs the validated repository, PR, branch,
+Evaluate failures, delegate accepted repairs to a fresh executor, and verify again before retrying. Give CI repairs the validated repository, PR, branch,
 commit, and failing run/job identities. A confirmed CI-only infrastructure failure may retry that
 job within the shipping budget without repeating unchanged local checks. Other input changes
 invalidate the local gate.
