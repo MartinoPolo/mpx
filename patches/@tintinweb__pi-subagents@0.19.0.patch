@@ -1,5 +1,5 @@
 diff --git a/src/agent-manager.ts b/src/agent-manager.ts
-index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15bdb875b8 100644
+index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..06b3b0dd935c82e47b51d1258fc7d1ea07aaf7fc 100644
 --- a/src/agent-manager.ts
 +++ b/src/agent-manager.ts
 @@ -10,8 +10,8 @@
@@ -67,11 +67,12 @@ index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15
    /**
     * Run the resumed turn detached in the background: return immediately with
     * the record still "running" (or "queued" at the concurrency limit) and
-@@ -362,8 +364,13 @@ async function shutdownChildSession(session: AgentSession | undefined): Promise<
+@@ -362,8 +364,14 @@ async function shutdownChildSession(session: AgentSession | undefined): Promise<
  
  export class AgentManager {
    private agents = new Map<string, AgentRecord>();
 +  private completions = new Map<string, { revision: number; settled?: AgentRecord; promise: Promise<AgentRecord>; resolve: (record: AgentRecord) => void }>();
++  private activitySubscriptions = new Map<string, () => void>();
    private cleanupInterval: ReturnType<typeof setInterval>;
    private onComplete?: OnAgentComplete;
 +  private recordObserver?: OnAgentComplete;
@@ -81,7 +82,7 @@ index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15
    private onStart?: OnAgentStart;
    private onCompact?: OnAgentCompact;
    private onUsage?: OnAgentUsage;
-@@ -411,6 +418,13 @@ export class AgentManager {
+@@ -411,6 +419,13 @@ export class AgentManager {
    private runningBackground = 0;
    /** Number of currently running foreground (blocking) agents. */
    private runningForeground = 0;
@@ -95,7 +96,7 @@ index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15
  
    constructor(
      onComplete?: OnAgentComplete,
-@@ -424,7 +438,7 @@ export class AgentManager {
+@@ -424,7 +439,7 @@ export class AgentManager {
      this.onCompact = onCompact;
      this.onUsage = onUsage;
      this.maxConcurrent = maxConcurrent;
@@ -104,7 +105,7 @@ index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15
      this.cleanupInterval = setInterval(() => this.cleanup(), 60_000);
      this.cleanupInterval.unref();
    }
-@@ -466,12 +480,14 @@ export class AgentManager {
+@@ -466,12 +481,14 @@ export class AgentManager {
     * is pinned in `test/foreground-concurrency.test.ts`.
     */
    private poolFor(record: AgentRecord): Pool | undefined {
@@ -119,7 +120,7 @@ index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15
      return pool === "background"
        ? this.runningBackground < this.maxConcurrent
        : this.maxConcurrentForeground === 0 || this.runningForeground < this.maxConcurrentForeground;
-@@ -497,6 +513,7 @@ export class AgentManager {
+@@ -497,6 +514,7 @@ export class AgentManager {
      // call, not minutes later at drain. Throw (not warn): programmatic callers
      // can fix and retry; the RPC layer converts throws into error envelopes.
      assertValidSpawnCwd(options.cwd);
@@ -127,7 +128,7 @@ index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15
  
      const id = randomUUID().slice(0, 17);
      const abortController = new AbortController();
-@@ -541,8 +558,14 @@ export class AgentManager {
+@@ -541,8 +559,14 @@ export class AgentManager {
        workflowId: options.workflowId,
        maxSubagentDepth: options.maxSubagentDepth,
        rootSessionId: options.rootSessionId,
@@ -142,7 +143,7 @@ index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15
      // After the insert, so `takenHandles()` already counts this record's own
      // handle — a spawn named after its own type gets `explore-2`, not a
      // duplicate `explore` that would make resolution ambiguous.
-@@ -550,6 +573,7 @@ export class AgentManager {
+@@ -550,6 +574,7 @@ export class AgentManager {
        record.alias = assignHandle(handleBase(options.name), this.takenHandles());
      }
  
@@ -150,7 +151,7 @@ index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15
      const args: SpawnArgs = { pi, ctx, type, prompt, options };
  
      const pool = this.poolFor(record);
-@@ -599,6 +623,8 @@ export class AgentManager {
+@@ -599,6 +624,8 @@ export class AgentManager {
        if (record) {
          record.status = "stopped";
          record.completedAt = Date.now();
@@ -159,7 +160,7 @@ index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15
        }
        return false;
      }
-@@ -628,13 +654,18 @@ export class AgentManager {
+@@ -628,13 +655,18 @@ export class AgentManager {
            // Mirrors settleRun: an inline caller gets this failure as a throw
            // out of spawnAndWait, so an unconsumed record would ALSO nudge the
            // session about it — the same failure reported twice.
@@ -180,7 +181,7 @@ index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15
          }
          // The agent never kept its slot (startAgent gives it back on failure),
          // so anything queued behind it can go now.
-@@ -693,14 +724,12 @@ export class AgentManager {
+@@ -693,14 +725,12 @@ export class AgentManager {
      // never reach `settleRun`, so they hand the slot back themselves.
      const pool = this.poolFor(record);
      const releaseSlot = () => {
@@ -197,7 +198,7 @@ index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15
  
      // Worktree isolation: try to create a temporary git worktree. Strict —
      // fail loud if not possible (no silent fallback to main tree). Done BEFORE
-@@ -736,6 +765,8 @@ export class AgentManager {
+@@ -736,6 +766,8 @@ export class AgentManager {
        if (record.status !== "running") {
          releaseSlot();
          record.worktreeResult = await cleanupWorktree(pi, baseCwd, wt, options.description);
@@ -206,7 +207,7 @@ index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15
          this.drainQueue();
          return;
        }
-@@ -780,6 +811,7 @@ export class AgentManager {
+@@ -780,6 +812,7 @@ export class AgentManager {
        // copy came from, so the prompt can tell the agent not to work there.
        worktreeBase: worktreeCwd ? baseCwd : undefined,
        configCwd: options.configCwd ?? (customCwd !== undefined ? ctx.cwd : undefined),
@@ -214,7 +215,7 @@ index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15
        signal: record.abortController!.signal,
        onToolActivity: (activity) => {
          if (activity.type === "end") record.toolUses++;
-@@ -804,6 +836,10 @@ export class AgentManager {
+@@ -804,7 +837,12 @@ export class AgentManager {
          maxSubagentDepth: record.maxSubagentDepth,
        },
        onSessionCreated: (session) => {
@@ -223,9 +224,11 @@ index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15
 +          return;
 +        }
          record.session = session;
++        this.trackActivity(record, session);
          // Capture now, while the session object exists: after eviction this
          // path is the only thing that can reopen the conversation, and an
-@@ -814,6 +850,7 @@ export class AgentManager {
+         // in-memory session reports undefined, which correctly means
+@@ -814,6 +852,7 @@ export class AgentManager {
          // stubbed session must degrade to "not resumable" rather than throw
          // and take the whole spawn down with it.
          record.sessionFile = session.sessionManager?.getSessionFile?.();
@@ -233,7 +236,7 @@ index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15
          // Same reason, different field: the model and thinking level are only
          // knowable once pi has resolved its defaults and clamped the level to
          // what the model supports. Writing them back here makes the record
-@@ -843,6 +880,7 @@ export class AgentManager {
+@@ -843,6 +882,7 @@ export class AgentManager {
            }
            record.pendingSteers = undefined;
          }
@@ -241,7 +244,7 @@ index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15
          options.onSessionCreated?.(session);
        },
      })
-@@ -955,9 +993,8 @@ export class AgentManager {
+@@ -955,9 +995,8 @@ export class AgentManager {
     * only fires its controller and leaves the run to settle normally, so
     * decrementing there too would double-free — permanently lifting the limit.
     *
@@ -253,7 +256,7 @@ index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15
     *
     * @param guardCallback swallow a throwing `onComplete` (the success path does;
     *   the error path historically did not, and keeps not doing so).
-@@ -966,9 +1003,8 @@ export class AgentManager {
+@@ -966,9 +1005,8 @@ export class AgentManager {
     *   the release disagree with the acquire.
     */
    private settleRun(record: AgentRecord, guardCallback: boolean, pool: Pool | undefined): void {
@@ -265,7 +268,7 @@ index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15
  
      if (guardCallback) {
        try { this.onComplete?.(record); } catch { /* ignore completion side-effect errors */ }
-@@ -1069,27 +1105,7 @@ export class AgentManager {
+@@ -1069,27 +1107,7 @@ export class AgentManager {
        blocking: true,
        onSpawned,
      });
@@ -294,7 +297,7 @@ index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15
  
      // A record that ended "error" without ever getting a promise never ran: the
      // same startup failure spawn() rethrows on the immediate path (#179). Keep
-@@ -1111,102 +1127,39 @@ export class AgentManager {
+@@ -1111,102 +1129,39 @@ export class AgentManager {
      options?: ResumeOptions,
    ): Promise<AgentRecord | undefined> {
      const record = this.agents.get(id);
@@ -426,17 +429,18 @@ index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15
      return record;
    }
  
-@@ -1228,7 +1181,8 @@ export class AgentManager {
+@@ -1228,7 +1183,9 @@ export class AgentManager {
  
      record.status = "running";
      record.startedAt = Date.now();
 -    if (occupiesPoolSlot(record)) this.runningBackground++;
++    this.trackActivity(record, record.session);
 +    const pool = this.poolFor(record);
 +    this.chargePool(pool, 1);
      this.onStart?.(record);
  
      // Fresh abort controller so /agents stop and steering target THIS run rather
-@@ -1260,7 +1214,8 @@ export class AgentManager {
+@@ -1260,7 +1217,8 @@ export class AgentManager {
        }
        // Children spawned during the resumed turn must not outlive it.
        this.abortOwnedChildren(id);
@@ -446,7 +450,7 @@ index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15
        try { this.onComplete?.(record); } catch { /* ignore completion side-effect errors */ }
        this.drainQueue();
      };
-@@ -1329,10 +1284,80 @@ export class AgentManager {
+@@ -1329,10 +1287,98 @@ export class AgentManager {
      return true;
    }
  
@@ -473,14 +477,32 @@ index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15
    }
  
 +  private createCompletion(record: AgentRecord): void {
++    this.activitySubscriptions.get(record.id)?.();
++    this.activitySubscriptions.delete(record.id);
++    record.lastActivityAt = undefined;
 +    let resolve!: (record: AgentRecord) => void;
 +    const promise = new Promise<AgentRecord>(done => { resolve = done; });
 +    this.completions.set(record.id, { revision: record.runRevision, promise, resolve });
 +  }
 +
++  private trackActivity(record: AgentRecord, session: AgentSession): void {
++    this.activitySubscriptions.get(record.id)?.();
++    const revision = record.runRevision;
++    const unsubscribe = session.subscribe(event => {
++      if (this.agents.get(record.id) !== record || record.runRevision !== revision || this.isSettled(record.id)) return;
++      if (((event.type === "message_start" || event.type === "message_update" || event.type === "message_end") && event.message.role === "assistant")
++        || event.type === "tool_execution_start" || event.type === "tool_execution_update" || event.type === "tool_execution_end") {
++        record.lastActivityAt = Date.now();
++      }
++    });
++    this.activitySubscriptions.set(record.id, unsubscribe);
++  }
++
 +  private settleCompletion(record: AgentRecord): void {
 +    const completion = this.completions.get(record.id);
 +    if (this.agents.get(record.id) === record && completion?.revision === record.runRevision && !completion.settled) {
++      this.activitySubscriptions.get(record.id)?.();
++      this.activitySubscriptions.delete(record.id);
 +      completion.settled = Object.freeze({ ...record,
 +        invocation: record.invocation && Object.freeze({ ...record.invocation }),
 +        lifetimeUsage: { ...record.lifetimeUsage }, toolCeiling: record.toolCeiling && [...record.toolCeiling],
@@ -527,7 +549,7 @@ index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15
    /** Handles already in use, so a fresh spawn can pick an unclaimed one. */
    private takenHandles(): Set<string> {
      const taken = new Set<string>();
-@@ -1407,14 +1432,15 @@ export class AgentManager {
+@@ -1407,14 +1453,15 @@ export class AgentManager {
    abort(id: string): boolean {
      const record = this.agents.get(id);
      if (!record) return false;
@@ -546,15 +568,17 @@ index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15
        return true;
      }
  
-@@ -1433,6 +1459,7 @@ export class AgentManager {
+@@ -1433,6 +1480,9 @@ export class AgentManager {
      // nothing can observe a session that is half torn down.
      record.session = undefined;
      this.agents.delete(id);
++    this.activitySubscriptions.get(id)?.();
++    this.activitySubscriptions.delete(id);
 +    this.completions.delete(id);
      // A failed startup keeps its (rejected) entry so a late awaitStartup still
      // sees it; drop it with the record so the map can't grow unbounded.
      this.startups.delete(id);
-@@ -1470,9 +1497,13 @@ export class AgentManager {
+@@ -1470,9 +1520,13 @@ export class AgentManager {
    private cleanup() {
      const cutoff = Date.now() - 10 * 60_000;
      for (const [id, record] of this.agents) {
@@ -570,7 +594,7 @@ index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15
      }
    }
  
-@@ -1484,7 +1515,7 @@ export class AgentManager {
+@@ -1484,7 +1538,7 @@ export class AgentManager {
     */
    clearCompleted(skipUnconsumed = false): void {
      for (const [id, record] of this.agents) {
@@ -579,7 +603,7 @@ index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15
        if (skipUnconsumed && !record.resultConsumed) continue;
        this.removeRecord(id, record);
      }
-@@ -1506,6 +1537,7 @@ export class AgentManager {
+@@ -1506,6 +1560,7 @@ export class AgentManager {
  
    /** Abort all running and queued agents immediately. */
    abortAll(): number {
@@ -587,7 +611,7 @@ index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15
      let count = 0;
      // Clear queued agents first
      for (const queued of this.queue) {
-@@ -1513,6 +1545,8 @@ export class AgentManager {
+@@ -1513,6 +1568,8 @@ export class AgentManager {
        if (record) {
          record.status = "stopped";
          record.completedAt = Date.now();
@@ -596,7 +620,7 @@ index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15
          count++;
        }
      }
-@@ -1535,15 +1569,7 @@ export class AgentManager {
+@@ -1535,15 +1592,7 @@ export class AgentManager {
      // agents finish they start queued ones, which need awaiting too.
      while (true) {
        this.drainQueue();
@@ -613,7 +637,7 @@ index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15
        if (pending.length === 0) break;
        await Promise.allSettled(pending);
      }
-@@ -1558,9 +1584,12 @@ export class AgentManager {
+@@ -1558,9 +1607,14 @@ export class AgentManager {
      clearInterval(this.cleanupInterval);
      // Clear queue — via dequeue, so anyone blocked in spawnAndWait is woken
      // rather than left awaiting a gate nothing will ever resolve.
@@ -621,6 +645,8 @@ index 8c973b6ac4d28b06c9a2c71ef992bec00b96ae2a..ae2a7e95939016ca0f3c0a284e2b6f15
 +    for (const record of this.agents.values()) this.settleCompletion(record);
      this.dequeue(() => true);
      const sessions = [...this.agents.values()].map(record => record.session);
++    for (const unsubscribe of this.activitySubscriptions.values()) unsubscribe();
++    this.activitySubscriptions.clear();
      this.agents.clear();
 +    this.completions.clear();
      this.startups.clear();
@@ -1084,9 +1110,18 @@ index aa84c1411be875eee9d8aa80c3ab2a46aa56da1e..a5d7537b27353e8b0f1e2b1c0f574a71
  
  /**
 diff --git a/src/index.ts b/src/index.ts
-index 4989968c98e186b3c94194ae8c05c7651374fcb6..6907b0f9f6b148bd0b99dbabe1bc5d4dbcece259 100644
+index 4989968c98e186b3c94194ae8c05c7651374fcb6..925f780b1d11641a169d3b4544c1289ccbdbb268 100644
 --- a/src/index.ts
 +++ b/src/index.ts
+@@ -13,7 +13,7 @@
+ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+ import { isAbsolute, join } from "node:path";
+ import { defineTool, type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext, getAgentDir, getSettingsListTheme } from "@earendil-works/pi-coding-agent";
+-import { Container, Key, matchesKey, type SettingItem, SettingsList, Spacer, Text } from "@earendil-works/pi-tui";
++import { Container, Key, matchesKey, type SettingItem, SettingsList, Spacer, Text, visibleWidth } from "@earendil-works/pi-tui";
+ import { Type } from "@sinclair/typebox";
+ import { abortable } from "./abortable.js";
+ import { hasAgentBadge, renderAgentName } from "./agent-color.js";
 @@ -24,11 +24,10 @@ import { BUILTIN_TOOL_NAMES, getAgentConfig, getAllTypes, getAvailableTypes, get
  import { inChildSessionContext } from "./child-context.js";
  import { type RpcHandle, registerRpcHandlers } from "./cross-extension-rpc.js";
@@ -1241,8 +1276,7 @@ index 4989968c98e186b3c94194ae8c05c7651374fcb6..6907b0f9f6b148bd0b99dbabe1bc5d4d
 -      status: record.status, result: record.result, error: record.error,
 -      startedAt: record.startedAt, completedAt: record.completedAt,
 -    });
-+    delivery.completed(record);
- 
+-
 -    // Skip notification if result was already consumed via get_subagent_result
 -    if (record.resultConsumed) {
 -      agentActivity.delete(record.id);
@@ -1251,7 +1285,8 @@ index 4989968c98e186b3c94194ae8c05c7651374fcb6..6907b0f9f6b148bd0b99dbabe1bc5d4d
 -      widget.update();
 -      return;
 -    }
--
++    delivery.completed(record);
+ 
 -    // If this agent is pending batch finalization (debounce window still open),
 -    // don't send an individual nudge — finalizeBatch will pick it up retroactively.
 -    if (currentBatchAgents.some(a => a.id === record.id)) {
@@ -1587,11 +1622,40 @@ index 4989968c98e186b3c94194ae8c05c7651374fcb6..6907b0f9f6b148bd0b99dbabe1bc5d4d
        wait: Type.Optional(
          Type.Boolean({
            description: "If true, wait for the agent to complete before returning. Default: false.",
-@@ -2751,7 +2632,29 @@ Terse command-style prompts produce shallow, generic work.
+@@ -2750,8 +2631,86 @@ Terse command-style prompts produce shallow, generic work.
+         }),
        ),
      }),
-     execute: async (_toolCallId, params, signal, _onUpdate, _ctx) => {
+-    execute: async (_toolCallId, params, signal, _onUpdate, _ctx) => {
 -      const record = resolveAgentRef(params.agent_id);
++    renderResult(result, { expanded, isPartial }, theme, renderContext) {
++      const waiting = (result.details as { waitingAgents?: Array<{ name: string; status: string; elapsedMs?: number; quietMs?: number }> } | undefined)?.waitingAgents;
++      const text = result.content[0]?.type === "text" ? result.content[0].text : "";
++      if (renderContext.isError) return new Text(text, 0, 0);
++      if (!isPartial || !waiting) {
++        if (expanded || text.length <= 240 && text.split("\n").length <= 4) return new Text(text, 0, 0);
++        const preview = text.split("\n").slice(0, 4).join("\n").slice(0, 240).trimEnd();
++        return new Text(preview + "\n… (expand for full result)", 0, 0);
++      }
++      const duration = (ms: number) => {
++        const seconds = Math.floor(ms / 1000);
++        const hours = Math.floor(seconds / 3600);
++        const minutes = Math.floor(seconds % 3600 / 60);
++        return [hours ? `${hours}h` : "", minutes ? `${minutes}m` : "", `${seconds % 60}s`].filter(Boolean).join(" ");
++      };
++      const lines: string[] = [];
++      const longestName = Math.max(...waiting.map(agent => visibleWidth(agent.name)), 0);
++      for (const agent of waiting) {
++        const elapsedColor = agent.elapsedMs !== undefined && agent.elapsedMs >= 60 * 60_000 ? "error" : agent.elapsedMs !== undefined && agent.elapsedMs >= 30 * 60_000 ? "warning" : "muted";
++        const quietColor = agent.quietMs !== undefined && agent.quietMs >= 30 * 60_000 ? "error" : agent.quietMs !== undefined && agent.quietMs >= 10 * 60_000 ? "warning" : "muted";
++        lines.push("  " + theme.fg("accent", agent.name) + " ".repeat(longestName - visibleWidth(agent.name)) + theme.fg("dim", " · ")
++          + (agent.status === "running" ? "" : theme.fg("muted", agent.status) + theme.fg("dim", " · "))
++          + theme.fg(elapsedColor, `elapsed ${agent.elapsedMs === undefined ? "unknown" : duration(agent.elapsedMs)}`)
++          + (agent.status !== "running" ? "" : theme.fg("dim", " · ") + theme.fg(quietColor, `quiet ${agent.quietMs === undefined ? "unknown" : duration(agent.quietMs)}`)));
++      }
++      return new Text(lines.join("\n"), 0, 0);
++    },
++    execute: async (_toolCallId, params, signal, onUpdate, _ctx) => {
 +      if ((params.agent_id === undefined) === (params.agent_ids === undefined)) {
 +        return textResult("Provide exactly one of agent_id or agent_ids.");
 +      }
@@ -1599,13 +1663,42 @@ index 4989968c98e186b3c94194ae8c05c7651374fcb6..6907b0f9f6b148bd0b99dbabe1bc5d4d
 +        throw new Error("Use agent_id with wait, or agent_ids with wait_for: any");
 +      }
 +      const waitSignal = signal ? AbortSignal.any([signal, delivery.signal]) : delivery.signal;
++      const waitWithProgress = async <T>(records: AgentRecord[], wait: () => Promise<T>): Promise<T> => {
++        if (!onUpdate) return wait();
++        let active = true;
++        const update = () => {
++          if (!active) return;
++          const now = Date.now();
++          onUpdate({ content: [{ type: "text", text: "" }], details: {
++            waitingAgents: records.map(selected => {
++              const record = manager.getRecord(selected.id) ?? selected;
++              const settled = manager.isSettled(selected.id);
++              const startedAt = record.startedAt;
++              const validStart = Number.isFinite(startedAt) && startedAt > 0 && startedAt <= now;
++              const completedAt = settled ? record.completedAt : now;
++              const validEnd = completedAt !== undefined && Number.isFinite(completedAt) && completedAt <= now && completedAt >= startedAt;
++              const lastActivityAt = record.lastActivityAt;
++              return {
++                name: (record.alias || record.handle || record.type || record.id).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64) || "agent",
++                status: settled ? record.status : record.status === "stopped" ? "stopped · settling" : record.status,
++                elapsedMs: validStart && validEnd ? completedAt - startedAt : undefined,
++                quietMs: !settled && record.status === "running" && validStart && lastActivityAt !== undefined && Number.isFinite(lastActivityAt) && lastActivityAt >= startedAt && lastActivityAt <= now ? now - lastActivityAt : undefined,
++              };
++            }),
++          } });
++        };
++        update();
++        const interval = setInterval(update, 1000);
++        interval.unref();
++        try { return await wait(); } finally { active = false; clearInterval(interval); }
++      };
 +      if (params.agent_ids !== undefined) {
 +        if (params.wait_for !== "any") return textResult("agent_ids requires wait_for: 'any'.");
 +        const records = params.agent_ids.map(resolveAgentRef);
 +        if (records.some(record => !record || !isTopLevelAgent(record))) {
 +          return textResult("One or more selected agents were not found.");
 +        }
-+        const ready = await manager.waitForAny(records.map(record => record!.id), waitSignal);
++        const ready = await waitWithProgress(records.filter(record => record !== undefined), () => manager.waitForAny(records.map(record => record!.id), waitSignal));
 +        const budget = Math.floor(48000 / Math.max(1, ready.length));
 +        const output = ready.map(record => {
 +          const text = `Agent: ${record.id}\nStatus: ${record.status}\n\n${record.error ? `Error: ${record.error}${partialOutputSuffix(record)}` : record.result?.trim() || "No output."}`;
@@ -1618,7 +1711,7 @@ index 4989968c98e186b3c94194ae8c05c7651374fcb6..6907b0f9f6b148bd0b99dbabe1bc5d4d
        if (!record || !isTopLevelAgent(record)) {
          return textResult(`Agent not found: "${params.agent_id}". It may have been cleaned up.`);
        }
-@@ -2759,17 +2662,7 @@ Terse command-style prompts produce shallow, generic work.
+@@ -2759,17 +2718,9 @@ Terse command-style prompts produce shallow, generic work.
        // Wait for completion if requested. Cancellation stops only this tool
        // call; the background agent keeps running and remains unconsumed so its
        // completion notification can still be delivered.
@@ -1633,11 +1726,13 @@ index 4989968c98e186b3c94194ae8c05c7651374fcb6..6907b0f9f6b148bd0b99dbabe1bc5d4d
 -        }
 -        if (record.promise) await abortable(record.promise, signal);
 -      }
-+      if (params.wait) record = await manager.waitForResult(record.id, waitSignal);
++      if (params.wait) record = await (manager.isSettled(record.id)
++        ? manager.waitForResult(record.id, waitSignal)
++        : waitWithProgress([record], () => manager.waitForResult(record.id, waitSignal)));
  
        const displayName = getDisplayName(record.type);
        const duration = formatDuration(record.startedAt, record.completedAt);
-@@ -2790,19 +2683,15 @@ Terse command-style prompts produce shallow, generic work.
+@@ -2790,19 +2741,15 @@ Terse command-style prompts produce shallow, generic work.
          `Type: ${displayName} | Status: ${record.status}${getStatusNote(record.status)} | ${statsParts.join(" | ")}\n` +
          `Description: ${record.description}\n\n`;
  
@@ -1660,7 +1755,7 @@ index 4989968c98e186b3c94194ae8c05c7651374fcb6..6907b0f9f6b148bd0b99dbabe1bc5d4d
  
        // Verbose: include full conversation
        if (params.verbose && record.session) {
-@@ -2812,7 +2701,7 @@ Terse command-style prompts produce shallow, generic work.
+@@ -2812,7 +2759,7 @@ Terse command-style prompts produce shallow, generic work.
          }
        }
  
@@ -1733,7 +1828,7 @@ index 09344ce287e151ebf35e8facffb06232cfea8d74..0b42cc894064d5afdb39ebfafa0f4a33
  }
  
 diff --git a/src/model-resolver.ts b/src/model-resolver.ts
-index fa7cd383e9085d1e44288c1f6873bfac0b513bfa..8cb497d96e4a435c44320e44023d998f90f547db 100644
+index fa7cd383e9085d1e44288c1f6873bfac0b513bfa..7d85df50d11131fe7c4aa650c9b42212568b22bf 100644
 --- a/src/model-resolver.ts
 +++ b/src/model-resolver.ts
 @@ -14,6 +14,52 @@ export interface ModelRegistry {
@@ -1789,7 +1884,7 @@ index fa7cd383e9085d1e44288c1f6873bfac0b513bfa..8cb497d96e4a435c44320e44023d998f
  /**
   * Both display forms of a model. The short one goes on tight rows (the widget,
   * the Agent tool result), the canonical one where there is room to disambiguate
-@@ -26,8 +72,10 @@
+@@ -26,8 +72,10 @@ export interface ModelRegistry {
  export function describeModel(
    model: { provider: string; id: string; name?: string },
  ): { modelName: string; modelId: string } {
@@ -2198,10 +2293,19 @@ index 643589eeec082f2bc0d458bfe20823c92bb87312..6ac89e6654369d364f93cf731ed3df68
    for (const root of roots) {
      const content = findInRoot(root, name);
 diff --git a/src/types.ts b/src/types.ts
-index 3b7f262bdfc154d8454c1b0be67bcd14587029de..ce3763ba15be829ca617d01c92d1aec0965ac385 100644
+index 3b7f262bdfc154d8454c1b0be67bcd14587029de..8659562d0910c21537e9e4b4afcca76c8b9e0e30 100644
 --- a/src/types.ts
 +++ b/src/types.ts
-@@ -198,8 +198,15 @@ export interface AgentRecord {
+@@ -176,6 +176,8 @@ export interface AgentRecord {
+   error?: string;
+   toolUses: number;
+   startedAt: number;
++  /** Latest assistant stream or tool activity in the current run. */
++  lastActivityAt?: number;
+   completedAt?: number;
+   session?: AgentSession;
+   abortController?: AbortController;
+@@ -198,8 +200,15 @@ export interface AgentRecord {
    startGate?: Promise<void>;
    groupId?: string;
    joinMode?: JoinMode;

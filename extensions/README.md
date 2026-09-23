@@ -34,9 +34,12 @@ in both summary and detail views. Tokens include cache reads; prices are estimat
 is omitted. The upstream zero-cost placeholder is not treated as proof of a known price.
 
 Runtime sync sets `widgetMode: "off"` and `fleetView: false` in the selected account's `subagents.json`.
-MPX uses lifecycle events for bounded running and queued agent rows, removing the widget when idle.
-Live rows read safe in-memory progress snapshots; a local timer updates elapsed and quiet time only while
-agents are live. This never polls a model or reads transcripts.
+MPX uses lifecycle events for a bounded running-agent widget with a queued count, removing it when idle.
+Running rows show labeled elapsed time and quiet time since the native agent's last recorded activity;
+missing activity timestamps display `quiet unknown`. The widget refreshes both locally once per second
+while a running agent has a valid start time. `get_subagent_result` waiting output also shows these
+clocks for selected agents. Quiet time reflects only recorded activity, not proof that a child is idle
+or hung; neither surface reads transcripts, exposes tool contents, or controls child execution.
 
 The expanded Pi footer keeps file links for the project and linked checkout, places the same VS Code icon as
 Claude beside the project name to open the active checkout, and bounds long checkout and branch labels
@@ -97,13 +100,7 @@ MPX pins `@tintinweb/pi-subagents` and maintains its compatibility changes in
 - Global `maxSubagentDepth` permits bounded grandchildren without editing each profile. Independent
   per-depth concurrency pools prevent waiting parents from starving their children.
 - Results stay outside the prompt while the parent works. `get_subagent_result` can join one agent
-  with `agent_id` and `wait: true`, or ready siblings with `agent_ids` and `wait_for: "any"`. Joins
-  render throttled native partial snapshots while preserving final results and receipts. Canceling a
-  join leaves its child running; use `/agents` to stop the child.
-- Progress retains only bounded identifiers, phases, counts, and timestamps. It reports unavailable
-  telemetry after reload; silence and elapsed declared Bash timeouts are not proof of a hang or cleanup.
-  Input/resource waits remain unknown without supported child signals. Timeout observations can precede
-  argument-mutating hooks, so hook-added deadlines may be unavailable.
+  with `agent_id` and `wait: true`, or ready siblings with `agent_ids` and `wait_for: "any"`.
 - Idle recovery sends bounded useful results without completion cards or preview acknowledgements.
   Native persisted result receipts prevent automatic redelivery; intentional rereads remain available.
 - Cancellation disarms automatic recovery. Saved native parent entries and child sessions support

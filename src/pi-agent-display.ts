@@ -15,6 +15,8 @@ export interface LiveAgent {
   status: 'running' | 'queued';
   model?: string;
   effort?: string;
+  elapsedMs?: number;
+  quietMs?: number;
 }
 
 function object(value: unknown): Record<string, unknown> | undefined {
@@ -65,6 +67,12 @@ export function savedFinishedAgents(entries: readonly unknown[], sessionId: stri
   return [...agents.values()];
 }
 
+function elapsedDuration(milliseconds: number): string {
+  const seconds = Math.floor(milliseconds / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}m${seconds % 60 ? ` ${seconds % 60}s` : ''}`;
+}
+
 export function renderLiveAgents(agents: readonly LiveAgent[], width: number, theme: Pick<Theme, 'fg'>): string[] {
   if (!agents.length || !Number.isFinite(width) || width <= 0) return [];
   const clean = (value: string) => stripTerminalSequences(value).replace(/[\u0000-\u001f\u007f-\u009f]/g, '');
@@ -72,10 +80,18 @@ export function renderLiveAgents(agents: readonly LiveAgent[], width: number, th
   const queued = agents.length - running.length;
   const rows = [theme.fg('muted', `Agents · ${running.length} running${queued ? ` · ${queued} queued` : ''}`)];
   for (const agent of running.slice(0, MAX_VISIBLE_LIVE_AGENTS)) {
-    const details = [colorAgentModel(agent.model, clean(agent.type), theme),
+    const elapsedMs = amount(agent.elapsedMs);
+    const quietMs = amount(agent.quietMs);
+    const timing = [colorAgentModel(agent.model, clean(agent.type), theme),
+      ...(elapsedMs !== undefined ? [theme.fg(elapsedMs >= 60 * 60_000 ? 'error' : elapsedMs >= 30 * 60_000 ? 'warning' : 'dim', `elapsed ${elapsedDuration(elapsedMs)}`)] : []),
+      theme.fg(quietMs === undefined ? 'dim' : quietMs >= 30 * 60_000 ? 'error' : quietMs >= 10 * 60_000 ? 'warning' : 'dim',
+        quietMs === undefined ? 'quiet unknown' : `quiet ${elapsedDuration(quietMs)}`)];
+    const modelAndEffort = [
       ...(agent.model ? [colorAgentModel(agent.model, shortModel(agent.model), theme)] : []),
-      ...(agent.effort ? [thinkingGauge(agent.effort)] : []), ...(agent.description ? [clean(agent.description)] : [])];
-    rows.push(`${theme.fg('accent', '●')} ${details.join(' · ')}`);
+      ...(agent.effort ? [thinkingGauge(agent.effort)] : []),
+    ];
+    const prefix = `${theme.fg('accent', '●')} `;
+    rows.push(`${prefix}${[...timing, ...modelAndEffort, ...(agent.description ? [clean(agent.description)] : [])].join(' · ')}`);
   }
   if (running.length > MAX_VISIBLE_LIVE_AGENTS) rows.push(theme.fg('dim', `… ${running.length - MAX_VISIBLE_LIVE_AGENTS} more running`));
   return rows.map(row => truncateToWidth(row, Math.floor(width), '…'));

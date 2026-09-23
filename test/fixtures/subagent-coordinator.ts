@@ -10,7 +10,7 @@ export async function runCoordinatorFixture(): Promise<void> {
   const project = join(root, 'project');
   const source = resolve(process.env.MPX_SUBAGENTS_TEST_SOURCE ?? 'node_modules/@tintinweb/pi-subagents/src').replaceAll('\\', '/');
   const symbol = Symbol.for('mpx.coordinator.fixture');
-  const tracker: any = { tools: new Map(), children: [], gates: new Map(), gateReady: new Map(), requests: [], delivered: [] };
+  const tracker: any = { tools: new Map(), children: [], gates: new Map(), gateReady: new Map(), requests: [], delivered: [], updates: [] };
   Reflect.set(globalThis, symbol, tracker);
   const environment = ['HOME', 'USERPROFILE', 'PI_CODING_AGENT_DIR', 'PI_OFFLINE', 'PI_TELEMETRY', 'MPX_ACTIVE_CONTENT_ROOT'];
   const previous = new Map(environment.map(name => [name, process.env[name]]));
@@ -79,7 +79,12 @@ export default function(pi) {
   if (tracker.pi) return;
   tracker.pi = pi;
   const register = pi.registerTool.bind(pi);
-  extension({ ...pi, registerTool(tool) { tracker.tools.set(tool.name, tool); register(tool); } });
+  extension({ ...pi, registerTool(tool) {
+    const registered = tool.name === 'get_subagent_result' ? { ...tool, execute(call, args, signal, onUpdate, ctx) {
+      return tool.execute(call, args, signal, update => { tracker.updates.push(update); onUpdate?.(update); }, ctx);
+    } } : tool;
+    tracker.tools.set(tool.name, registered); register(registered);
+  } });
   pi.on('session_start', (_event, ctx) => { tracker.ctx = ctx; });
   pi.on('agent_settled', (_event, ctx) => { if (ctx.isIdle()) tracker.idle?.(); });
   pi.events.on('subagents:result-delivered', value => tracker.delivered.push(value));
@@ -106,6 +111,38 @@ export default function(pi) {
     session = (await createAgentSession({ cwd: project, agentDir: account, modelRuntime: runtime, model: runtime.getModel('fixture', 'default')!, settingsManager: settings, resourceLoader: loader, sessionManager: SessionManager.create(project, join(root, 'sessions')) })).session;
     await session.bindExtensions({});
     assert.equal(tracker.tools.has('SubagentWorkflow'), false);
+    const resultTool = tracker.tools.get('get_subagent_result');
+    const theme = { fg: (color: string, text: string) => `<${color}>${text}</${color}>` };
+    const rendered = resultTool.renderResult({ content: [{ type: 'text', text: '' }], details: {
+      waitingAgents: [{ name: 'reader', status: 'running', elapsedMs: 60 * 60_000, quietMs: 30 * 60_000 },
+        { name: 'writer-long', status: 'running', elapsedMs: 30 * 60_000, quietMs: 10 * 60_000 }],
+    } }, { isPartial: true }, theme, {});
+    const renderedLines = rendered.render(160).join('\n');
+    assert.doesNotMatch(renderedLines, /Waiting for subagents/);
+    assert.match(renderedLines, /<accent>reader<\/accent>.*<error>elapsed/);
+    assert.match(renderedLines, /<error>quiet/);
+    assert.match(renderedLines, /<accent>reader<\/accent> {5}<dim> · <\/dim>/);
+    assert.match(renderedLines, /<accent>writer-long<\/accent>.*<warning>elapsed/);
+    assert.match(renderedLines, /<warning>quiet/);
+    const unknownRender = resultTool.renderResult({ content: [{ type: 'text', text: '' }], details: {
+      waitingAgents: [{ name: 'queued', status: 'queued' }, { name: 'running', status: 'running' },
+        { name: 'stopped', status: 'stopped · settling' }],
+    } }, { isPartial: true }, theme, {});
+    const unknownLines = unknownRender.render(160).join('\n');
+    assert.match(unknownLines, /elapsed unknown/);
+    assert.match(unknownLines, /quiet unknown/);
+    assert.match(unknownLines, /stopped · settling/);
+    assert.doesNotMatch(unknownLines, /running<\/muted>/);
+    const fullResult = `Agent: complete\n${'Full result\n'.repeat(100)}`;
+    const finalResult = { content: [{ type: 'text', text: fullResult }], details: {} };
+    const collapsed = resultTool.renderResult(finalResult, { expanded: false, isPartial: false }, theme, { isError: false }).render(160).join('\n');
+    assert.match(collapsed, /Agent: complete/);
+    assert.ok(collapsed.split('\n').length <= 5, 'collapsed rendering has bounded rows');
+    assert.match(collapsed, /expand for full result/);
+    const expanded = resultTool.renderResult(finalResult, { expanded: true, isPartial: false }, theme, { isError: false }).render(160).map((line: string) => line.trimEnd()).join('\n');
+    assert.equal(expanded.trimEnd(), fullResult.trimEnd());
+    const failure = resultTool.renderResult(finalResult, { expanded: false, isPartial: false }, theme, { isError: true }).render(160).map((line: string) => line.trimEnd()).join('\n');
+    assert.equal(failure.trimEnd(), fullResult.trimEnd());
     const agentParameters = tracker.tools.get('Agent').parameters.properties;
     assert.equal('schedule' in agentParameters, false);
     assert.equal('isolation' in agentParameters, false);
@@ -138,6 +175,13 @@ export default function(pi) {
       if (!tracker.gates.has(prompt)) await new Promise<void>(resolve => tracker.gateReady.set(prompt, resolve));
       return tracker.gates.get(prompt);
     };
+    const waitUntil = async (ready: () => boolean, description: string) => {
+      const deadline = Date.now() + 3_000;
+      while (!ready()) {
+        assert.ok(Date.now() < deadline, `Timed out waiting for ${description}`);
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+    };
     await spawn('foreground', false);
     let manager = tracker.manager;
     assert.ok(manager);
@@ -167,6 +211,9 @@ export default function(pi) {
     assert.ok(grandchild, JSON.stringify(nestedParent.session.messages));
     assert.equal(grandchild.depth, 2);
     assert.equal(grandchild.result, 'RESULT:nested-leaf');
+    assert.ok(Number.isFinite(nestedParent.lastActivityAt), 'tool events update the run activity timestamp');
+    assert.ok(nestedParent.lastActivityAt >= nestedParent.startedAt);
+    assert.ok(nestedParent.lastActivityAt <= nestedParent.completedAt);
     assert.ok(grandchild.session.agent.state.systemPrompt.includes('REQUESTED_WRITER_CONFIG'));
     assert.equal(grandchild.session.model.id, 'override');
     assert.equal(grandchild.session.getActiveToolNames().includes('write'), false);
@@ -190,10 +237,22 @@ export default function(pi) {
     const retrieved = manager.listAgents().find((record: any) => record.description === 'held-retrieval');
     const releaseRetrieved = await gate('held-retrieval');
     const beforeRetrieval = session.messages.filter(message => message.role === 'custom').length;
+    tracker.updates.length = 0;
     const retrieving = invoke('get_subagent_result', { agent_id: retrieved.id, wait: true });
+    await waitUntil(() => tracker.updates.length > 0, 'retrieval progress');
+    assert.deepEqual(tracker.updates[0].details.waitingAgents.map((agent: any) => agent.name), [retrieved.handle]);
+    assert.equal(tracker.updates[0].content[0].text, '', 'display-only progress contains no transcript');
+    assert.equal(tracker.updates[0].details.waitingAgents[0].status, 'running');
+    await new Promise(resolve => setTimeout(resolve, 1100));
+    assert.ok(tracker.updates.length >= 2, 'waiting updates every second');
     releaseRetrieved();
     const fetched = await retrieving;
     assert.ok(JSON.stringify(fetched.content).includes('RESULT:held-retrieval'));
+    assert.equal(fetched.details.subagentReceipts.length, 1);
+    assert.equal(tracker.updates[0].details.waitingAgents[0].quietMs, undefined, 'quiet is unknown before observed activity');
+    const completedProgress = tracker.updates;
+    const completedUpdates = completedProgress.length;
+    tracker.updates = [];
     assert.equal(retrieved.resultConsumed, true);
     assert.equal(session.messages.filter(message => message.role === 'custom').length, beforeRetrieval);
     await spawn('held-rpc');
@@ -206,11 +265,59 @@ export default function(pi) {
     assert.equal(rpcRecord.resultConsumed, true, 'RPC consumption is reconciled from actual persisted tool output');
     const joined = await invoke('get_subagent_result', { agent_ids: [retrieved.id, idle.id], wait_for: 'any' });
     assert.equal(joined.details.subagentReceipts.length, 2, 'wait-any returns all currently settled selections');
+    await spawn('held-group-a');
+    await spawn('held-group-b');
+    const groupA = manager.listAgents().find((record: any) => record.description === 'held-group-a');
+    const groupB = manager.listAgents().find((record: any) => record.description === 'held-group-b');
+    tracker.updates.length = 0;
+    const groupWait = invoke('get_subagent_result', { agent_ids: [groupA.id, groupB.id], wait_for: 'any' });
+    await waitUntil(() => tracker.updates.length > 0, 'group retrieval progress');
+    assert.deepEqual(tracker.updates[0].details.waitingAgents.map((agent: any) => agent.name), [groupA.handle, groupB.handle]);
+    const groupRelease = await gate('held-group-a');
+    groupRelease();
+    const groupResult = await groupWait;
+    assert.equal(groupResult.details.subagentReceipts.length, 1);
+    assert.ok(['running', 'queued'].includes(groupB.status));
+    (await gate('held-group-b'))();
+    await manager.waitForResult(groupB.id);
+    await new Promise(resolve => setImmediate(resolve));
+    await session.agent.waitForIdle();
+    const abortController = new AbortController();
+    await spawn('held-wait-cancel');
+    const cancelRecord = manager.listAgents().find((record: any) => record.description === 'held-wait-cancel');
+    const cancelProgress: any[] = [];
+    const cancelledWait = tracker.tools.get('get_subagent_result').execute('fixture-cancel', { agent_id: cancelRecord.id, wait: true }, abortController.signal,
+      (update: any) => cancelProgress.push(update), tracker.ctx);
+    assert.equal(cancelProgress.length, 1);
+    abortController.abort();
+    await assert.rejects(cancelledWait);
+    const cancelledUpdates = cancelProgress.length;
+    await new Promise(resolve => setTimeout(resolve, 1100));
+    assert.equal(completedProgress.length, completedUpdates, 'completed wait stops updating');
+    assert.equal(cancelProgress.length, cancelledUpdates, 'cancelled wait stops updating');
+    assert.equal(cancelRecord.status, 'running', 'cancelling retrieval does not stop child');
+    (await gate('held-wait-cancel'))();
+    await manager.waitForResult(cancelRecord.id);
+    await new Promise(resolve => setImmediate(resolve));
+    await session.agent.waitForIdle();
+    const cancelReceipt = await invoke('get_subagent_result', { agent_id: cancelRecord.id, wait: true });
+    assert.equal(cancelReceipt.details.subagentReceipts.length, 1);
     const oldSnapshot = await manager.waitForResult(foreground.id);
     await invoke('Agent', { subagent_type: 'reader', resume: foreground.id, prompt: 'another turn', description: 'resume', run_in_background: false });
     assert.equal(oldSnapshot.runRevision, 0, 'settled snapshot is immutable across resume');
     assert.equal(manager.getRecord(foreground.id).runRevision, 1);
+    assert.ok(manager.getRecord(foreground.id).lastActivityAt >= manager.getRecord(foreground.id).startedAt,
+      'a nonstream assistant response observes fresh activity after resume');
     assert.equal(manager.getRecord(foreground.id).resultConsumed, true);
+    const previousIdleGate = tracker.gates.get('held-idle');
+    await manager.resume(idle.id, 'resume idle', undefined, { isBackground: true });
+    assert.equal(idle.lastActivityAt, undefined, 'resume resets observed activity before the next assistant response');
+    await waitUntil(() => tracker.gates.get('held-idle') !== previousIdleGate, 'resumed child stream');
+    tracker.gates.get('held-idle')();
+    await manager.waitForResult(idle.id);
+    assert.ok(idle.lastActivityAt >= idle.startedAt, 'nonstream assistant response records new activity');
+    await new Promise(resolve => setImmediate(resolve));
+    await session.agent.waitForIdle();
 
     await spawn('held-abort');
     const aborted = manager.listAgents().find((record: any) => record.description === 'held-abort');

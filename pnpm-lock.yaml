@@ -6,7 +6,7 @@ settings:
 
 patchedDependencies:
   '@earendil-works/pi-coding-agent@0.85.1': 8785561a7160ed5409de8b6602476c4be5a4ce525daa4cdfc935a8c1e036e8b5
-  '@tintinweb/pi-subagents@0.19.0': fda73fae2cf536ea5f00681e81f3aa5308043d87ab17adcfee945157d8ffe466
+  '@tintinweb/pi-subagents@0.19.0': 09c0609e6b0170a7662aaba967de3af5a30a3e24f50625024c84faff189f41cf
 
 importers:
 
@@ -20,7 +20,7 @@ importers:
         version: 0.85.1
       '@tintinweb/pi-subagents':
         specifier: 0.19.0
-        version: 0.19.0(patch_hash=fda73fae2cf536ea5f00681e81f3aa5308043d87ab17adcfee945157d8ffe466)(@earendil-works/pi-ai@0.85.1(ws@8.21.3))(@earendil-works/pi-coding-agent@0.85.1(patch_hash=8785561a7160ed5409de8b6602476c4be5a4ce525daa4cdfc935a8c1e036e8b5)(ws@8.21.3))(@earendil-works/pi-tui@0.85.1)
+        version: 0.19.0(patch_hash=09c0609e6b0170a7662aaba967de3af5a30a3e24f50625024c84faff189f41cf)(@earendil-works/pi-ai@0.85.1(ws@8.21.3))(@earendil-works/pi-coding-agent@0.85.1(patch_hash=8785561a7160ed5409de8b6602476c4be5a4ce525daa4cdfc935a8c1e036e8b5)(ws@8.21.3))(@earendil-works/pi-tui@0.85.1)
       shiki:
         specifier: ^3.23.0
         version: 3.23.0
@@ -1721,7 +1721,7 @@ snapshots:
 
   '@stablelib/base64@1.0.1': {}
 
-  '@tintinweb/pi-subagents@0.19.0(patch_hash=fda73fae2cf536ea5f00681e81f3aa5308043d87ab17adcfee945157d8ffe466)(@earendil-works/pi-ai@0.85.1(ws@8.21.3))(@earendil-works/pi-coding-agent@0.85.1(patch_hash=8785561a7160ed5409de8b6602476c4be5a4ce525daa4cdfc935a8c1e036e8b5)(ws@8.21.3))(@earendil-works/pi-tui@0.85.1)':
+  '@tintinweb/pi-subagents@0.19.0(patch_hash=09c0609e6b0170a7662aaba967de3af5a30a3e24f50625024c84faff189f41cf)(@earendil-works/pi-ai@0.85.1(ws@8.21.3))(@earendil-works/pi-coding-agent@0.85.1(patch_hash=8785561a7160ed5409de8b6602476c4be5a4ce525daa4cdfc935a8c1e036e8b5)(ws@8.21.3))(@earendil-works/pi-tui@0.85.1)':
     dependencies:
       '@earendil-works/pi-ai': 0.85.1(ws@8.21.3)
       '@earendil-works/pi-coding-agent': 0.85.1(patch_hash=8785561a7160ed5409de8b6602476c4be5a4ce525daa4cdfc935a8c1e036e8b5)(ws@8.21.3)

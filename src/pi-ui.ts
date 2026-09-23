@@ -50,6 +50,7 @@ export interface PiUiOptions {
   requestQuota?: typeof import('./pi-footer-quota.js').requestFooterQuota;
   loadRepository?: (cwd: string) => Promise<FooterRepository>;
   readPeakInputTokens?: (transcriptUrl: string, signal: AbortSignal) => Promise<number | undefined>;
+  liveAgentTiming?: ActivityTiming & { now(): number };
 }
 
 interface Timer {
@@ -61,6 +62,7 @@ export interface ActivityTiming {
 }
 
 const DEFAULT_SETTLE_DELAY_MS = 500;
+const LIVE_AGENT_REFRESH_MS = 1_000;
 
 const defaultTiming: ActivityTiming = {
   delay(callback, milliseconds) {
@@ -557,6 +559,12 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
   let diagnosticCount = 0;
   const finished = new Map<string, FinishedAgent>();
   const liveAgents = new Map<string, LiveAgent>();
+  const liveAgentTiming = options.liveAgentTiming ?? { ...defaultTiming, now: Date.now };
+  let liveAgentTimer: Timer | undefined;
+  const stopLiveAgentTimer = (): void => {
+    liveAgentTimer?.cancel();
+    liveAgentTimer = undefined;
+  };
   const knownSubagents = new Set<string>();
   const terminalSubagents = new Set<string>();
   const reservedSubagentResults = new Set<string>();
@@ -668,7 +676,7 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
     }
   };
 
-  const nativeRecord = (id: string): { status?: string; resultConsumed?: boolean; model?: string; effort?: string; url?: string } | undefined => {
+  const nativeRecord = (id: string): { status?: string; resultConsumed?: boolean; model?: string; effort?: string; startedAt?: number; lastActivityAt?: number; url?: string } | undefined => {
     const manager = (globalThis as GlobalWithOwner)[SUBAGENT_MANAGER];
     if (typeof manager?.getRecord !== 'function') return undefined;
     try {
@@ -679,6 +687,8 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
       return {
         model: nonempty(invocation?.modelId) ?? nonempty(invocation?.modelName),
         effort: nonempty(invocation?.thinking),
+        startedAt: finiteNonNegative(source.startedAt),
+        lastActivityAt: finiteNonNegative(source.lastActivityAt),
         url: sessionFile && path.isAbsolute(sessionFile) ? pathToFileURL(sessionFile).href : undefined,
         ...(typeof source.status === 'string' ? { status: source.status } : {}),
         ...(typeof source.resultConsumed === 'boolean'
@@ -740,17 +750,42 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
   const unsubscribeConsume = pi.events.on('subagents:rpc:consume', refreshConsumedResultsSoon);
   const unsubscribeDelivery = pi.events.on('subagents:result-delivered', refreshConsumedResultsSoon);
 
+  const liveAgentRows = (): LiveAgent[] => {
+    const now = finiteNonNegative(liveAgentTiming.now());
+    return [...liveAgents.values()].flatMap(agent => {
+      const native = nativeRecord(agent.id);
+      if (native?.status && native.status !== 'running' && native.status !== 'queued') return [];
+      const startedAt = native?.startedAt;
+      const lastActivityAt = native?.lastActivityAt;
+      const hasElapsedTime = agent.status === 'running' && now !== undefined && startedAt !== undefined && startedAt <= now;
+      return [{
+        ...agent, model: native?.model, effort: native?.effort,
+        elapsedMs: hasElapsedTime ? now - startedAt : undefined,
+        quietMs: hasElapsedTime && lastActivityAt !== undefined && lastActivityAt >= startedAt && lastActivityAt <= now
+          ? now - lastActivityAt : undefined,
+      }];
+    });
+  };
   const refreshLiveWidget = (): void => {
-    if (!own() || currentContext?.mode !== 'tui') return;
-    if (!liveAgents.size) {
+    if (!own() || currentContext?.mode !== 'tui') {
+      stopLiveAgentTimer();
+      return;
+    }
+    const rows = liveAgentRows();
+    if (rows.some(agent => agent.elapsedMs !== undefined)) {
+      liveAgentTimer ??= liveAgentTiming.delay(() => {
+        liveAgentTimer = undefined;
+        refreshLiveWidget();
+      }, LIVE_AGENT_REFRESH_MS);
+    } else {
+      stopLiveAgentTimer();
+    }
+    if (!rows.length) {
       currentContext.ui.setWidget(LIVE_AGENT_WIDGET, undefined);
       return;
     }
     currentContext.ui.setWidget(LIVE_AGENT_WIDGET, (_tui, theme) => ({
-      render: width => renderLiveAgents([...liveAgents.values()].map(agent => {
-        const native = nativeRecord(agent.id);
-        return { ...agent, model: native?.model, effort: native?.effort };
-      }), width, theme),
+      render: width => renderLiveAgents(liveAgentRows(), width, theme),
       invalidate() {},
     }));
   };
@@ -843,6 +878,7 @@ export function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void 
     const global = globalThis as GlobalWithOwner;
     if (global[PROCESS_OWNER] === undefined) global[PROCESS_OWNER] = token;
     ownsProcess = global[PROCESS_OWNER] === token;
+    stopLiveAgentTimer();
     if (!ownsProcess) {
       invalidatePeakReads(true);
       return;

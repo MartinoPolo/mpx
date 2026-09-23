@@ -29,10 +29,12 @@ function registerPiUi(pi: ExtensionAPI, options: PiUiOptions = {}): void {
 }
 
 class FakeTiming implements ActivityTiming {
-  pending: Array<{ active: boolean; callback: () => void }> = [];
+  pending: Array<{ active: boolean; callback: () => void; milliseconds: number }> = [];
+  time = 100_000;
+  now = (): number => this.time;
 
-  delay(callback: () => void): { cancel(): void } {
-    const item = { active: true, callback };
+  delay(callback: () => void, milliseconds: number): { cancel(): void } {
+    const item = { active: true, callback, milliseconds };
     this.pending.push(item);
     return { cancel: () => { item.active = false; } };
   }
@@ -314,7 +316,7 @@ function extensionHarness(options: { titleResult?: () => Promise<string> } = {})
 
 const SUBAGENT_MANAGER_FIXTURE = Symbol.for('pi-subagents:manager');
 
-type RegistryFixtureRecord = { status: string; resultConsumed?: boolean; sessionFile?: string; invocation?: { modelId?: string; thinking?: string; requestedModel?: string; requestedThinking?: string } };
+type RegistryFixtureRecord = { status: string; startedAt?: unknown; lastActivityAt?: unknown; resultConsumed?: boolean; sessionFile?: string; invocation?: { modelId?: string; thinking?: string; requestedModel?: string; requestedThinking?: string } };
 
 function installNativeRegistryFixture(records: Map<string, RegistryFixtureRecord>): () => void {
   // Fixture only: this stubs the documented in-process registry; no provider or child process runs.
@@ -483,6 +485,114 @@ test('live display disappears on completion and resume never duplicates finished
     assert.equal(harness.widgets.has(LIVE_AGENT_WIDGET), true, 'stale result cannot hide a resumed run');
   } finally { await harness.call('session_shutdown'); restore(); }
   assert.equal(harness.widgets.has(LIVE_AGENT_WIDGET), false);
+});
+
+test('elapsed uses native start time, with one UI-only timer that stops across lifecycle boundaries', async () => {
+  const timing = new FakeTiming();
+  const records = new Map<string, RegistryFixtureRecord>([['one', { status: 'queued', startedAt: 10_000, lastActivityAt: 95_000 }]]);
+  const restore = installNativeRegistryFixture(records);
+  const harness = extensionHarness();
+  registerPiUi(harness.pi, { environment: {}, liveAgentTiming: timing });
+  const timers = () => timing.pending.filter(item => item.active);
+  const liveText = () => stripVTControlCharacters(harness.widgets.get(LIVE_AGENT_WIDGET)?.({}, footerTheme).render(120).join('\n') ?? '');
+  try {
+    await harness.call('session_start');
+    assert.equal(timers().length, 0);
+    harness.emitBus('subagents:created', { id: 'one', type: 'Explore' });
+    assert.equal(timers().length, 0, 'queued work has no clock');
+    assert.equal(liveText(), 'Agents · 0 running · 1 queued');
+    records.set('one', { status: 'running', startedAt: 10_000, lastActivityAt: 95_000 });
+    harness.emitBus('subagents:started', { id: 'one', type: 'Explore' });
+    harness.emitBus('subagents:started', { id: 'one', type: 'Explore' });
+    assert.match(liveText(), /Explore · elapsed 1m 30s · quiet 5s/);
+    assert.equal(timers().length, 1);
+    assert.equal(timers()[0]?.milliseconds, 1_000);
+    const revision = activityEvents(harness).at(-1)?.revision;
+    timing.time += 1_000;
+    timing.flush();
+    assert.match(liveText(), /Explore · elapsed 1m 31s · quiet 6s/);
+    assert.equal(timers().length, 1);
+    assert.equal(activityEvents(harness).at(-1)?.revision, revision, 'ticks do not change activity');
+    records.set('one', { status: 'stopped', startedAt: 10_000, lastActivityAt: 95_000 });
+    assert.doesNotMatch(liveText(), /Explore|elapsed|quiet/, 'terminal native state suppresses a stale running row');
+    timing.flush();
+    assert.equal(timers().length, 0, 'stale running rows cannot keep the clock alive');
+    records.set('one', { status: 'running', startedAt: 10_000, lastActivityAt: 95_000 });
+    harness.emitBus('subagents:started', { id: 'one', type: 'Explore' });
+    assert.equal(timers().length, 1);
+    records.set('two', { status: 'running', startedAt: 100_000 });
+    harness.emitBus('subagents:started', { id: 'two', type: 'Plan' });
+    assert.equal(timers().length, 1, 'all rows share one timer');
+    records.set('two', { status: 'failed', resultConsumed: true });
+    harness.emitBus('subagents:failed', { id: 'two', status: 'failed' });
+    assert.equal(timers().length, 1);
+    records.set('one', { status: 'completed', resultConsumed: true });
+    harness.emitBus('subagents:completed', { id: 'one', status: 'completed' });
+    assert.equal(timers().length, 0);
+    assert.equal(harness.widgets.has(LIVE_AGENT_WIDGET), false);
+    records.set('one', { status: 'running', startedAt: timing.time - 2_000, lastActivityAt: timing.time - 1_000 });
+    harness.emitBus('subagents:started', { id: 'one', type: 'Explore' });
+    assert.match(liveText(), /Explore · elapsed 2s · quiet 1s/);
+    assert.equal(timers().length, 1);
+    await harness.call('session_start');
+    assert.equal(timers().length, 0, 'reload cancels the previous timer');
+    harness.emitBus('subagents:started', { id: 'one', type: 'Explore' });
+    assert.equal(timers().length, 1);
+    await harness.call('session_shutdown');
+    assert.equal(timers().length, 0);
+    timing.flush();
+    assert.equal(harness.widgets.has(LIVE_AGENT_WIDGET), false);
+  } finally { await harness.call('session_shutdown'); restore(); }
+});
+
+test('missing or invalid native timestamps never invent elapsed or quiet time or timers', async () => {
+  const timing = new FakeTiming();
+  const records = new Map<string, RegistryFixtureRecord>();
+  const restore = installNativeRegistryFixture(records);
+  const harness = extensionHarness();
+  registerPiUi(harness.pi, { environment: {}, liveAgentTiming: timing });
+  try {
+    await harness.call('session_start');
+    for (const startedAt of [undefined, NaN, Infinity, -1, '100', timing.time + 1]) {
+      records.set('one', { status: 'running', startedAt, lastActivityAt: timing.time });
+      harness.emitBus('subagents:started', { id: 'one', type: 'Explore' });
+      const lines = harness.widgets.get(LIVE_AGENT_WIDGET)({}, footerTheme).render(120);
+      assert.deepEqual(lines.map(stripVTControlCharacters), ['Agents · 1 running', '● Explore · quiet unknown']);
+      assert.equal(timing.pending.filter(item => item.active).length, 0);
+    }
+    records.set('one', { status: 'running', startedAt: 0, lastActivityAt: 0 });
+    for (const now of [NaN, Infinity, -1]) {
+      timing.time = now;
+      harness.emitBus('subagents:started', { id: 'one', type: 'Explore' });
+      assert.equal(timing.pending.filter(item => item.active).length, 0);
+      const lines = harness.widgets.get(LIVE_AGENT_WIDGET)({}, footerTheme).render(120);
+      assert.deepEqual(lines.map(stripVTControlCharacters), ['Agents · 1 running', '● Explore · quiet unknown']);
+    }
+    timing.time = 100_000;
+    for (const lastActivityAt of [undefined, NaN, Infinity, -1, '100', timing.time + 1]) {
+      records.set('one', { status: 'running', startedAt: 10_000, lastActivityAt });
+      harness.emitBus('subagents:started', { id: 'one', type: 'Explore' });
+      assert.match(harness.widgets.get(LIVE_AGENT_WIDGET)({}, footerTheme).render(120).join('\n'), /elapsed 1m 30s · quiet unknown/);
+      assert.equal(timing.pending.filter(item => item.active).length, 1, 'elapsed continues refreshing with unknown quiet');
+    }
+    records.set('one', { status: 'running', startedAt: 10_000, lastActivityAt: 9_999 });
+    harness.emitBus('subagents:started', { id: 'one', type: 'Explore' });
+    assert.match(harness.widgets.get(LIVE_AGENT_WIDGET)({}, footerTheme).render(120).join('\n'), /quiet unknown/);
+    records.set('one', { status: 'running', startedAt: 0, lastActivityAt: 0 });
+    harness.emitBus('subagents:started', { id: 'one', type: 'Explore' });
+    assert.match(harness.widgets.get(LIVE_AGENT_WIDGET)({}, footerTheme).render(120).join('\n'), /elapsed 1m 40s · quiet 1m 40s/);
+    assert.equal(timing.pending.filter(item => item.active).length, 1, 'zero is a valid native timestamp');
+    await harness.call('session_before_switch');
+    assert.equal(timing.pending.filter(item => item.active).length, 1, 'a cancellable switch does not stop the current clock');
+    timing.time += 5_000;
+    timing.flush();
+    const continuedLines = harness.widgets.get(LIVE_AGENT_WIDGET)({}, footerTheme).render(120);
+    assert.match(continuedLines.map(stripVTControlCharacters).join('\n'), /Explore · elapsed 1m 45s · quiet 1m 45s/);
+    assert.equal(timing.pending.filter(item => item.active).length, 1, 'an abandoned switch keeps refreshing');
+    await harness.call('session_start', {}, { ...harness.ctx, mode: 'rpc' });
+    harness.emitBus('subagents:started', { id: 'one', type: 'Explore' });
+    assert.equal(timing.pending.filter(item => item.active).length, 0, 'non-TUI work has no UI clock');
+  } finally { await harness.call('session_shutdown'); restore(); }
 });
 
 test('peak enrichment survives metadata replacement and stale reads cannot cross reruns or session switches', async () => {
@@ -685,7 +795,7 @@ test('footer keeps current context tokens, compaction and responsive agents with
   const rendered = stripVTControlCharacters(component.render(180).join('\n'));
   assert.match(rendered, /12\.3k \(25%\)/);
   assert.match(rendered, /compact/);
-  assert.match(rendered, /Explore.*luna 5\.6.*◆◆◇◇◇◇/);
+  assert.match(rendered, /Explore.*luna 6.*◆◆◇◇◇◇/);
   assert.doesNotMatch(rendered, /Context|9\.9m|9876543|tokens 321|port|Ctrl\+|Alt\+|\blow\b/i);
 
   assert.ok(harness.emitted.some((event) => event.name === PI_ACTIVITY_EVENT));
