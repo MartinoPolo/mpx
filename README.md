@@ -18,8 +18,8 @@ pnpm status
 - Run `pnpm build` after content changes and before launching a harness or running content tests.
   Generated `dist/` files are ignored: never edit or commit them.
 - Agent metadata selects a semantic model class; `content/runtime-profiles.json` maps classes to
-  harness models. Pi uses provider-qualified, versionless family aliases so runtime discovery picks
-  the latest available stable family version by numeric ordering. Reviewer agents use the dedicated
+  harness models. Pi pins Luna and Sol classes to `gpt-6` models; other family references can use
+  provider-qualified aliases resolved by numeric version ordering. Reviewer agents use the dedicated
   `reviewer` class. A shared `thinking` value may be replaced per harness by `thinkingOverrides`; Pi
   Luna requires `high` or above. Native Pi `enabledModels` can use family patterns such as
   `openai-codex/gpt-*-luna:high`; native session defaults and history retain concrete model IDs.

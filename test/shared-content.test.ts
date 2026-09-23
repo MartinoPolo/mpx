@@ -142,7 +142,7 @@ test('retired design pipeline is excluded from source and projections', async ()
   }
 });
 
-test('runtime profiles use provider-qualified family aliases and a reviewer class', async () => {
+test('runtime profiles pin Codex Luna and Sol models and define a reviewer class', async () => {
   const profiles = JSON.parse(await readFile(path.join(content, 'runtime-profiles.json'), 'utf8'));
   assert.deepEqual(profiles.models.claude, {
     mechanical: 'sonnet',
@@ -153,11 +153,11 @@ test('runtime profiles use provider-qualified family aliases and a reviewer clas
     frontier: 'fable',
   });
   assert.deepEqual(profiles.models.pi, {
-    mechanical: 'openai-codex/luna',
-    exploration: 'openai-codex/luna',
-    standard: 'openai-codex/luna',
-    reviewer: 'openai-codex/sol',
-    advanced: 'openai-codex/sol',
+    mechanical: 'openai-codex/gpt-6-luna',
+    exploration: 'openai-codex/gpt-6-luna',
+    standard: 'openai-codex/gpt-6-luna',
+    reviewer: 'openai-codex/gpt-6-sol',
+    advanced: 'openai-codex/gpt-6-sol',
     frontier: 'openai-codex/astra',
   });
 

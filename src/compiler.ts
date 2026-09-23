@@ -18,7 +18,7 @@ import { LUNA_ALLOWED_THINKING } from './pi-model-routing.js';
 const HARNESSES: readonly Harness[] = ['pi', 'claude'];
 const MODEL_CLASSES: readonly ModelClass[] = ['mechanical', 'exploration', 'standard', 'reviewer', 'advanced', 'frontier'];
 const THINKING_LEVELS: readonly Thinking[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
-const PI_LUNA_MODEL = 'openai-codex/luna';
+const PI_LUNA_MODEL = 'openai-codex/gpt-6-luna';
 const CAPABILITIES: readonly Capability[] = ['read', 'search', 'shell', 'write', 'browser', 'context', 'web'];
 const EXPOSURES: readonly Exposure[] = ['normal', 'name-only', 'explicit-only'];
 const OUTPUT_ROOTS = ['dist/packs', 'dist/pi', 'dist/claude'] as const;

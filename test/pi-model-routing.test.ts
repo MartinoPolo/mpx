@@ -5,8 +5,8 @@ import { registerPiModelRouting } from '../extensions/pi-model-routing.js';
 import { enforceLunaThinking, piFamilyReference, resolvePiModelReference } from '../src/pi-model-routing.js';
 
 const profiles = {
-  mechanical: 'openai-codex/luna', exploration: 'openai-codex/luna', standard: 'openai-codex/luna',
-  reviewer: 'openai-codex/sol', advanced: 'openai-codex/sol', frontier: 'openai-codex/astra',
+  mechanical: 'openai-codex/gpt-6-luna', exploration: 'openai-codex/gpt-6-luna', standard: 'openai-codex/gpt-6-luna',
+  reviewer: 'openai-codex/gpt-6-sol', advanced: 'openai-codex/gpt-6-sol', frontier: 'openai-codex/astra',
 };
 const model = (provider: string, id: string, thinkingLevelMap?: Record<string, string | null>) => ({
   provider, id, name: id, api: 'openai-codex-responses' as const, baseUrl: 'http://fixture', reasoning: true,
@@ -25,7 +25,7 @@ test('family resolution compares numeric version components and excludes variant
     kind: 'resolved', family: 'luna', model: 'openai-codex/gpt-10-luna',
   });
   assert.deepEqual(resolvePiModelReference('mechanical', profiles, available), {
-    kind: 'resolved', family: 'luna', model: 'openai-codex/gpt-10-luna',
+    kind: 'resolved', family: 'luna', model: 'openai-codex/gpt-6-luna',
   });
   assert.deepEqual(resolvePiModelReference('luna', profiles, available), {
     kind: 'resolved', family: 'luna', model: 'openai-codex/gpt-10-luna',

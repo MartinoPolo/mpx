@@ -7,13 +7,13 @@ const theme = { fg: (_color: string, text: string) => text };
 const taggedTheme = { fg: (color: string, text: string) => `<${color}>${text}</${color}>` };
 const saved = {
   id: 'one', type: 'Explore', status: 'completed', parentSessionId: 'parent',
-  invocation: { modelId: 'gpt-5.6-luna', thinking: 'high' }, startedAt: 100, completedAt: 600,
+  invocation: { modelId: 'gpt-6-luna', thinking: 'high' }, startedAt: 100, completedAt: 600,
   lifetimeUsage: { input: 10, output: 20, cacheWrite: 30, cacheRead: 40, cost: 0.25 },
 };
 
 test('saved history restores exact model, effort, lifetime cost, and leaves peak input unknown', () => {
   assert.deepEqual(finishedAgentFromRecord(saved, 'parent'), {
-    id: 'one', type: 'Explore', status: 'completed', model: 'gpt-5.6-luna', effort: 'high',
+    id: 'one', type: 'Explore', status: 'completed', model: 'gpt-6-luna', effort: 'high',
     elapsedMs: 500, cost: 0.25,
   });
   const withoutUsage = finishedAgentFromRecord({ ...saved, invocation: undefined, lifetimeUsage: undefined }, 'parent');
@@ -56,8 +56,8 @@ test('live agent names and model names follow model tier colors', () => {
   const agents: LiveAgent[] = [
     { id: 'a', type: 'AstraAgent', status: 'running', model: 'gpt-6-astra' },
     { id: 's', type: 'SolAgent', status: 'running', model: 'gpt-6-sol' },
-    { id: 'l', type: 'LunaAgent', status: 'running', model: 'gpt-5.6-luna' },
-    { id: 't', type: 'TerraAgent', status: 'running', model: 'gpt-5.6-terra' },
+    { id: 'l', type: 'LunaAgent', status: 'running', model: 'gpt-6-luna' },
+    { id: 't', type: 'TerraAgent', status: 'running', model: 'gpt-6-terra' },
   ];
   const output = renderLiveAgents(agents, 200, taggedTheme).join('\n');
   assert.match(output, /\x1b\[38;5;48mAstraAgent\x1b\[0m.*\x1b\[38;5;48mgpt-6-astra\x1b\[0m/);

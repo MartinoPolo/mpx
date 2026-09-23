@@ -116,7 +116,7 @@ test('footer refreshes coalesce, retain valid settings on failure, and fence dis
 test('runtime uses structured glyph targets for independent history and model controls and preserves expansion', () => {
   let renders = 0;
   let agents = [
-    { id: 'a', type: 'reviewer', status: 'done', model: 'gpt-5.6-luna', effort: 'high', peakInputTokens: 1000, cost: 0 },
+    { id: 'a', type: 'reviewer', status: 'done', model: 'gpt-6-luna', effort: 'high', peakInputTokens: 1000, cost: 0 },
     { id: 'b', type: 'planner', status: 'done', model: 'gpt-6-terra', effort: 'low', peakInputTokens: 500, cost: 1 },
   ];
   const context = {
@@ -174,7 +174,7 @@ test('runtime uses structured glyph targets for independent history and model co
   component.update(context);
   assert.equal(component.handleMouse?.(click(2, priorLunaRow)), undefined, 'data refresh clears stale targets before rerender');
   agents = [
-    { id: 'a', type: 'reviewer', status: 'done', model: 'gpt-5.6-luna', effort: 'high', peakInputTokens: 1000, cost: 0 },
+    { id: 'a', type: 'reviewer', status: 'done', model: 'gpt-6-luna', effort: 'high', peakInputTokens: 1000, cost: 0 },
     { id: 'b', type: 'planner', status: 'done', model: 'gpt-6-terra', effort: 'low', peakInputTokens: 500, cost: 1 },
   ];
   component.render(2);

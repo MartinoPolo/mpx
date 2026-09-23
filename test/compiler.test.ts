@@ -194,7 +194,7 @@ test('projects deterministic native metadata while preserving bodies and support
 test('projects harness-specific thinking overrides before the shared default', async () => {
   const root = await fixture();
   const profiles = path.join(root, 'content/runtime-profiles.json');
-  await writeFile(profiles, (await readFile(profiles, 'utf8')).replace('pi/exploration', 'openai-codex/luna'));
+  await writeFile(profiles, (await readFile(profiles, 'utf8')).replace('pi/exploration', 'openai-codex/gpt-6-luna'));
   const agent = path.join(root, 'content/agents/explorer.md');
   await writeFile(agent, (await readFile(agent, 'utf8')).replace(
     'thinking: high\n    capabilities:',
@@ -224,7 +224,7 @@ test('rejects invalid thinking overrides and Pi Luna effort below high', async (
   await t.test('Luna floor uses effective Pi override', async () => {
     const root = await fixture();
     const profiles = path.join(root, 'content/runtime-profiles.json');
-    await writeFile(profiles, (await readFile(profiles, 'utf8')).replace('pi/exploration', 'openai-codex/luna'));
+    await writeFile(profiles, (await readFile(profiles, 'utf8')).replace('pi/exploration', 'openai-codex/gpt-6-luna'));
     const agent = path.join(root, 'content/agents/explorer.md');
     await writeFile(agent, (await readFile(agent, 'utf8')).replace(
       'thinking: high\n    capabilities:',

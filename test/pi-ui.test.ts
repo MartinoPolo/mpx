@@ -167,7 +167,7 @@ test('public tool_result details enrich model and effective effort without repla
       agentId: 'a1',
       subagentType: 'Explore',
       status: 'completed',
-      modelName: 'luna 5.6',
+      modelName: 'luna 6',
       tags: ['thinking: low', 'background'],
       durationMs: 1_300,
       tokens: '0 token',
@@ -177,7 +177,7 @@ test('public tool_result details enrich model and effective effort without repla
     id: 'a1',
     type: 'Explore',
     status: 'completed',
-    model: 'luna 5.6',
+    model: 'luna 6',
     effort: 'low',
     elapsedMs: 1_300,
     peakInputTokens: 120,
@@ -223,7 +223,7 @@ function extensionHarness(options: { titleResult?: () => Promise<string> } = {})
   const shortcuts = new Map<string, any>();
   const notifications: string[] = [];
   const completedCalls: any[] = [];
-  const model = { provider: 'openai-codex', id: 'gpt-5.6-luna', contextWindow: 272_000, reasoning: true };
+  const model = { provider: 'openai-codex', id: 'gpt-6-luna', contextWindow: 272_000, reasoning: true };
 
   const pi = {
     registerCommand(name: string, command: unknown) { commands.set(name, command); },
@@ -338,7 +338,7 @@ const pause = (milliseconds = 0): Promise<void> => new Promise(resolve => setTim
 test('extension uses the explicitly configured title model and effort, then preserves the name', async () => {
   const harness = extensionHarness();
   const configuredTitle: NonNullable<UserConfig['piTitle']> = {
-    provider: 'openai-codex', model: 'gpt-5.6-luna', thinking: 'low',
+    provider: 'openai-codex', model: 'gpt-6-luna', thinking: 'low',
   };
   createPiUiExtension({
     title: configuredTitle,
@@ -369,7 +369,7 @@ test('extension uses the explicitly configured title model and effort, then pres
 test('manual naming prevents automatic generation and an absent title config uses no fallback model', async () => {
   const manual = extensionHarness();
   registerPiUi(manual.pi, {
-    title: { provider: 'openai-codex', model: 'gpt-5.6-luna', effort: 'low' },
+    title: { provider: 'openai-codex', model: 'gpt-6-luna', effort: 'low' },
     environment: {},
   });
   await manual.call('session_start');
@@ -463,9 +463,9 @@ test('live display disappears on completion and resume never duplicates finished
     const liveText = () => stripVTControlCharacters(harness.widgets.get(LIVE_AGENT_WIDGET)?.({}, footerTheme).render(120).join('\n') ?? '');
     harness.emitBus('subagents:created', { id: 'one', type: 'Explore' });
     assert.match(liveText(), /1 queued/);
-    records.set('one', { status: 'running', invocation: { modelId: 'gpt-5.6-luna', thinking: 'low' } });
+    records.set('one', { status: 'running', invocation: { modelId: 'gpt-6-luna', thinking: 'low' } });
     harness.emitBus('subagents:started', { id: 'one', type: 'Explore', description: 'Investigate footer' });
-    assert.match(liveText(), /Explore.*gpt-5.6-luna.*Investigate footer/);
+    assert.match(liveText(), /Explore.*gpt-6-luna.*Investigate footer/);
     assert.doesNotMatch(component.render(120).join('\n'), /Explore/);
     records.set('one', { status: 'completed', resultConsumed: true });
     harness.emitBus('subagents:completed', { id: 'one', type: 'Explore', status: 'completed' });
@@ -488,7 +488,7 @@ test('live display disappears on completion and resume never duplicates finished
 test('peak enrichment survives metadata replacement and stale reads cannot cross reruns or session switches', async () => {
   const records = new Map<string, RegistryFixtureRecord>([['one', {
     status: 'completed', resultConsumed: true, sessionFile: 'C:/sessions/one.jsonl',
-    invocation: { modelId: 'gpt-5.6-luna', thinking: 'low' },
+    invocation: { modelId: 'gpt-6-luna', thinking: 'low' },
   }]]);
   const restore = installNativeRegistryFixture(records);
   const reads: Array<{ signal: AbortSignal; resolve: (peak: number | undefined) => void }> = [];
@@ -604,7 +604,7 @@ test('footer asynchronously restores transcript peak only for the selected branc
   const reads: string[] = [];
   harness.entries.push({ type: 'custom', customType: 'subagents:record', data: {
     id: 'saved', type: 'SavedExplorer', status: 'completed', parentSessionId: 'session-12345678',
-    invocation: { modelId: 'gpt-5.6-luna', thinking: 'low' }, sessionFile: 'C:/sessions/saved.jsonl',
+    invocation: { modelId: 'gpt-6-luna', thinking: 'low' }, sessionFile: 'C:/sessions/saved.jsonl',
     lifetimeUsage: { input: 1000, output: 100, cacheWrite: 0, cacheRead: 500, cost: 0.2 },
   } });
   registerPiUi(harness.pi, {
@@ -678,7 +678,7 @@ test('footer keeps current context tokens, compaction and responsive agents with
   await harness.call('tool_result', {
     toolName: 'get_subagent_result',
     details: {
-      agentId: 'agent-1', subagentType: 'Explore', status: 'completed', modelName: 'luna 5.6',
+      agentId: 'agent-1', subagentType: 'Explore', status: 'completed', modelName: 'luna 6',
       tags: ['thinking: low'], durationMs: 2_000,
     },
   });
@@ -695,7 +695,7 @@ test('footer keeps current context tokens, compaction and responsive agents with
 test('background footer uses resolved native invocation without waiting for a result tool or inventing requested settings', async () => {
   const records = new Map<string, RegistryFixtureRecord>([
     ['background', { status: 'completed', resultConsumed: true, invocation: {
-      modelId: 'openai-codex/gpt-5.6-luna', thinking: 'low', requestedModel: 'other-model', requestedThinking: 'max',
+      modelId: 'openai-codex/gpt-6-luna', thinking: 'low', requestedModel: 'other-model', requestedThinking: 'max',
     } }],
   ]);
   const restore = installNativeRegistryFixture(records);
@@ -1049,7 +1049,7 @@ test('duplicate terminal events cannot reserve an already delivered child again'
 test('cancelled first turn does not start a fresh automatic title request', async () => {
   let requests = 0;
   const harness = extensionHarness({ titleResult: async () => { requests++; return 'Title'; } });
-  registerPiUi(harness.pi, { title: { provider: 'openai-codex', model: 'gpt-5.6-luna', effort: 'low' }, environment: {} });
+  registerPiUi(harness.pi, { title: { provider: 'openai-codex', model: 'gpt-6-luna', effort: 'low' }, environment: {} });
   try {
     await harness.call('session_start');
     await harness.call('input', { source: 'interactive', text: 'cancel before title' });
@@ -1089,7 +1089,7 @@ test('same-session reload gives a new activity identity and stale title cleanup 
     titleResult: () => new Promise<string>(resolve => resolvers.push(resolve)),
   });
   registerPiUi(harness.pi, {
-    title: { provider: 'openai-codex', model: 'gpt-5.6-luna', effort: 'low' },
+    title: { provider: 'openai-codex', model: 'gpt-6-luna', effort: 'low' },
     settleDelayMs: 0,
     environment: {},
   });

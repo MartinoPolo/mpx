@@ -10,11 +10,11 @@
       "frontier": "fable"
     },
     "pi": {
-      "mechanical": "openai-codex/luna",
-      "exploration": "openai-codex/luna",
-      "standard": "openai-codex/luna",
-      "reviewer": "openai-codex/sol",
-      "advanced": "openai-codex/sol",
+      "mechanical": "openai-codex/gpt-6-luna",
+      "exploration": "openai-codex/gpt-6-luna",
+      "standard": "openai-codex/gpt-6-luna",
+      "reviewer": "openai-codex/gpt-6-sol",
+      "advanced": "openai-codex/gpt-6-sol",
       "frontier": "openai-codex/astra"
     }
   },

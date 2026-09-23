@@ -29,14 +29,16 @@ export function piFamilyReference(reference: string, profiles: Readonly<Record<s
   const slash = candidate.indexOf('/');
   if (slash >= 0) {
     const provider = candidate.slice(0, slash);
-    const family = candidate.slice(slash + 1);
+    const modelReference = candidate.slice(slash + 1);
+    const family = parseVersionedPiModelFamily(modelReference)?.family ?? modelReference;
     return provider && isPiModelFamily(family) ? { provider, family } : undefined;
   }
   if (!isPiModelFamily(candidate)) return undefined;
   const providers = new Set(
     Object.values(profiles)
       .map(value => value.toLowerCase().split('/'))
-      .filter(parts => parts.length === 2 && parts[1] === candidate)
+      .filter(parts => parts.length === 2
+        && (parseVersionedPiModelFamily(parts[1]!)?.family ?? parts[1]) === candidate)
       .map(parts => parts[0]!),
   );
   return providers.size === 1 ? { provider: [...providers][0]!, family: candidate } : undefined;
@@ -72,10 +74,14 @@ export function resolvePiModelReference(
   availableModels: readonly AvailablePiModel[],
 ): PiModelRoutingResult {
   const normalizedInput = input.trim().toLowerCase();
-  const slash = normalizedInput.indexOf('/');
+  const configuredReference = Object.hasOwn(profiles, normalizedInput)
+    ? profiles[normalizedInput]?.trim().toLowerCase()
+    : undefined;
+  const modelReference = configuredReference ?? normalizedInput;
+  const slash = modelReference.indexOf('/');
   if (slash >= 0) {
-    const provider = normalizedInput.slice(0, slash);
-    const modelId = normalizedInput.slice(slash + 1);
+    const provider = modelReference.slice(0, slash);
+    const modelId = modelReference.slice(slash + 1);
     const pinned = parseVersionedPiModelFamily(modelId);
     if (pinned) {
       const exact = availableModels.find(model => model.provider.toLowerCase() === provider && model.id.toLowerCase() === modelId);
@@ -84,18 +90,18 @@ export function resolvePiModelReference(
         : { kind: 'error', message: `Required model is unavailable: ${input}` };
     }
   } else {
-    const pinned = parseVersionedPiModelFamily(normalizedInput);
+    const pinned = parseVersionedPiModelFamily(modelReference);
     if (pinned) {
       const profile = piFamilyReference(pinned.family, profiles);
       if (!profile) return { kind: 'error', message: `No provider is configured for model family ${pinned.family}` };
-      const exact = availableModels.find(model => model.provider.toLowerCase() === profile.provider && model.id.toLowerCase() === normalizedInput);
+      const exact = availableModels.find(model => model.provider.toLowerCase() === profile.provider && model.id.toLowerCase() === modelReference);
       return exact
         ? { kind: 'resolved', family: pinned.family, model: `${exact.provider}/${exact.id}` }
         : { kind: 'error', message: `Required model is unavailable: ${input}` };
     }
   }
 
-  const reference = piFamilyReference(normalizedInput, profiles);
+  const reference = piFamilyReference(modelReference, profiles);
   if (!reference) {
     if (isPiModelFamily(normalizedInput) || Object.hasOwn(profiles, normalizedInput)) {
       return { kind: 'error', message: `No unambiguous provider is configured for model reference ${input}` };

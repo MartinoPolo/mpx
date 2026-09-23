@@ -62,7 +62,7 @@ test('v3 active branch recovers mid-session model and effort while ignoring aban
       assistant('a1', 'u1', 'old-provider', 'old-model'),
       entry('model_change', 'ab1', 'a1', { provider: 'abandoned', modelId: 'wrong-model' }),
       entry('thinking_level_change', 'ab2', 'ab1', { thinkingLevel: 'xhigh' }),
-      entry('model_change', 'mc1', 'a1', { provider: 'openai-codex', modelId: 'gpt-5.6-sol' }),
+      entry('model_change', 'mc1', 'a1', { provider: 'openai-codex', modelId: 'gpt-6-sol' }),
       entry('thinking_level_change', 'tc1', 'mc1', { thinkingLevel: 'low' }),
       entry('custom', 'c1', 'tc1', { customType: 'fixture', data: { retained: true } }),
       entry('compaction', 'cp1', 'c1', { summary: 'summary', firstKeptEntryId: 'u1', tokensBefore: 100 }),
@@ -74,7 +74,7 @@ test('v3 active branch recovers mid-session model and effort while ignoring aban
     assert.equal(result.session.id, 'session-active');
     assert.equal(result.session.cwd, cwd);
     assert.equal(result.session.provider, 'openai-codex');
-    assert.equal(result.session.model, 'gpt-5.6-sol');
+    assert.equal(result.session.model, 'gpt-6-sol');
     assert.equal(result.session.thinking, 'low');
     assert.equal(result.session.title, 'Build the feature');
     assert.deepEqual(result.warnings, []);
@@ -102,7 +102,7 @@ test('large inactive payloads are projected away while active structured restore
       inactiveParent = id;
     }
     await appendFile(file, `${JSON.stringify(entry('model_change', 'active-model', 'u1', {
-      provider: 'openai-codex', modelId: 'gpt-5.6-sol', ignored: payload,
+      provider: 'openai-codex', modelId: 'gpt-6-sol', ignored: payload,
     }))}\n`);
     await appendFile(file, `${JSON.stringify(entry('thinking_level_change', 'active-thinking', 'active-model', {
       thinkingLevel: 'xhigh', ignored: payload,
@@ -123,7 +123,7 @@ test('large inactive payloads are projected away while active structured restore
       '--max-old-space-size=64', '--import', 'tsx', '--input-type=module', '--eval', childCode,
     ], { cwd: path.resolve('.'), timeout: 30_000, maxBuffer: 1024 * 1024 });
     assert.deepEqual(JSON.parse(stdout), {
-      title: 'Large session title', provider: 'openai-codex', model: 'gpt-5.6-sol', thinking: 'xhigh',
+      title: 'Large session title', provider: 'openai-codex', model: 'gpt-6-sol', thinking: 'xhigh',
     });
   } finally { await f.cleanup(); }
 });
