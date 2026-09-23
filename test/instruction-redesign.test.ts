@@ -17,18 +17,6 @@ function projectedText(projections: Awaited<ReturnType<typeof projectContent>>, 
   return projection.content.toString('utf8');
 }
 
-test('checker detector links resolve in both harnesses', async () => {
-  const projections = await projectContent(root);
-  for (const harness of ['pi', 'claude']) {
-    const destination = `dist/${harness}/agents/mpx-checker.md`;
-    const checker = projectedText(projections, destination);
-    const detectorLink = /\[[^\]]*\]\(([^)]+detect-check-scripts\.mjs)\)/.exec(checker);
-    assert.ok(detectorLink);
-    const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(destination), detectorLink[1]!));
-    assert.ok(projections.some(projection => projection.path === resolved), resolved);
-  }
-});
-
 test('compiled agents are self-contained and contain no retired active agent names', async () => {
   const projections = await projectContent(root);
   const retiredAgent = /\bmpx-(?:tdd-executor|git-committer|review-manager)\b/;
@@ -65,7 +53,25 @@ test('retired diagnosis agents remain archived without active projections', asyn
   }
 });
 
-test('bundled check detector runs from its compiled skill link in both standalone harness bundles', async () => {
+test('execute responsibility boundaries survive both harness projections', async () => {
+  const projections = await projectContent(root);
+  for (const harness of ['pi', 'claude']) {
+    const skillDirectory = harness === 'pi'
+      ? 'dist/packs/development/pi/skills/mpx-execute'
+      : 'dist/packs/development/claude/.claude/skills/mpx-execute';
+    const skill = projectedText(projections, `${skillDirectory}/SKILL.md`);
+    const server = projectedText(projections, `${skillDirectory}/DEV_SERVER.md`);
+    const checker = projectedText(projections, `dist/${harness}/agents/mpx-checker.md`);
+    assert.match(skill, /Dispatch `mpx-executor` for the agreed scope/);
+    assert.match(skill, /Ask `mpx-checker` to run `fast_checks`/);
+    assert.doesNotMatch(skill, /detect-check-scripts/);
+    assert.match(checker, /For discovery-only tasks, return the plan and unresolved gaps without running checks or formatting/);
+    assert.match(server, /Main owns server startup and cleanup/);
+    assert.match(server, /stop only processes started for this task/);
+  }
+});
+
+test('check detector runs from each compiled checker link and projected dependency', async () => {
   const projections = await projectContent(root);
   const temporary = await mkdtemp(path.join(tmpdir(), 'mpx-detector-contract-'));
   const repository = path.join(temporary, 'repository');
@@ -96,21 +102,23 @@ test('bundled check detector runs from its compiled skill link in both standalon
       unresolved: [],
     };
     for (const harness of ['pi', 'claude']) {
-      const skillRoot = harness === 'pi' ? 'pi/skills' : 'claude/.claude/skills';
-      const prefix = `dist/packs/development/${skillRoot}/mpx-execute/`;
-      const bundle = path.join(temporary, harness);
-      const bundledFiles = projections.filter(item => item.path.startsWith(prefix));
-      for (const file of bundledFiles) {
-        const destination = path.join(bundle, file.path.slice(prefix.length));
-        await mkdir(path.dirname(destination), { recursive: true });
-        await writeFile(destination, file.content);
-      }
-      const skill = bundledFiles.find(item => item.path === `${prefix}SKILL.md`);
-      assert.ok(skill, `${harness} compiled skill`);
-      const detectorLink = /\[[^\]]*\]\(([^)]+detect-check-scripts\.mjs)\)/.exec(skill.content.toString('utf8'))?.[1];
+      const checkerPath = `dist/${harness}/agents/mpx-checker.md`;
+      const checker = projections.find(item => item.path === checkerPath);
+      assert.ok(checker, `${harness} compiled checker`);
+      const detectorLink = /\[[^\]]*\]\(([^)]+detect-check-scripts\.mjs)\)/.exec(checker.content.toString('utf8'))?.[1];
       assert.ok(detectorLink, `${harness} detector link`);
-      const detector = path.resolve(bundle, detectorLink);
-      const { stdout } = await exec(process.execPath, [detector, repository]);
+      const detectorPath = path.posix.normalize(path.posix.join(path.posix.dirname(checkerPath), detectorLink));
+      const detectorDependency = projections.find(item => item.path === detectorPath);
+      assert.ok(detectorDependency, `${harness} projected detector dependency`);
+
+      const bundle = path.join(temporary, harness);
+      for (const projection of [checker, detectorDependency]) {
+        const destination = path.join(bundle, projection.path);
+        await mkdir(path.dirname(destination), { recursive: true });
+        await writeFile(destination, projection.content);
+      }
+      const detector = path.resolve(bundle, path.dirname(checkerPath), detectorLink);
+      const { stdout } = await exec(process.execPath, [detector, repository], { timeout: 5_000 });
       assert.deepEqual(JSON.parse(stdout), expected);
     }
   } finally {

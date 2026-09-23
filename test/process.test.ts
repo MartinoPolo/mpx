@@ -18,6 +18,13 @@ test('bounded children receive isolated environment without mutating parent rout
   assert.equal(process.env.MPX_CHILD_ENV_FIXTURE, before);
 });
 
+test('passing-looking output cannot hide a failed exit', async () => {
+  const failed = await runBounded(process.execPath, ['-e', "console.log('assertions passed'); process.exitCode = 1"], process.cwd(), 3000);
+  assert.equal(failed.stdout.trim(), 'assertions passed');
+  assert.equal(failed.code, 1);
+  assert.equal(failed.incomplete, undefined);
+});
+
 test('deadline stops a real process tree before its delayed write', async () => {
   const root = await mkdtemp(join(tmpdir(), 'mpx-process-'));
   try {
