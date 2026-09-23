@@ -9,7 +9,7 @@ const require = createRequire(import.meta.url);
 const { createJiti } = require(path.join(root, 'node_modules/.pnpm/node_modules/jiti'));
 const native = createJiti(import.meta.url);
 const packageSource = path.join(root, 'node_modules/@tintinweb/pi-subagents/src');
-const { resolveModel } = native(path.join(packageSource, 'model-resolver.ts'));
+const { describeModel, resolveModel } = native(path.join(packageSource, 'model-resolver.ts'));
 const { resolveDefaultModel, resumeAgent } = native(path.join(packageSource, 'agent-runner.ts'));
 const { SubagentScheduler } = native(path.join(packageSource, 'schedule.ts'));
 
@@ -25,6 +25,19 @@ const registry = {
   getAvailable: () => models,
   getAll: () => models,
 };
+
+test('native subagent labels include family and version while retaining canonical identifiers', () => {
+  for (const [id, label] of [
+    ['gpt-5.6-terra', 'Terra 5.6'], ['gpt-6-sol', 'Sol 6'],
+    ['gpt-6-luna', 'Luna 6'], ['gpt-6-astra', 'Astra 6'],
+    ['gpt-5.10-luna', 'Luna 5.10'], ['codex-6-sol', 'Sol 6'],
+  ]) {
+    assert.deepEqual(describeModel({ provider: 'chatgpt-codex', id, name: 'Long model name' }),
+      { modelName: label, modelId: `chatgpt-codex/${id}` });
+  }
+  assert.deepEqual(describeModel({ provider: 'vendor', id: 'other-model', name: 'Claude Other Model' }),
+    { modelName: 'other model', modelId: 'vendor/other-model' });
+});
 
 test('native resolution chooses numeric latest within the requested provider and strict family', () => {
   assert.equal(resolveModel('openai-codex/luna', registry), models[1]);

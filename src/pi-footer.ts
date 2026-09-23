@@ -154,10 +154,10 @@ function modelIdentifier(value: string | undefined): string {
   return slash < 0 ? original : original.slice(slash + 1) || 'model unavailable';
 }
 
-function shortModel(value: string | undefined): string {
+export function shortModel(value: string | undefined): string {
   const model = modelIdentifier(value);
-  const alias = model.match(/^gpt-\d+(?:\.\d+)?-(astra|luna|sol|terra)$/i)?.[1];
-  return alias ? `${alias[0]!.toUpperCase()}${alias.slice(1).toLowerCase()}` : model;
+  const versioned = model.match(/^(?:gpt|codex)-(\d+(?:\.\d+)*)-(astra|luna|sol|terra)$/i);
+  return versioned ? `${versioned[2]![0]!.toUpperCase()}${versioned[2]!.slice(1).toLowerCase()} ${versioned[1]}` : model;
 }
 
 export function colorAgentModel(value: string | undefined, label: string, theme: Pick<Theme, 'fg'>): string {

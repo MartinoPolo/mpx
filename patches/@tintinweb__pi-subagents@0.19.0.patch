@@ -1789,7 +1789,19 @@ index fa7cd383e9085d1e44288c1f6873bfac0b513bfa..8cb497d96e4a435c44320e44023d998f
  /**
   * Both display forms of a model. The short one goes on tight rows (the widget,
   * the Agent tool result), the canonical one where there is room to disambiguate
-@@ -41,6 +87,9 @@ export function resolveModel(
+@@ -26,8 +72,10 @@
+ export function describeModel(
+   model: { provider: string; id: string; name?: string },
+ ): { modelName: string; modelId: string } {
++  const versioned = model.id.match(/^(?:gpt|codex)-(\d+(?:\.\d+)*)-(astra|luna|sol|terra)$/i);
+   return {
+-    modelName: (model.name ?? model.id).replace(/^Claude\s+/i, "").toLowerCase(),
++    modelName: versioned ? `${versioned[2]![0]!.toUpperCase()}${versioned[2]!.slice(1).toLowerCase()} ${versioned[1]}`
++      : (model.name ?? model.id).replace(/^Claude\s+/i, "").toLowerCase(),
+     modelId: `${model.provider}/${model.id}`,
+   };
+ }
+@@ -41,6 +89,9 @@ export function resolveModel(
    input: string,
    registry: ModelRegistry,
  ): any | string {

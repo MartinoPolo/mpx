@@ -60,10 +60,12 @@ test('live agent names and model names follow model tier colors', () => {
     { id: 't', type: 'TerraAgent', status: 'running', model: 'gpt-6-terra' },
   ];
   const output = renderLiveAgents(agents, 200, taggedTheme).join('\n');
-  assert.match(output, /\x1b\[38;5;48mAstraAgent\x1b\[0m.*\x1b\[38;5;48mgpt-6-astra\x1b\[0m/);
-  assert.match(output, /\x1b\[38;5;39mSolAgent\x1b\[0m.*\x1b\[38;5;39mgpt-6-sol\x1b\[0m/);
-  assert.match(output, /\x1b\[38;5;226mLunaAgent\x1b\[0m.*\x1b\[38;5;226mgpt-5\.6-luna\x1b\[0m/);
-  assert.match(output, /\x1b\[38;5;208mTerraAgent\x1b\[0m.*\x1b\[38;5;208mgpt-5\.6-terra\x1b\[0m/);
+  assert.match(output, /\x1b\[38;5;48mAstraAgent\x1b\[0m.*\x1b\[38;5;48mAstra 6\x1b\[0m/);
+  assert.match(output, /\x1b\[38;5;39mSolAgent\x1b\[0m.*\x1b\[38;5;39mSol 6\x1b\[0m/);
+  assert.match(output, /\x1b\[38;5;226mLunaAgent\x1b\[0m.*\x1b\[38;5;226mLuna 6\x1b\[0m/);
+  assert.match(output, /\x1b\[38;5;208mTerraAgent\x1b\[0m.*\x1b\[38;5;208mTerra 6\x1b\[0m/);
+  assert.match(renderLiveAgents([{ id: 'codex', type: 'Worker', status: 'running',
+    model: 'chatgpt-codex/codex-6-sol' }], 120, theme).join(''), /Sol 6/);
 });
 
 test('live rows sanitize untrusted text and stay within terminal width', () => {

@@ -141,7 +141,7 @@ test('runtime uses structured glyph targets for independent history and model co
   text = component.render(120).map(stripTerminalSequences);
   assert.ok(text.length > 1, 'history collapse does not collapse the operational footer');
   assert.equal(text.filter(line => line.includes('History')).length, 1);
-  assert.match(text.at(-1)!, /^▸ History \(2\).*(Luna ×1).*(Terra ×1)/);
+  assert.match(text.at(-1)!, /^▸ History \(2\).*Luna 6 ×1.*Terra 6 ×1/);
 
   historyRow = text.length - 1;
   component.handleMouse?.(click(0, historyRow));

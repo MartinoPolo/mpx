@@ -465,7 +465,7 @@ test('live display disappears on completion and resume never duplicates finished
     assert.match(liveText(), /1 queued/);
     records.set('one', { status: 'running', invocation: { modelId: 'gpt-6-luna', thinking: 'low' } });
     harness.emitBus('subagents:started', { id: 'one', type: 'Explore', description: 'Investigate footer' });
-    assert.match(liveText(), /Explore.*gpt-6-luna.*Investigate footer/);
+    assert.match(liveText(), /Explore.*Luna 6.*Investigate footer/);
     assert.doesNotMatch(component.render(120).join('\n'), /Explore/);
     records.set('one', { status: 'completed', resultConsumed: true });
     harness.emitBus('subagents:completed', { id: 'one', type: 'Explore', status: 'completed' });

@@ -67,8 +67,21 @@ test('agent model tiers use stable colors', () => {
 
 test('main model uses the same tier color in expanded and compact views', () => {
   const value = snapshot({ model: 'gpt-6-sol' });
-  assert.match(renderPiFooter(value, 120, theme, 'summary')[1]!, /^\x1b\[38;5;39mSol/);
-  assert.match(renderPiFooter(value, 120, theme, 'compact')[0]!, /\x1b\[38;5;39mSol/);
+  assert.match(renderPiFooter(value, 120, theme, 'summary')[1]!, /^\x1b\[38;5;39mSol 6/);
+  assert.match(renderPiFooter(value, 120, theme, 'compact')[0]!, /\x1b\[38;5;39mSol 6/);
+});
+
+test('versioned family labels retain exact model versions and unknown models stay recognizable', () => {
+  for (const [model, label] of [
+    ['chatgpt-codex/gpt-5.6-terra', 'Terra 5.6'],
+    ['chatgpt-codex/codex-6-sol', 'Sol 6'],
+    ['chatgpt-codex/gpt-6-sol', 'Sol 6'],
+    ['chatgpt-codex/gpt-6-luna', 'Luna 6'],
+    ['chatgpt-codex/gpt-5.10-astra', 'Astra 5.10'],
+    ['vendor/custom-model-v9', 'custom-model-v9'],
+  ]) {
+    assert.ok(plain(renderPiFooter(snapshot({ model }), 120, theme))[1]!.startsWith(`${label} · `));
+  }
 });
 
 test('thinkingGauge implements every original six-slot effort level', () => {
@@ -343,7 +356,7 @@ test('compact is one bounded bar-free line with aliases, context, and every quot
     ],
   }), 120, theme, 'compact');
   assert.equal(lines.length, 1);
-  assert.match(plain(lines)[0]!, /^▸ · #12345678 · Luna · ◆◆◆◆◇◇ · 42\.1k \(42%\) · 5h 23% 1h · 7d 42% 2h$/);
+  assert.match(plain(lines)[0]!, /^▸ · #12345678 · Luna 6 · ◆◆◆◆◇◇ · 42\.1k \(42%\) · 5h 23% 1h · 7d 42% 2h$/);
   assert.doesNotMatch(plain(lines)[0]!, /[█░]/);
   assertBounded(lines, 120);
 });
@@ -384,8 +397,8 @@ test('history summary columns align by terminal width across mixed models and me
       .map(match => visibleWidth(row.slice(0, match.index))));
     assert.equal(separatorColumns[0]!.length, 4);
     for (const columns of separatorColumns) assert.deepEqual(columns, separatorColumns[0]);
-    assert.ok(rows.some(row => /Sol +·/.test(row)));
-    assert.ok(rows.some(row => /gpt-5\.10-luna/.test(row)));
+    assert.ok(rows.some(row => /Sol 6 +·/.test(row)));
+    assert.ok(rows.some(row => /Luna 5\.10/.test(row)));
     assert.ok(rows.some(row => /×12 · 240\.0k \(20\.0k\) · \$1\.200$/.test(row)));
     assert.ok(rows.some(row => /×1 +· 900 +· \$0\.010$/.test(row)));
     assert.ok(rows.every(row => row === row.trimEnd()));
@@ -401,8 +414,8 @@ test('history never merges distinct model versions sharing a short display alias
   ];
   const text = plain(renderPiFooter(snapshot({ agents }), 120, theme, 'summary')).join('\n');
   assert.match(text, /History \(3\)/);
-  assert.match(text, /gpt-5\.10-luna.*×1.*100/);
-  assert.match(text, /gpt-6-luna.*×1.*200/);
+  assert.match(text, /Luna 5\.10.*×1.*100/);
+  assert.match(text, /Luna 6.*×1.*200/);
   assert.match(text, /gpt-5-mini.*×1.*300/);
   assert.doesNotMatch(text, /×2/);
 });
@@ -509,7 +522,7 @@ test('collapsed history is one aggregate line combining efforts per exact model 
   });
   const text = plain(layout.lines);
   assert.equal(text.filter(line => line.includes('History')).length, 1);
-  assert.match(text.at(-1)!, /^▸ History \(3\) · \$3\.000 known cost · gpt-5\.10-luna ×2 · gpt-6-luna ×1$/);
+  assert.match(text.at(-1)!, /^▸ History \(3\) · \$3\.000 known cost · Luna 5\.10 ×2 · Luna 6 ×1$/);
 });
 
 test('one model group can expand independently while the other remains a summary', () => {

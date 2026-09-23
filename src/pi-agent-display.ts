@@ -2,7 +2,7 @@ import type { Theme } from '@earendil-works/pi-coding-agent';
 import { stripTerminalSequences, truncateToWidth } from '@earendil-works/pi-tui';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { colorAgentModel, thinkingGauge, type FooterAgent } from './pi-footer.js';
+import { colorAgentModel, shortModel, thinkingGauge, type FooterAgent } from './pi-footer.js';
 
 export const LIVE_AGENT_WIDGET = 'mpx-live-agents';
 const MAX_VISIBLE_LIVE_AGENTS = 5;
@@ -73,7 +73,7 @@ export function renderLiveAgents(agents: readonly LiveAgent[], width: number, th
   const rows = [theme.fg('muted', `Agents · ${running.length} running${queued ? ` · ${queued} queued` : ''}`)];
   for (const agent of running.slice(0, MAX_VISIBLE_LIVE_AGENTS)) {
     const details = [colorAgentModel(agent.model, clean(agent.type), theme),
-      ...(agent.model ? [colorAgentModel(agent.model, clean(agent.model), theme)] : []),
+      ...(agent.model ? [colorAgentModel(agent.model, shortModel(agent.model), theme)] : []),
       ...(agent.effort ? [thinkingGauge(agent.effort)] : []), ...(agent.description ? [clean(agent.description)] : [])];
     rows.push(`${theme.fg('accent', '●')} ${details.join(' · ')}`);
   }
