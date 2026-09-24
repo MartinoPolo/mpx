@@ -14,6 +14,7 @@ import { syncRuntime, syncRuntimeScope } from './runtime-install.js';
 import { setupProject, orcaProjectSnippet } from './project.js';
 import { evaluateDangerousCommand } from './safeguards/dangerous.js';
 import { inspectNativePackages } from './native-packages.js';
+import { updatePiExtensions } from './pi-extension-update.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const [command, ...args] = process.argv.slice(2);
@@ -207,6 +208,9 @@ async function main(): Promise<number> {
       if (!result.ok) console.error('Partial sync failed for the reported entries; unrelated entries were preserved.');
       return result.ok ? 0 : 1;
     }
+    case 'update-pi-extensions':
+      if (args.length) throw new Error('Usage: mpx update-pi-extensions');
+      return updatePiExtensions(await readUserConfig(userConfigPath()));
     case 'resume':
       return resumeCommand(root, await readUserConfig(userConfigPath()), args);
     case 'project': {
@@ -224,7 +228,7 @@ async function main(): Promise<number> {
       return result.status === 'conflict' ? 1 : 0;
     }
     default:
-      console.log(`MPX development checkout\nCommands: build, status, ${syncSyntax}, project setup, project config, check-dangerous, check-staged-secrets, check-package-manager, resume [--list|--preview|--launch], launch-preview, launch\nLocal implementation only: installed acceptance and live cutover remain gated.`);
+      console.log(`MPX development checkout\nCommands: build, status, update-pi-extensions, ${syncSyntax}, project setup, project config, check-dangerous, check-staged-secrets, check-package-manager, resume [--list|--preview|--launch], launch-preview, launch\nLocal implementation only: installed acceptance and live cutover remain gated.`);
       return command ? 1 : 0;
   }
 }

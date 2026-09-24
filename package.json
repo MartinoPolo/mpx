@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test --test-concurrency=4 test/*.test.ts",
     "status": "tsx src/cli.ts status",
+    "update:pi-extensions": "tsx src/cli.ts update-pi-extensions",
     "sync": "tsx src/cli.ts sync",
     "setup-project": "tsx src/cli.ts project setup"
   },

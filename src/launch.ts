@@ -6,7 +6,7 @@ import type { Account, Harness, LaunchSpec, LaunchWarning, PackSelection, Projec
 import { LAUNCH_WARNING_CODE, sortLaunchWarnings, WARNING_SEVERITY } from './contracts.js';
 
 const retainedMpx = new Set(['MPX_PROJECTS', 'MPX_WORK', 'MPX_CLONED', 'MPX_APPS', 'MPX_ONEDRIVE', 'MPX_AI_GENERATED', 'MPX_OBSIDIAN_VAULT', 'MPX_PI_EXECUTABLE', 'MPX_CLAUDE_EXECUTABLE']);
-function cleanEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+export function cleanEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const result: NodeJS.ProcessEnv = {};
   const removed = new Set(['PI_SESSION_ID', 'PI_SESSION_FILE', 'PI_MODEL', 'PI_PROVIDER', 'PI_REASONING_LEVEL', 'PI_CODING_AGENT_SESSION_DIR', 'PI_CODING_AGENT_DIR', 'CLAUDE_CONFIG_DIR']);
   for (const [key, value] of Object.entries(env)) {

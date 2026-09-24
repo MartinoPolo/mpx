@@ -41,6 +41,9 @@ Run from Git Bash in your project:
 | `mpx project setup . --preview` | Preview optional project setup |
 | `mpx project config <directory>` | Inspect resolved project configuration |
 
+From this repository, run `pnpm run update:pi-extensions` to update native Pi extensions for
+personal then work using separate account roots; native package pins and account configs remain intact.
+
 The account shortcuts require MPX's `bin/` to precede native launchers on `PATH`. Check with
 `type -a pi`; use `mpx launch pi personal` to bypass a shadowed `pi` shortcut.
 Preview sync/setup before allowing writes; preserve unrelated native and project files.

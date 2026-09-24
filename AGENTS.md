@@ -11,6 +11,10 @@ pnpm build
 pnpm test
 ```
 
+When asked to update Pi extensions, run `pnpm run update:pi-extensions` from this repository. It
+updates personal then work via native Pi, preserving pins, patches, and separate account configs.
+Verify installed versions in both accounts and report any remaining drift.
+
 ## Source map
 
 - `content/` is the authored skill, specialist, rule, and shared-instruction source.
