@@ -163,8 +163,8 @@ export default function(pi) {
               sessionEvidence = {
                 allToolNames: session.getAllTools().map((tool) => tool.name).sort(),
                 activeToolNames: session.getActiveToolNames().slice().sort(),
-                authorizedSkillLoaded: session.agent.state.systemPrompt.includes('<name>authorized-skill</name>'),
-                requestedConfigMarkerLoaded: session.agent.state.systemPrompt.includes('REQUESTED_CONFIG:' + type),
+                authorizedSkillLoaded: session.systemPrompt.includes('<name>authorized-skill</name>'),
+                requestedConfigMarkerLoaded: session.systemPrompt.includes('REQUESTED_CONFIG:' + type),
               };
             },
           });

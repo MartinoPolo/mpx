@@ -56,7 +56,7 @@ try {
   const runnerSource = fileURLToPath(new URL('../node_modules/@tintinweb/pi-subagents/src/agent-runner.ts', import.meta.url)).replaceAll('\\', '/');
   const typesSource = fileURLToPath(new URL('../node_modules/@tintinweb/pi-subagents/src/agent-types.js', import.meta.url)).replaceAll('\\', '/');
   await writeFile(extension, `
-import { createAssistantMessageEventStream } from '@earendil-works/pi-ai';
+import { createAssistantMessageEventStream, getCurrentSystemPrompt } from '@earendil-works/pi-ai';
 import { runAgent, getSelectedMpxSkillPaths } from ${JSON.stringify(runnerSource)};
 import { registerAgents } from ${JSON.stringify(typesSource)};
 const base = { description: 'Probe', builtinToolNames: ['read'], extensions: false, systemPrompt: '', promptMode: 'replace' };
@@ -79,7 +79,7 @@ const inspect = (systemPrompt) => ({
 });
 const installFixtureStream = (session) => {
   session.agent.streamFunction = ((model, context) => {
-    const text = JSON.stringify(inspect(context.systemPrompt ?? ''));
+    const text = JSON.stringify(inspect(getCurrentSystemPrompt(context.messages)));
     const stream = createAssistantMessageEventStream();
     stream.push({ type: 'done', reason: 'stop', message: {
       role: 'assistant', content: [{ type: 'text', text }], api: model.api,

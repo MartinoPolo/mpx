@@ -3,6 +3,13 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { AgentSession } from '@earendil-works/pi-coding-agent';
+import type { JsonObject, ToolResultMessage } from '@earendil-works/pi-ai';
+
+function receiptCount(result: ToolResultMessage): number {
+  const details = result.details;
+  assert.ok(details && typeof details === 'object' && 'subagentReceipts' in details && Array.isArray(details.subagentReceipts));
+  return details.subagentReceipts.length;
+}
 
 export async function runCoordinatorFixture(): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), 'mpx-coordinator-'));
@@ -146,7 +153,7 @@ export default function(pi) {
     const agentParameters = tracker.tools.get('Agent').parameters.properties;
     assert.equal('schedule' in agentParameters, false);
     assert.equal('isolation' in agentParameters, false);
-    let action: { name: string; arguments: object } | undefined;
+    let action: { name: string; arguments: JsonObject } | undefined;
     const installParentStream = (parent: AgentSession) => { parent.agent.streamFunction = ((model) => {
       tracker.requests.push(model.id);
       const stream = createAssistantMessageEventStream();
@@ -160,7 +167,7 @@ export default function(pi) {
       return stream;
     }); };
     installParentStream(session);
-    const invoke = async (name: string, parameters: object) => {
+    const invoke = async (name: string, parameters: JsonObject) => {
       action = { name, arguments: parameters };
       await session!.prompt('Run fixture action');
       if (!tracker.ctx.isIdle()) await new Promise<void>(resolve => { tracker.idle = resolve; });
@@ -248,7 +255,7 @@ export default function(pi) {
     releaseRetrieved();
     const fetched = await retrieving;
     assert.ok(JSON.stringify(fetched.content).includes('RESULT:held-retrieval'));
-    assert.equal(fetched.details.subagentReceipts.length, 1);
+    assert.equal(receiptCount(fetched), 1);
     assert.equal(tracker.updates[0].details.waitingAgents[0].quietMs, undefined, 'quiet is unknown before observed activity');
     const completedProgress = tracker.updates;
     const completedUpdates = completedProgress.length;
@@ -261,10 +268,10 @@ export default function(pi) {
     const rpcRead = invoke('fixture_rpc_result', { id: rpcRecord.id });
     releaseRpc();
     const rpcResult = await rpcRead;
-    assert.equal(rpcResult.details.subagentReceipts.length, 1);
+    assert.equal(receiptCount(rpcResult), 1);
     assert.equal(rpcRecord.resultConsumed, true, 'RPC consumption is reconciled from actual persisted tool output');
     const joined = await invoke('get_subagent_result', { agent_ids: [retrieved.id, idle.id], wait_for: 'any' });
-    assert.equal(joined.details.subagentReceipts.length, 2, 'wait-any returns all currently settled selections');
+    assert.equal(receiptCount(joined), 2, 'wait-any returns all currently settled selections');
     await spawn('held-group-a');
     await spawn('held-group-b');
     const groupA = manager.listAgents().find((record: any) => record.description === 'held-group-a');
@@ -276,7 +283,7 @@ export default function(pi) {
     const groupRelease = await gate('held-group-a');
     groupRelease();
     const groupResult = await groupWait;
-    assert.equal(groupResult.details.subagentReceipts.length, 1);
+    assert.equal(receiptCount(groupResult), 1);
     assert.ok(['running', 'queued'].includes(groupB.status));
     (await gate('held-group-b'))();
     await manager.waitForResult(groupB.id);
@@ -301,7 +308,7 @@ export default function(pi) {
     await new Promise(resolve => setImmediate(resolve));
     await session.agent.waitForIdle();
     const cancelReceipt = await invoke('get_subagent_result', { agent_id: cancelRecord.id, wait: true });
-    assert.equal(cancelReceipt.details.subagentReceipts.length, 1);
+    assert.equal(receiptCount(cancelReceipt), 1);
     const oldSnapshot = await manager.waitForResult(foreground.id);
     await invoke('Agent', { subagent_type: 'reader', resume: foreground.id, prompt: 'another turn', description: 'resume', run_in_background: false });
     assert.equal(oldSnapshot.runRevision, 0, 'settled snapshot is immutable across resume');
@@ -373,7 +380,9 @@ export default function(pi) {
     const queried = await invoke('get_subagent_result', { agent_id: restored.handle, wait: true });
     assert.ok(JSON.stringify(queried.content).includes('RESULT:foreground'));
     const reopenedResult = await invoke('Agent', { subagent_type: restored.type, resume: restored.id, prompt: 'reopened', description: 'reopened', run_in_background: false });
-    const reopened = manager.getRecord(reopenedResult.details.agentId);
+    const reopenedDetails = reopenedResult.details;
+    assert.ok(reopenedDetails && typeof reopenedDetails === 'object' && 'agentId' in reopenedDetails && typeof reopenedDetails.agentId === 'string');
+    const reopened = manager.getRecord(reopenedDetails.agentId);
     assert.notEqual(reopened.id, restored.id, 'reopen returns its new run identity explicitly');
     assert.ok(reopened.session.messages.some((message: any) => message.role === 'assistant' && message.content.some((block: any) => block.text === 'RESULT:foreground')), 'explicit reopen retains saved context');
     assert.equal(reopened.result, 'RESULT:reopened');

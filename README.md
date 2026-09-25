@@ -44,6 +44,17 @@ Run from Git Bash in your project:
 From this repository, run `pnpm run update:pi-extensions` to update native Pi extensions for
 personal then work using separate account roots; native package pins and account configs remain intact.
 
+Pi core for `pi` and `piw` is pinned in this repository, including a checkout-local cancellation
+patch. To update core, change the Pi dependency pins here, rebase the patch with `pnpm patch` /
+`pnpm patch-commit`, run `pnpm install --frozen-lockfile` and the repository checks, then verify
+`./node_modules/.bin/pi --version`, `mpx launch-preview pi personal`, and
+`mpx launch-preview pi work`. Do not use `pi update`, `xpi update`,
+`pi update --self`, or `pi update --all` to update this installation: those commands target Pi's
+native self-updater rather than this repository's package and patch lockfile. Current Pi releases
+reject self-updates from project-local pnpm installations when they are not under a global package
+root, but use the repository workflow even if that native safeguard changes. For native packages
+only, use `pnpm run update:pi-extensions` rather than a core self-update command.
+
 The account shortcuts require MPX's `bin/` to precede native launchers on `PATH`. Check with
 `type -a pi`; use `mpx launch pi personal` to bypass a shadowed `pi` shortcut.
 Preview sync/setup before allowing writes; preserve unrelated native and project files.

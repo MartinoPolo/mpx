@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { stripVTControlCharacters } from 'node:util';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import type { TranscriptContext } from '@earendil-works/pi-ai';
 import { createPiUiExtension } from '../extensions/pi-ui.js';
 import type { UserConfig } from '../src/contracts.js';
 import { LIVE_AGENT_WIDGET } from '../src/pi-agent-display.js';
@@ -225,6 +226,7 @@ function extensionHarness(options: { titleResult?: () => Promise<string> } = {})
   const shortcuts = new Map<string, any>();
   const notifications: string[] = [];
   const completedCalls: any[] = [];
+  const titleContexts: TranscriptContext[] = [];
   const model = { provider: 'openai-codex', id: 'gpt-6-luna', contextWindow: 272_000, reasoning: true };
 
   const pi = {
@@ -272,7 +274,8 @@ function extensionHarness(options: { titleResult?: () => Promise<string> } = {})
         provider === model.provider && id === model.id ? model : undefined,
       hasConfiguredAuth: () => true,
       getApiKeyAndHeaders: async () => ({ ok: true }),
-      getProvider: () => ({ streamSimple(_model: unknown, _context: unknown, streamOptions: unknown) {
+      getProvider: () => ({ streamSimple(_model: unknown, context: TranscriptContext, streamOptions: unknown) {
+        titleContexts.push(context);
         completedCalls.push(streamOptions);
         return { result: async () => ({
           content: [{
@@ -303,6 +306,7 @@ function extensionHarness(options: { titleResult?: () => Promise<string> } = {})
     entries,
     emitted,
     completedCalls,
+    titleContexts,
     widgets,
     commands,
     shortcuts,
@@ -355,6 +359,13 @@ test('extension uses the explicitly configured title model and effort, then pres
 
   assert.equal(harness.sessionName(), 'Build Pi Activity UI');
   assert.equal(harness.completedCalls.length, 1);
+  assert.deepEqual(harness.titleContexts[0]?.messages.map((message) => message.role), ['system', 'user']);
+  const [systemMessage, userMessage] = harness.titleContexts[0]?.messages ?? [];
+  assert.ok(systemMessage?.role === 'system');
+  assert.equal(typeof systemMessage.content, 'string');
+  assert.match(String(systemMessage.content), /Create a concise title for a coding-agent session/);
+  assert.ok(userMessage?.role === 'user');
+  assert.deepEqual(userMessage.content, [{ type: 'text', text: 'Implement Pi UI' }]);
   assert.deepEqual(
     {
       reasoning: harness.completedCalls[0].reasoning,

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
-import { getSupportedThinkingLevels } from '@earendil-works/pi-ai';
+import { getSupportedThinkingLevels, normalizeContext } from '@earendil-works/pi-ai';
 import { withoutDeletedHeaders } from './context.js';
 import { createPiFooterComponent, type PiFooterComponent } from './pi-footer-runtime.js';
 import type { FooterRepository } from './pi-footer-data.js';
@@ -444,7 +444,7 @@ async function requestTitle(
     if (!provider || !auth.ok || signal.aborted) return fallbackTitle(prompt);
     const response = await provider.streamSimple(
       auth.baseUrl ? { ...model, baseUrl: auth.baseUrl } : model,
-      {
+      normalizeContext({
         systemPrompt: TITLE_SYSTEM_PROMPT,
         messages: [
           {
@@ -453,7 +453,7 @@ async function requestTitle(
             timestamp: Date.now(),
           },
         ],
-      },
+      }),
       {
         apiKey: auth.apiKey,
         headers: withoutDeletedHeaders(auth.headers),

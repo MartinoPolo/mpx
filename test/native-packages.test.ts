@@ -144,7 +144,7 @@ test('native package status is portable for absent artifacts and requires explic
   }
 });
 
-test('status load target supports Pi 0.85.1 explicit package-directory extension loading', async () => {
+test('status load target supports explicit package-directory extension loading', async () => {
   const fixture = await mkdtemp(join(tmpdir(), 'mpx-native-package-loader-'));
   try {
     const account = resolve(fixture, 'agent');

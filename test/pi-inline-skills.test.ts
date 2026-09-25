@@ -74,14 +74,16 @@ test('prompt-start skills use only native canonical suggestions and prefix', asy
   assert.deepEqual(await suggestions(provider, '/skill:'), await suggestions(native, '/skill:'));
 });
 
-test('prompt-start /resum Enter submits the native command even when a skill name collides', async () => {
-  const { provider } = await setup([skill('resume'), { name: 'resume', source: 'extension', sourceInfo }]);
+test('prompt-start collision uses native suggestions and Enter behavior', async () => {
+  const { provider, native } = await setup([skill('resume'), { name: 'resume', source: 'extension', sourceInfo }]);
   const choices = await suggestions(provider, '/resum');
-  assert.deepEqual(choices?.items.map((item) => item.value), ['resume', 'skill:resume']);
+  assert.deepEqual(choices, await suggestions(native, '/resum'));
+  assert.equal(choices?.items[0]?.value, 'skill:resume');
+  assert.ok(choices?.items.some((item) => item.value === 'resume'));
   const { editor, submitted } = createEditor(provider);
   await showCompletion(editor, '/resum');
   editor.handleInput('\r');
-  assert.deepEqual(submitted, ['/resume']);
+  assert.deepEqual(submitted, ['/skill:resume']);
 });
 
 test('native /skill: completion submits on Enter but Tab only completes', async () => {

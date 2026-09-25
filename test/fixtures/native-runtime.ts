@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { access, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { InMemoryCredentialStore, createAssistantMessageEventStream, type AssistantMessage, type Context } from '@earendil-works/pi-ai';
+import { InMemoryCredentialStore, createAssistantMessageEventStream, getCurrentSystemPrompt, type AssistantMessage, type Context } from '@earendil-works/pi-ai';
 import { DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager, createAgentSession } from '@earendil-works/pi-coding-agent';
 import { STYLE_REINFORCEMENT } from '../../src/context.js';
 
@@ -62,7 +62,7 @@ const message = (content: AssistantMessage['content'], stopReason: AssistantMess
   stopReason, timestamp: Date.now(),
 });
 session.agent.streamFunction = ((_model, context) => {
-  captured.push(structuredClone({ systemPrompt: context.systemPrompt, messages: context.messages }));
+  captured.push(structuredClone({ systemPrompt: getCurrentSystemPrompt(context.messages), messages: context.messages }));
   const planned = calls[request++];
   const response = planned
     ? message([{ type: 'toolCall', ...planned }], 'toolUse')

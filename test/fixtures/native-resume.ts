@@ -98,5 +98,5 @@ assert.deepEqual(userTexts, ['owned-user-model-a', 'owned-user-model-b', 'owned-
 assert.deepEqual(assistantModels, ['model-a', 'model-b']);
 console.log(JSON.stringify({ nativeSdk: true, sessionIdMatched: true, restored: {
   provider: resumed.model?.provider, model: resumed.model?.id, thinking: resumed.thinkingLevel,
-}, historyMessages: nativeHistory.length, modelRequests: 0, bytesUnchanged: true }));
+}, historyMessages: historyShape(nativeHistory).length, modelRequests: 0, bytesUnchanged: true }));
 resumed.dispose();

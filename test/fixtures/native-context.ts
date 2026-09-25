@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createAssistantMessageEventStream } from '@earendil-works/pi-ai';
+import { createAssistantMessageEventStream, getCurrentSystemPrompt } from '@earendil-works/pi-ai';
 import { join } from 'node:path';
 import { DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager, createAgentSession } from '@earendil-works/pi-coding-agent';
 import { MACHINE_ROOT_CUSTOM_TYPE, NO_MACHINE_ROOTS_CONTEXT, STYLE_REINFORCEMENT } from '../../src/context.js';
@@ -21,7 +21,7 @@ const { session } = await createAgentSession({ cwd: options.cwd, agentDir: optio
 const captured: Array<{ systemPrompt?: string; messages: unknown[] }> = [];
 // Mock ONLY the model stream boundary. Native session, loader, context and lifecycle run normally.
 session.agent.streamFunction = ((_model, context) => {
-  captured.push(structuredClone(context));
+  captured.push(structuredClone({ systemPrompt: getCurrentSystemPrompt(context.messages), messages: context.messages }));
   const message = { role: 'assistant' as const, content: [{ type: 'text' as const, text: 'fixture reply' }], api: model.api, provider: model.provider, model: model.id, usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, stopReason: 'stop' as const, timestamp: Date.now() };
   const stream = createAssistantMessageEventStream();
   stream.push({ type: 'done', reason: 'stop', message });
