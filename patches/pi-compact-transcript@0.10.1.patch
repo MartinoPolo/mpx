@@ -1,5 +1,5 @@
 diff --git a/extensions/compact-transcript.ts b/extensions/compact-transcript.ts
-index dfe65c5dcb34fee62a005f51b39634d5d27990db..1b34f59474bdf65d795b109d6fe44fa77b05a000 100644
+index dfe65c5dcb34fee62a005f51b39634d5d27990db..3af4a1e48d1e49af27e1c4364b33c291d95f96e2 100644
 --- a/extensions/compact-transcript.ts
 +++ b/extensions/compact-transcript.ts
 @@ -43,6 +43,7 @@ type ToolInfo = {
@@ -61,7 +61,7 @@ index dfe65c5dcb34fee62a005f51b39634d5d27990db..1b34f59474bdf65d795b109d6fe44fa7
  	for (const tool of state.currentBurst.slice(0, -1)) setToolHidden(tool, true);
  	info.burstCount = state.currentBurst.length;
  	previous?.invalidate?.();
-@@ -747,12 +773,22 @@ function patchToolExecutionComponent() {
+@@ -747,8 +773,9 @@ function patchToolExecutionComponent() {
  		}
  		const info = upsertToolInfo(this.toolCallId, this.toolName, this.args, invalidate);
  		applyResult(info, this.result, this.result?.isError ?? false, this.isPartial);
@@ -72,17 +72,3 @@ index dfe65c5dcb34fee62a005f51b39634d5d27990db..1b34f59474bdf65d795b109d6fe44fa7
  			setToolHidden(info, false);
  			this.__compactTranscriptForceSelf = false;
  			this.__compactTranscriptHidden = false;
--			return originalUpdateDisplay.call(this);
-+			if (this.expanded || info.name.split(".").pop() !== "get_subagent_result") {
-+				return originalUpdateDisplay.call(this);
-+			}
-+			const wasExpanded = this.expanded;
-+			try {
-+				this.expanded = true;
-+				return originalUpdateDisplay.call(this);
-+			} finally {
-+				this.expanded = wasExpanded;
-+			}
- 		}
- 
- 		this.__compactTranscriptForceSelf = true;

@@ -53,7 +53,7 @@ async function setup() {
   return { create, reset, toggle: (value: string) => command.handler(value, context) };
 }
 
-test('skill reads use native collapsed previews; subagent results use expanded native rendering', async () => {
+test('skill reads and subagent results use native collapsed, expandable previews', async () => {
   const { create } = await setup();
   const skill = create('skill', 'functions.read', { path: 'skills/Foo/SKILL.md' });
   assert.match(plain(skill), /\[skill\].*Foo.*to expand/);
@@ -71,8 +71,15 @@ test('skill reads use native collapsed previews; subagent results use expanded n
   assert.match(plain(mixedCaseSkill), /read .*sKiLl\.Md/i);
   assert.doesNotMatch(plain(mixedCaseSkill), /content line 14|◆/);
   const subagent = create('agent', 'functions.get_subagent_result', { agent_id: 'a' });
+  assert.match(plain(subagent), /get_subagent_result native call \(false\)/);
+  assert.match(plain(subagent), /short preview/);
+  assert.doesNotMatch(plain(subagent), /content line 14|◆/);
+  subagent.setExpanded(true);
   assert.match(plain(subagent), /get_subagent_result native call \(true\)/);
   assert.match(plain(subagent), /content line 14/);
+  subagent.setExpanded(false);
+  assert.match(plain(subagent), /short preview/);
+  assert.doesNotMatch(plain(subagent), /content line 14|◆/);
   const ordinary = create('ordinary', 'functions.read', { path: 'docs/README.md' });
   assert.match(plain(ordinary), /◆.*read/);
   assert.doesNotMatch(plain(ordinary), /content line 14/);
@@ -105,8 +112,10 @@ test('exempt calls break bursts in live events and restored history', async () =
     assert.match(plain(more), /3×.*more\.txt/);
     const agent = create(`agent-${hydrate}`, 'functions.get_subagent_result', { agent_id: 'a' }, hydrate);
     const secondAgent = create(`second-agent-${hydrate}`, 'functions.get_subagent_result', { agent_id: 'b' }, hydrate);
-    assert.match(plain(agent), /content line 14/);
-    assert.match(plain(secondAgent), /content line 14/);
+    assert.match(plain(agent), /short preview/);
+    assert.match(plain(secondAgent), /short preview/);
+    assert.doesNotMatch(plain(agent), /content line 14|◆/);
+    assert.doesNotMatch(plain(secondAgent), /content line 14|◆/);
     const afterAgent = create(`after-agent-${hydrate}`, 'read', { path: 'after.txt' }, hydrate);
     assert.match(plain(afterAgent), /◆.*after\.txt/);
   }

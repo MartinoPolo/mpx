@@ -92,9 +92,9 @@ pnpm exec tsx --test test/pi-inline-skills.test.ts
 
 ## Compact transcript exceptions
 
-MPX pins `pi-compact-transcript` with a patch in `patches/`. Reads of `SKILL.md` use Pi's
-native collapsed, expandable skill preview; `get_subagent_result` uses Pi's fully expanded native
-renderer. Both stay separate from compact tool bursts. Ordinary reads and other tools remain compact.
+MPX pins `pi-compact-transcript` with a patch in `patches/`. Reads of `SKILL.md` and
+`get_subagent_result` use their native collapsed, expandable previews. Both stay separate from compact
+tool bursts. Ordinary reads and other tools remain compact.
 This affects display only, not tool output limits; skills inserted directly into prompts do not
 create a read call.
 
