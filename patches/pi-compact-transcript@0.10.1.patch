@@ -1,0 +1,88 @@
+diff --git a/extensions/compact-transcript.ts b/extensions/compact-transcript.ts
+index dfe65c5dcb34fee62a005f51b39634d5d27990db..1b34f59474bdf65d795b109d6fe44fa77b05a000 100644
+--- a/extensions/compact-transcript.ts
++++ b/extensions/compact-transcript.ts
+@@ -43,6 +43,7 @@ type ToolInfo = {
+ 	hidden?: boolean;
+ 	running?: boolean;
+ 	burstCount?: number;
++	burstMembers?: ToolInfo[];
+ 	startedAt?: number;
+ 	durationMs?: number;
+ 	burstDurationMs?: number;
+@@ -374,6 +375,13 @@ function isWriteTool(name: string): boolean {
+ 	return name.split(".").pop() === "write";
+ }
+ 
++function requiresNativeRenderer(name: string, args: any): boolean {
++	const toolName = name.split(".").pop();
++	return toolName === "get_subagent_result" ||
++		(toolName === "read" && typeof args?.path === "string" &&
++			/(?:^|[\\/])SKILL\.md$/i.test(args.path));
++}
++
+ function resultPreview(result: any, isPartial = false): string {
+ 	const text = Array.isArray(result?.content)
+ 		? result.content.find((c: any) => c?.type === "text" && typeof c.text === "string")?.text
+@@ -580,10 +588,27 @@ function recordToolStart(name: string, args: any) {
+ 	}
+ }
+ 
++function breakBurstForExemptTool(info: ToolInfo): boolean {
++	if (!requiresNativeRenderer(info.name, info.args)) return false;
++	const burst = info.burstMembers;
++	if (burst) {
++		// A streamed path can become a skill after a later tool has already ended its burst.
++		const members = burst.filter((tool) => tool.burstMembers === burst);
++		for (const tool of members) tool.burstMembers = undefined;
++		if (state.currentBurst === burst) state.currentBurst = [];
++		for (const tool of members) {
++			setToolHidden(tool, false);
++			tool.burstCount = 1;
++		}
++		for (const tool of members) if (tool !== info) tool.invalidate?.();
++	}
++	return true;
++}
++
+ function joinBurst(info: ToolInfo) {
+ 	const previous = state.currentBurst[state.currentBurst.length - 1];
+ 
+-	if (!isEnabled()) {
++	if (!isEnabled() || breakBurstForExemptTool(info)) {
+ 		state.currentBurst = [];
+ 		return;
+ 	}
+@@ -595,6 +620,7 @@ function joinBurst(info: ToolInfo) {
+ 	}
+ 
+ 	if (!state.currentBurst.some((tool) => tool.id === info.id)) state.currentBurst.push(info);
++	info.burstMembers = state.currentBurst;
+ 	for (const tool of state.currentBurst.slice(0, -1)) setToolHidden(tool, true);
+ 	info.burstCount = state.currentBurst.length;
+ 	previous?.invalidate?.();
+@@ -747,12 +773,22 @@ function patchToolExecutionComponent() {
+ 		}
+ 		const info = upsertToolInfo(this.toolCallId, this.toolName, this.args, invalidate);
+ 		applyResult(info, this.result, this.result?.isError ?? false, this.isPartial);
++		const useNativeRenderer = breakBurstForExemptTool(info);
+ 
+-		if (!isEnabled() || this.expanded) {
++		if (!isEnabled() || this.expanded || useNativeRenderer) {
+ 			setToolHidden(info, false);
+ 			this.__compactTranscriptForceSelf = false;
+ 			this.__compactTranscriptHidden = false;
+-			return originalUpdateDisplay.call(this);
++			if (this.expanded || info.name.split(".").pop() !== "get_subagent_result") {
++				return originalUpdateDisplay.call(this);
++			}
++			const wasExpanded = this.expanded;
++			try {
++				this.expanded = true;
++				return originalUpdateDisplay.call(this);
++			} finally {
++				this.expanded = wasExpanded;
++			}
+ 		}
+ 
+ 		this.__compactTranscriptForceSelf = true;

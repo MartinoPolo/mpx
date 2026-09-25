@@ -8,6 +8,7 @@ patchedDependencies:
   '@earendil-works/pi-coding-agent@0.87.1': a1489d4465d2486bb66cd4f2e77fdbff95400e2865a338bfee78fe1890686912
   '@tifan/pi-inline-skills@1.0.6': 30ddd09db63b5f57b004456e782d884d900baf248c22b2df5207be5ae2faae0e
   '@tintinweb/pi-subagents@0.19.0': 09c0609e6b0170a7662aaba967de3af5a30a3e24f50625024c84faff189f41cf
+  pi-compact-transcript@0.10.1: 08c7fba6a673c03a34c0cff886b336dfdd02796c076a3e488e29a160e018fb7e
 
 importers:
 
@@ -25,6 +26,9 @@ importers:
       '@tintinweb/pi-subagents':
         specifier: 0.19.0
         version: 0.19.0(patch_hash=09c0609e6b0170a7662aaba967de3af5a30a3e24f50625024c84faff189f41cf)(@earendil-works/pi-ai@0.87.1(ws@8.21.3))(@earendil-works/pi-coding-agent@0.87.1(patch_hash=a1489d4465d2486bb66cd4f2e77fdbff95400e2865a338bfee78fe1890686912)(ws@8.21.3))(@earendil-works/pi-tui@0.87.1)
+      pi-compact-transcript:
+        specifier: 0.10.1
+        version: 0.10.1(patch_hash=08c7fba6a673c03a34c0cff886b336dfdd02796c076a3e488e29a160e018fb7e)(@earendil-works/pi-coding-agent@0.87.1(patch_hash=a1489d4465d2486bb66cd4f2e77fdbff95400e2865a338bfee78fe1890686912)(ws@8.21.3))(@earendil-works/pi-tui@0.87.1)
       shiki:
         specifier: ^3.23.0
         version: 3.23.0
@@ -865,6 +869,12 @@ packages:
   path-key@3.1.1:
     resolution: {integrity: sha512-ojmeN0qd+y0jszEtoY48r0Peq5dwMEkIlCOu6Q5f41lfkswXuKtYrhgoTpLnyIcHm24Uhqx+5Tqm2InSwLhE6Q==}
     engines: {node: '>=8'}
+
+  pi-compact-transcript@0.10.1:
+    resolution: {integrity: sha512-nALg3kFIhjJCjzNBKFdYpGCa/6WLYYAQfQx8jkIA5ggI84C4wYS5BEMeQLpxOBWm8j+4YshlNt72cQpuaQX+Xg==}
+    peerDependencies:
+      '@earendil-works/pi-coding-agent': '>=0.79.7'
+      '@earendil-works/pi-tui': '*'
 
   proper-lockfile@4.1.2:
     resolution: {integrity: sha512-TjNPblN4BwAWMXU8s9AEz4JmQxnD1NNL7bNOY/AKUzyamc379FWASUhc/K1pL2noVb+XmZKLL68cjzLsiOAMaA==}
@@ -1898,6 +1908,11 @@ snapshots:
   partial-json@0.1.7: {}
 
   path-key@3.1.1: {}
+
+  pi-compact-transcript@0.10.1(patch_hash=08c7fba6a673c03a34c0cff886b336dfdd02796c076a3e488e29a160e018fb7e)(@earendil-works/pi-coding-agent@0.87.1(patch_hash=a1489d4465d2486bb66cd4f2e77fdbff95400e2865a338bfee78fe1890686912)(ws@8.21.3))(@earendil-works/pi-tui@0.87.1):
+    dependencies:
+      '@earendil-works/pi-coding-agent': 0.87.1(patch_hash=a1489d4465d2486bb66cd4f2e77fdbff95400e2865a338bfee78fe1890686912)(ws@8.21.3)
+      '@earendil-works/pi-tui': 0.87.1
 
   proper-lockfile@4.1.2:
     dependencies:

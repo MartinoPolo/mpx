@@ -6,3 +6,4 @@ patchedDependencies:
   '@earendil-works/pi-coding-agent@0.87.1': patches/@earendil-works__pi-coding-agent@0.87.1.patch
   '@tifan/pi-inline-skills@1.0.6': patches/@tifan__pi-inline-skills@1.0.6.patch
   '@tintinweb/pi-subagents@0.19.0': patches/@tintinweb__pi-subagents@0.19.0.patch
+  pi-compact-transcript@0.10.1: patches/pi-compact-transcript@0.10.1.patch

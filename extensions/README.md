@@ -90,6 +90,22 @@ absolute path to this checkout's `node_modules/@tifan/pi-inline-skills`. Replace
 pnpm exec tsx --test test/pi-inline-skills.test.ts
 ```
 
+## Compact transcript exceptions
+
+MPX pins `pi-compact-transcript` with a patch in `patches/`. Reads of `SKILL.md` use Pi's
+native collapsed, expandable skill preview; `get_subagent_result` uses Pi's fully expanded native
+renderer. Both stay separate from compact tool bursts. Ordinary reads and other tools remain compact.
+This affects display only, not tool output limits; skills inserted directly into prompts do not
+create a read call.
+
+Select this checkout's `node_modules/pi-compact-transcript` by absolute path in each native account's
+`settings.json` `packages` list, replacing the npm entry rather than loading both copies.
+`pnpm install --frozen-lockfile` reproduces the patch; restart Pi after switching package sources.
+
+```bash
+pnpm exec tsx --test test/pi-compact-transcript.test.ts
+```
+
 ## Native cancellation
 
 The maintained `@earendil-works/pi-coding-agent` patch adds a synchronous `session_abort` extension
