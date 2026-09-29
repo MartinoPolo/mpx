@@ -118,7 +118,7 @@ export function formatDuration(milliseconds: number): string {
     return `${Math.trunc(totalSeconds / 3600)}h${String(minutes).padStart(2, "0")}m`;
 }
 
-/** Normalizes either an alias ("sonnet") or a full id ("claude-sonnet-5"). */
+/** Normalizes either an alias ("sonnet") or a full id ("claude-sonnet-5.5"). */
 export function modelTier(model: string): string {
     return Object.keys(TIER_COLORS).find((tier) => model.includes(tier)) ?? "";
 }

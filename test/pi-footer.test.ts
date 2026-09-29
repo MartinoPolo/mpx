@@ -18,7 +18,7 @@ const theme: Pick<Theme, 'fg' | 'bold'> = {
 function snapshot(overrides: Partial<FooterSnapshot> = {}): FooterSnapshot {
   return {
     sessionId: '12345678-abcdef',
-    model: 'anthropic/claude-sonnet-4',
+    model: 'anthropic/claude-sonnet-5.5',
     effort: 'high',
     location: { project: 'mpx', worktree: 'feature-tree', branch: 'footer' },
     contextPercent: 42,
@@ -48,7 +48,7 @@ test('renders the rule and five core lines in order with exact account color and
   assert.equal(lines.length, 6);
   assert.match(text[1]!, /^▾ New session · #12345678 · Personal$/);
   assert.ok(lines[1]!.includes('\x1b[38;2;71;127;204mPersonal\x1b[0m'));
-  assert.match(text[2]!, /^claude-sonnet-4 · ◆◆◆◆◇◇$/);
+  assert.match(text[2]!, /^claude-sonnet-5.5 · ◆◆◆◆◇◇$/);
   assert.equal(text[3], 'mpx · feature-tree · footer');
   assert.match(text[4]!, /42\.1k \(42%\)/);
   assert.doesNotMatch(text[4]!, /Context/);
