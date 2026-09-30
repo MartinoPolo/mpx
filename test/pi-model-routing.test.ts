@@ -6,7 +6,7 @@ import { enforceLunaThinking, piFamilyReference, resolvePiModelReference } from 
 
 const profiles = {
   mechanical: 'openai-codex/gpt-6-luna', exploration: 'openai-codex/gpt-6-luna', standard: 'openai-codex/gpt-6-luna',
-  reviewer: 'openai-codex/gpt-6-sol', advanced: 'openai-codex/gpt-6-sol', frontier: 'openai-codex/astra',
+  reviewer: 'openai-codex/gpt-6.1-sol', advanced: 'openai-codex/gpt-6.1-sol', frontier: 'openai-codex/astra',
 };
 const model = (provider: string, id: string, thinkingLevelMap?: Record<string, string | null>) => ({
   provider, id, name: id, api: 'openai-codex-responses' as const, baseUrl: 'http://fixture', reasoning: true,
@@ -75,7 +75,7 @@ function extensionHarness(
     setThinkingLevel(level: string) { if (canRaiseThinking) thinking = level; },
   } as unknown as ExtensionAPI;
   const available = [
-    model('openai-codex', 'gpt-6-luna'), model('openai-codex', 'gpt-6-sol'),
+    model('openai-codex', 'gpt-6-luna'), model('openai-codex', 'gpt-6.1-sol'),
     model('openai-codex', 'gpt-6-astra'), model('gateway', 'gpt-7-luna'),
   ];
   const modelRegistry = {
@@ -114,7 +114,7 @@ test('Agent hook resolves native config, honors explicit overrides, and applies 
 
   const explicit = { subagent_type: 'worker', prompt: 'work', model: 'reviewer', thinking: 'max' };
   harness.call('Agent', explicit);
-  assert.equal(explicit.model, 'openai-codex/gpt-6-sol');
+  assert.equal(explicit.model, 'openai-codex/gpt-6.1-sol');
   assert.equal(explicit.thinking, 'max');
 });
 
@@ -128,9 +128,9 @@ test('inherited and natively fuzzy Luna models receive the floor without rewriti
   const fuzzyLuna: Record<string, unknown> = { subagent_type: 'general-purpose', model: 'GPT 6 Luna', thinking: 'low' };
   fuzzy.call('Agent', fuzzyLuna);
   assert.deepEqual(fuzzyLuna, { subagent_type: 'general-purpose', model: 'GPT 6 Luna', thinking: 'high' });
-  const unrelated: Record<string, unknown> = { subagent_type: 'general-purpose', model: 'GPT 6 Sol', thinking: 'low' };
+  const unrelated: Record<string, unknown> = { subagent_type: 'general-purpose', model: 'GPT 6.1 Sol', thinking: 'low' };
   fuzzy.call('Agent', unrelated);
-  assert.deepEqual(unrelated, { subagent_type: 'general-purpose', model: 'GPT 6 Sol', thinking: 'low' });
+  assert.deepEqual(unrelated, { subagent_type: 'general-purpose', model: 'GPT 6.1 Sol', thinking: 'low' });
 });
 
 test('project config is authoritative and names do not imply MPX routing', () => {
@@ -140,7 +140,7 @@ test('project config is authoritative and names do not imply MPX routing', () =>
   ]));
   const overridden: Record<string, unknown> = { subagent_type: 'mpx-worker' };
   harness.call('Agent', overridden);
-  assert.equal(overridden.model, 'openai-codex/gpt-6-sol');
+  assert.equal(overridden.model, 'openai-codex/gpt-6.1-sol');
   assert.equal(overridden.thinking, undefined);
   const noProfile = { subagent_type: 'mpx-no-profile' };
   harness.call('Agent', noProfile);

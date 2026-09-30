@@ -59,23 +59,23 @@ test('renders the rule and five core lines in order with exact account color and
 
 test('agent model tiers use stable colors', () => {
   assert.match(colorAgentModel('gpt-6-astra', 'Astra', theme), /^\x1b\[38;5;48m/);
-  assert.match(colorAgentModel('gpt-6-sol', 'Sol', theme), /^\x1b\[38;5;39m/);
+  assert.match(colorAgentModel('gpt-6.1-sol', 'Sol 6.1', theme), /^\x1b\[38;5;39m/);
   assert.match(colorAgentModel('gpt-6-luna', 'Luna', theme), /^\x1b\[38;5;226m/);
   assert.match(colorAgentModel('gpt-6-terra', 'Terra', theme), /^\x1b\[38;5;208m/);
   assert.match(colorAgentModel('vendor/custom', 'custom', theme), /^\x1b\[37m/);
 });
 
 test('main model uses the same tier color in expanded and compact views', () => {
-  const value = snapshot({ model: 'gpt-6-sol' });
-  assert.match(renderPiFooter(value, 120, theme, 'summary')[2]!, /^\x1b\[38;5;39mSol 6/);
-  assert.match(renderPiFooter(value, 120, theme, 'compact')[1]!, /\x1b\[38;5;39mSol 6/);
+  const value = snapshot({ model: 'gpt-6.1-sol' });
+  assert.match(renderPiFooter(value, 120, theme, 'summary')[2]!, /^\x1b\[38;5;39mSol 6\.1/);
+  assert.match(renderPiFooter(value, 120, theme, 'compact')[1]!, /\x1b\[38;5;39mSol 6\.1/);
 });
 
 test('versioned family labels retain exact model versions and unknown models stay recognizable', () => {
   for (const [model, label] of [
     ['chatgpt-codex/gpt-5.6-terra', 'Terra 5.6'],
-    ['chatgpt-codex/codex-6-sol', 'Sol 6'],
-    ['chatgpt-codex/gpt-6-sol', 'Sol 6'],
+    ['chatgpt-codex/codex-6.1-sol', 'Sol 6.1'],
+    ['chatgpt-codex/gpt-6.1-sol', 'Sol 6.1'],
     ['chatgpt-codex/gpt-6-luna', 'Luna 6'],
     ['chatgpt-codex/gpt-5.10-astra', 'Astra 5.10'],
     ['vendor/custom-model-v9', 'custom-model-v9'],
@@ -381,7 +381,7 @@ test('default history shows every closed model-effort group with honest aggregat
 test('history summary columns align by terminal width across mixed models and metrics', () => {
   const agents = [
     ...Array.from({ length: 12 }, (_, index) => ({
-      id: `sol-${index}`, type: 'Worker', status: 'done', model: 'gpt-6-sol',
+      id: `sol-${index}`, type: 'Worker', status: 'done', model: 'gpt-6.1-sol',
       effort: 'high', peakInputTokens: 20_000, cost: 0.1,
     })),
     { id: 'terra', type: 'Worker', status: 'done', model: 'gpt-6-terra', effort: 'medium', peakInputTokens: 900, cost: 0.01 },
@@ -397,7 +397,7 @@ test('history summary columns align by terminal width across mixed models and me
       .map(match => visibleWidth(row.slice(0, match.index))));
     assert.equal(separatorColumns[0]!.length, 4);
     for (const columns of separatorColumns) assert.deepEqual(columns, separatorColumns[0]);
-    assert.ok(rows.some(row => /Sol 6 +·/.test(row)));
+    assert.ok(rows.some(row => /Sol 6\.1 +·/.test(row)));
     assert.ok(rows.some(row => /Luna 5\.10/.test(row)));
     assert.ok(rows.some(row => /×12 · 240\.0k \(20\.0k\) · \$1\.200$/.test(row)));
     assert.ok(rows.some(row => /×1 +· 900 +· \$0\.010$/.test(row)));

@@ -55,17 +55,17 @@ test('live widget is empty when idle, collapses queued work and bounds running r
 test('live agent names and model names follow model tier colors', () => {
   const agents: LiveAgent[] = [
     { id: 'a', type: 'AstraAgent', status: 'running', model: 'gpt-6-astra' },
-    { id: 's', type: 'SolAgent', status: 'running', model: 'gpt-6-sol' },
+    { id: 's', type: 'SolAgent', status: 'running', model: 'gpt-6.1-sol' },
     { id: 'l', type: 'LunaAgent', status: 'running', model: 'gpt-6-luna' },
     { id: 't', type: 'TerraAgent', status: 'running', model: 'gpt-6-terra' },
   ];
   const output = renderLiveAgents(agents, 200, taggedTheme).join('\n');
   assert.match(output, /\x1b\[38;5;48mAstraAgent\x1b\[0m.*\x1b\[38;5;48mAstra 6\x1b\[0m/);
-  assert.match(output, /\x1b\[38;5;39mSolAgent\x1b\[0m.*\x1b\[38;5;39mSol 6\x1b\[0m/);
+  assert.match(output, /\x1b\[38;5;39mSolAgent\x1b\[0m.*\x1b\[38;5;39mSol 6\.1\x1b\[0m/);
   assert.match(output, /\x1b\[38;5;226mLunaAgent\x1b\[0m.*\x1b\[38;5;226mLuna 6\x1b\[0m/);
   assert.match(output, /\x1b\[38;5;208mTerraAgent\x1b\[0m.*\x1b\[38;5;208mTerra 6\x1b\[0m/);
   assert.match(renderLiveAgents([{ id: 'codex', type: 'Worker', status: 'running',
-    model: 'chatgpt-codex/codex-6-sol' }], 120, theme).join(''), /Sol 6/);
+    model: 'chatgpt-codex/codex-6.1-sol' }], 120, theme).join(''), /Sol 6\.1/);
 });
 
 test('running rows prioritize labeled timing before model, effort and long descriptions', () => {

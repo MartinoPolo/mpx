@@ -156,8 +156,8 @@ test('runtime profiles pin Codex Luna and Sol models and define a reviewer class
     mechanical: 'openai-codex/gpt-6-luna',
     exploration: 'openai-codex/gpt-6-luna',
     standard: 'openai-codex/gpt-6-luna',
-    reviewer: 'openai-codex/gpt-6-sol',
-    advanced: 'openai-codex/gpt-6-sol',
+    reviewer: 'openai-codex/gpt-6.1-sol',
+    advanced: 'openai-codex/gpt-6.1-sol',
     frontier: 'openai-codex/astra',
   });
 

@@ -18,7 +18,7 @@ const models = [
   { provider: 'openai-codex', id: 'gpt-5.10-luna', name: 'GPT Luna', reasoning: true },
   { provider: 'openai-codex', id: 'gpt-6-luna-preview', name: 'GPT Luna preview', reasoning: true },
   { provider: 'other', id: 'gpt-6-luna', name: 'GPT Luna', reasoning: true },
-  { provider: 'openai-codex', id: 'gpt-6-sol', name: 'GPT Sol', reasoning: true },
+  { provider: 'openai-codex', id: 'gpt-6.1-sol', name: 'GPT Sol 6.1', reasoning: true },
 ];
 const registry = {
   find: (provider: string, id: string) => models.find(model => model.provider === provider && model.id === id),
@@ -28,9 +28,9 @@ const registry = {
 
 test('native subagent labels include family and version while retaining canonical identifiers', () => {
   for (const [id, label] of [
-    ['gpt-5.6-terra', 'Terra 5.6'], ['gpt-6-sol', 'Sol 6'],
+    ['gpt-5.6-terra', 'Terra 5.6'], ['gpt-6.1-sol', 'Sol 6.1'],
     ['gpt-6-luna', 'Luna 6'], ['gpt-6-astra', 'Astra 6'],
-    ['gpt-5.10-luna', 'Luna 5.10'], ['codex-6-sol', 'Sol 6'],
+    ['gpt-5.10-luna', 'Luna 5.10'], ['codex-6.1-sol', 'Sol 6.1'],
   ]) {
     assert.deepEqual(describeModel({ provider: 'chatgpt-codex', id, name: 'Long model name' }),
       { modelName: label, modelId: `chatgpt-codex/${id}` });

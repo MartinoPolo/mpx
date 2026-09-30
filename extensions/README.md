@@ -26,7 +26,7 @@ extra blank padding. The footer starts with its operational summary expanded and
 `/footer` or `Ctrl+Alt+F` toggles compact mode: one content line beneath the rule. `/footer details`
 expands finished-agent details, and `/footer compact` restores compact mode. Agent and model names use stable tier colors: Astra green, Sol
 blue, Luna yellow, and Terra orange. The main footer model uses the same palette. Versioned family models display as `Terra 5.6`,
-`Sol 6`, or `Luna 6` in the footer and agent rows; canonical identifiers remain available in
+`Sol 6.1`, or `Luna 6` in the footer and agent rows; canonical identifiers remain available in
 native records.
 Fullscreen disclosure arrows perform the same actions without intercepting existing hyperlinks.
 Compact context and quota values retain text colouring and reset countdowns without progress bars.
