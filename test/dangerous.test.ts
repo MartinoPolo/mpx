@@ -62,7 +62,6 @@ void test('allows forced deletion of orphaned worktree leftovers but protects li
       await writeFile(path.join(cwd, relative), '');
     };
     await create('worktrees/project/orphan/src/leftover.ts');
-    await create('project.worktrees/orphan/node_modules/package/index.js');
     await create('worktrees/project/live/.git');
     await create('worktrees/group/nested/live/.git');
     await create('worktrees/project/live/notes/draft.md');
@@ -70,7 +69,6 @@ void test('allows forced deletion of orphaned worktree leftovers but protects li
     assert.deepEqual(
       await decisions([
         'rm -rf worktrees/project/orphan',
-        'rm -rf project.worktrees/orphan',
         'cd worktrees/project && rm -rf orphan',
         'rm -rf worktrees/project/live',
         'rm -rf worktrees/group',
@@ -78,7 +76,7 @@ void test('allows forced deletion of orphaned worktree leftovers but protects li
         'rm -rf worktrees/project/missing',
         'rm -rf worktrees',
       ], cwd),
-      ['allow', 'allow', 'allow', 'block', 'block', 'block', 'block', 'block'],
+      ['allow', 'allow', 'block', 'block', 'block', 'block', 'block'],
     );
   });
 });

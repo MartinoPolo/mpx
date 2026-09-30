@@ -314,11 +314,6 @@ function safeForcedDeletionTarget(target: Word, cwd: string): boolean {
   return beneathSystemTemp(resolved);
 }
 
-function isWorktreeContainer(component: string): boolean {
-  const lower = component.toLowerCase();
-  return WORKTREE_CONTAINER_COMPONENTS.has(lower) || lower.endsWith('.worktrees');
-}
-
 function mayContainGitEntry(directory: string): boolean {
   const pending = [directory];
   let visited = 0;
@@ -343,7 +338,7 @@ function mayContainGitEntry(directory: string): boolean {
 function orphanedWorktreeLeftover(resolved: string): boolean {
   const root = path.parse(resolved).root;
   const parts = path.relative(root, resolved).split(/[\\/]+/u).filter(Boolean);
-  const container = parts.findIndex(isWorktreeContainer);
+  const container = parts.findIndex((part) => WORKTREE_CONTAINER_COMPONENTS.has(part.toLowerCase()));
   if (container < 0 || container === parts.length - 1) return false;
   for (let depth = 0; depth < parts.length; depth += 1) {
     if (existsSync(path.join(root, ...parts.slice(0, depth), '.git'))) return false;
