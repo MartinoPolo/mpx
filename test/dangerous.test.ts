@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { access, mkdtemp, rm } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -52,6 +52,34 @@ void test('allows narrow and non-force cleanup but blocks unsafe, mixed, travers
       assert.equal(result.decision, 'block', command);
       assert.match(result.diagnostics.join('\n'), /forced recursive deletion/i, command);
     }
+  });
+});
+
+void test('allows forced deletion of orphaned worktree leftovers but protects live checkouts', async () => {
+  await temporary(async cwd => {
+    const create = async (relative: string): Promise<void> => {
+      await mkdir(path.dirname(path.join(cwd, relative)), { recursive: true });
+      await writeFile(path.join(cwd, relative), '');
+    };
+    await create('worktrees/project/orphan/src/leftover.ts');
+    await create('project.worktrees/orphan/node_modules/package/index.js');
+    await create('worktrees/project/live/.git');
+    await create('worktrees/group/nested/live/.git');
+    await create('worktrees/project/live/notes/draft.md');
+
+    assert.deepEqual(
+      await decisions([
+        'rm -rf worktrees/project/orphan',
+        'rm -rf project.worktrees/orphan',
+        'cd worktrees/project && rm -rf orphan',
+        'rm -rf worktrees/project/live',
+        'rm -rf worktrees/group',
+        'rm -rf worktrees/project/live/notes',
+        'rm -rf worktrees/project/missing',
+        'rm -rf worktrees',
+      ], cwd),
+      ['allow', 'allow', 'allow', 'block', 'block', 'block', 'block', 'block'],
+    );
   });
 });
 

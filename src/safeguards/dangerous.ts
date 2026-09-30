@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { existsSync, lstatSync, readdirSync, type Dirent } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,6 +26,8 @@ const PROTECTED_DELETE_COMPONENTS = new Set([
   'worktree',
   'worktrees',
 ]);
+const WORKTREE_CONTAINER_COMPONENTS = new Set(['worktree', 'worktrees']);
+const ORPHANED_WORKTREE_SCAN_DIRECTORY_LIMIT = 20_000;
 const SCRATCH_COMPONENTS = new Set(['.tmp', '.temp', '.scratch', 'tmp', 'temp', 'scratch']);
 const GENERATED_COMPONENTS = new Set([
   'node_modules',
@@ -300,13 +303,58 @@ function safeForcedDeletionTarget(target: Word, cwd: string): boolean {
   if (isBroadTarget(target.value)) return false;
   const cwdComponents = pathComponents(cwd).map((component) => component.toLowerCase());
   if (!path.isAbsolute(target.value) && !path.win32.isAbsolute(target.value) && cwdComponents.some((component) => GENERATED_COMPONENTS.has(component) && !SCRATCH_COMPONENTS.has(component))) return true;
-  if (components.some((component) => PROTECTED_DELETE_COMPONENTS.has(component))) return false;
+  if (components.some((component) => PROTECTED_DELETE_COMPONENTS.has(component) && !WORKTREE_CONTAINER_COMPONENTS.has(component))) return false;
   const native = /^\/([A-Za-z])(?:\/(.*))?$/u.exec(target.value);
   const literal = native ? `${native[1]?.toUpperCase()}:/${native[2] ?? ''}` : target.value;
   const resolved = path.isAbsolute(literal) || path.win32.isAbsolute(literal)
     ? path.normalize(literal)
     : path.resolve(cwd, literal);
+  if (orphanedWorktreeLeftover(resolved)) return true;
+  if (components.some((component) => WORKTREE_CONTAINER_COMPONENTS.has(component))) return false;
   return beneathSystemTemp(resolved);
+}
+
+function isWorktreeContainer(component: string): boolean {
+  const lower = component.toLowerCase();
+  return WORKTREE_CONTAINER_COMPONENTS.has(lower) || lower.endsWith('.worktrees');
+}
+
+function mayContainGitEntry(directory: string): boolean {
+  const pending = [directory];
+  let visited = 0;
+  while (pending.length > 0) {
+    if (++visited > ORPHANED_WORKTREE_SCAN_DIRECTORY_LIMIT) return true;
+    const current = pending.pop() as string;
+    let entries: Dirent[];
+    try {
+      entries = readdirSync(current, { withFileTypes: true });
+    } catch {
+      return true;
+    }
+    for (const entry of entries) {
+      if (entry.name.toLowerCase() === '.git') return true;
+      if (entry.isDirectory() && !entry.isSymbolicLink()) pending.push(path.join(current, entry.name));
+    }
+  }
+  return false;
+}
+
+// Failed worktree deletions leave folders git no longer tracks; any `.git` means a live checkout.
+function orphanedWorktreeLeftover(resolved: string): boolean {
+  const root = path.parse(resolved).root;
+  const parts = path.relative(root, resolved).split(/[\\/]+/u).filter(Boolean);
+  const container = parts.findIndex(isWorktreeContainer);
+  if (container < 0 || container === parts.length - 1) return false;
+  for (let depth = 0; depth < parts.length; depth += 1) {
+    if (existsSync(path.join(root, ...parts.slice(0, depth), '.git'))) return false;
+  }
+  let target;
+  try {
+    target = lstatSync(resolved);
+  } catch {
+    return false;
+  }
+  return !target.isDirectory() || !mayContainGitEntry(resolved);
 }
 
 function splitCommaTargets(words: readonly Word[]): Word[] {
