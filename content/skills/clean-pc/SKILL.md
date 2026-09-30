@@ -19,7 +19,7 @@ Scan every local disk, rank what can be reclaimed, and remove only what the user
 group. Use the invocation input to narrow the sweep when requested.
 
 Detection rules and safety heuristics: [DOMAINS.md](DOMAINS.md). Concrete commands:
-[WINDOWS.md](WINDOWS.md) (verified), [MACOS.md](MACOS.md) / [LINUX.md](LINUX.md) (unverified).
+[WINDOWS.md](WINDOWS.md).
 
 The bundled scanners and removal helper live in `./scripts/`.
 
@@ -34,8 +34,8 @@ The bundled scanners and removal helper live in `./scripts/`.
 
 ### Step 1: Resolve Platform, Scope and Prior State
 
-Detect the OS and read the matching platform file. Windows is the verified path; on macOS or Linux,
-tell the user those commands are unverified and dry-run each one.
+Windows is the only supported platform; on another OS, stop and report that. Read the platform
+file.
 
 Resolve `MPX_ONEDRIVE` from the environment and read `<MPX_ONEDRIVE>/.mpx/clean-pc/state.json` when
 it exists. Never use a runtime-private state directory and never guess an unset machine path:
@@ -50,13 +50,18 @@ Resolve project roots with `$env:MPX_PROJECTS`, `$env:MPX_WORK`, `$env:MPX_CLONE
 these up themselves, so they need the literal resolved value, not the variable name. An unset
 variable means that root is unavailable — ask rather than guessing a path.
 
+Resolve `MPX_AI_DUMP` and `MPX_TEMP` from the environment. For a unique run, keep the dashboard,
+results, and elevated handoff script in `<MPX_AI_DUMP>/_CLEAN_PC/<run>`; disposable scan CSVs and
+staging scratch belong in `<MPX_TEMP>/_CLEAN_PC/<run>`. If a required root is unset, relative, or
+unwritable, report a blocker; never guess a fallback. Exclude both run directories from scans and
+deletion candidates. Keep persistent state and same-volume quarantine at their existing locations.
+
 The invocation input optionally narrows the sweep to one domain name and/or one drive letter. With
 no arguments, scan all eight domains across all local fixed disks.
 
 ### Step 2: Detect a Fast Scanner
 
-Probe for WizTree, then TreeSize, then Sysinternals `du` (macOS/Linux: `ncdu`, `dust`, `gdu`). Drive
-whichever is present.
+Probe for WizTree, then TreeSize, then Sysinternals `du`. Drive whichever is present.
 
 When none is found, offer the install once via the platform file's command. If the user declines,
 fall back to `scripts/Scan-FolderMap.ps1` and stop offering for this run.
@@ -69,7 +74,7 @@ brief: this is a scan, not a review. Give each sub-agent:
 - The domain's section from `DOMAINS.md` and the platform file
 - The resolved roots, the exclusion list, and the quarantine roots
 - The universal protection rules
-- The scratchpad path for its CSV output
+- The scratch run directory for its CSV output
 
 Each sub-agent returns groups in the schema defined in `DOMAINS.md`: `group`, `domain`, `paths`,
 `gb`, `age`, `destination`, `visual`, `confidence`, `reason`, `status`.
@@ -81,7 +86,7 @@ Scan domain <N> (<name>) on <platform> and return candidate groups. Read only.
 
 Rules: <domain section from DOMAINS.md>
 Commands: <domain section from the platform file>
-Roots: <resolved roots>       Exclude: <quarantine roots + scratchpad>
+Roots: <resolved roots>       Exclude: <quarantine roots + both run directories>
 
 Required actions:
 1) Run the domain's scanner, or `scripts/Scan-FolderMap.ps1` as the fallback.
@@ -98,7 +103,7 @@ an interrupted sweep resumes rather than restarts.
 
 ### Step 4: Present a Ranked Dashboard
 
-Build a self-contained HTML dashboard in the unique session scratch directory, ranked by
+Build a self-contained HTML dashboard in the resolved dashboard directory, ranked by
 reclaimable GB: group, domain, size, age, destination, confidence, reason. Present its absolute
 `file:///` URL so the user can open it in Orca or their browser.
 
@@ -149,8 +154,9 @@ Take a free-space snapshot, execute approved groups by destination, then snapsho
 
 Run `-DryRun` first on any group above 5 GB.
 
-Collect every admin-requiring operation into a single reviewed `.ps1` in the scratchpad and hand it
-to the user to run elevated. One script at the end, not a UAC prompt per operation.
+Collect every admin-requiring operation into a single reviewed `.ps1` in the dashboard directory
+and hand its absolute `file:///` URL to the user to run elevated. Keep it self-contained rather than
+relying on disposable scan CSVs. One script at the end, not a UAC prompt per operation.
 
 Update the dashboard to a results view and write `state.json`.
 

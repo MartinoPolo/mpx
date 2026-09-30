@@ -67,7 +67,7 @@ export type ProjectOverride =
   | { path: string; omitConfig: true; config?: never };
 export interface UserConfig {
   accounts: Record<Account, Record<Harness, string>>;
-  domains: Record<Account, string[]>;
+  domains: Record<Account, string[]> & { shared?: string[] };
   projectOverrides?: ProjectOverride[];
   /** Parse diagnostics retained by readUserConfig; not a user-authored field. */
   projectOverrideDiagnostics?: { path: string; message: string }[];

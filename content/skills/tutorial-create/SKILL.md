@@ -65,7 +65,8 @@ Then ask for approval or adjustments. Adjust and re-show if the user changes the
 Resolve only `MPX_AI_GENERATED` from the process environment before writing — `Write` takes a real path, and
 `$MPX_AI_GENERATED` written in prose is literal text, not one. Read
 [`reference/SOURCE_FORMAT.md`](reference/SOURCE_FORMAT.md), then write `<slug>.source.md` directly
-into `$MPX_AI_GENERATED\_TUTORIALS\<category>\`.
+into `$MPX_AI_GENERATED\_TUTORIALS\<category>\`. This is a durable tutorial library with a
+stable index, not a temporary report under `MPX_AI_DUMP`; keep existing tutorials in place.
 
 Authoring rules:
 
@@ -105,7 +106,8 @@ inside committed skill projections. Mermaid additionally requires `@mermaid-js/m
 its browser dependency in the MPX installation; request explicit dependency setup when needed.
 Mermaid blocks compile to inline SVG in light and dark variants. If the optional renderer is missing,
 the build prints a "diagram skipped" warning and still succeeds; report that limitation, never claim
-the missing diagrams were rendered.
+the missing diagrams were rendered. When rendering diagrams, require an absolute `MPX_TEMP`; the
+compiler uses a unique child scratch directory and removes it after rendering, including on failure.
 
 The compiler writes `<slug>.html` beside the source and regenerates
 `$MPX_AI_GENERATED\_TUTORIALS\index.html` (dashboard with per-tutorial progress). Editing

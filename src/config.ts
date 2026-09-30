@@ -28,6 +28,8 @@ const APPROVED_ENVIRONMENT = new Set([
   'MPX_APPS',
   'MPX_ONEDRIVE',
   'MPX_AI_GENERATED',
+  'MPX_AI_DUMP',
+  'MPX_TEMP',
   'MPX_OBSIDIAN_VAULT',
   'MPX_PI_EXECUTABLE',
   'MPX_CLAUDE_EXECUTABLE',
@@ -171,7 +173,7 @@ export async function readUserConfig(
   const accountsSource = object(source.accounts, 'accounts');
   const domainsSource = object(source.domains, 'domains');
   allowedKeys(accountsSource, ['personal', 'work'], 'accounts');
-  allowedKeys(domainsSource, ['personal', 'work'], 'domains');
+  allowedKeys(domainsSource, ['personal', 'work', 'shared'], 'domains');
   const accounts = {} as UserConfig['accounts'];
   const domains = {} as UserConfig['domains'];
 
@@ -188,6 +190,12 @@ export async function readUserConfig(
       expandPath(entry, `domains.${account}[${index}]`, env));
   }
 
+  if (domainsSource.shared !== undefined) {
+    if (!Array.isArray(domainsSource.shared)) throw new Error('domains.shared must be an array');
+    domains.shared = domainsSource.shared.map((entry, index) =>
+      expandPath(entry, `domains.shared[${index}]`, env));
+  }
+
   for (const harness of ['pi', 'claude'] as const) {
     if (await comparablePath(accounts.personal[harness]) === await comparablePath(accounts.work[harness])) {
       throw new Error(`personal and work ${harness} account roots resolve to the same path`);
@@ -198,6 +206,10 @@ export async function readUserConfig(
   const workDomains = new Set(await Promise.all(domains.work.map(comparablePath)));
   if (personalDomains.some((domain) => workDomains.has(domain))) {
     throw new Error('ambiguous personal/work domain root is configured for both accounts');
+  }
+  const sharedDomains = await Promise.all((domains.shared ?? []).map(comparablePath));
+  if (sharedDomains.some((domain) => personalDomains.includes(domain) || workDomains.has(domain))) {
+    throw new Error('ambiguous shared domain root is configured as personal or work');
   }
 
   const result: UserConfig = { accounts, domains };

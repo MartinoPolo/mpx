@@ -23,7 +23,7 @@ test('additive arguments and selected native roots preserve all caller argument 
   try {
     const args = ['--settings', '{"a":"b c"}', '--', 'line one\nline two', '$(touch nope)', '', 'C:\\a b\\'];
     const packs = { packs: ['development'], paths: [join(f.root, 'pack space')], warnings: [] };
-    const spec = await createLaunchSpec({ root: f.root, cwd: join(f.root, 'personal'), harness: 'pi', account: 'personal', config: f.config, project: registered, selection: packs, args, env: { MPX_PROJECTS: 'preserved', MPX_SESSION_ID: 'obsolete', MPX_OWNER: 'old', PI_MODEL: 'parent-only' } });
+    const spec = await createLaunchSpec({ root: f.root, cwd: join(f.root, 'personal'), harness: 'pi', account: 'personal', config: f.config, project: registered, selection: packs, args, env: { MPX_PROJECTS: 'preserved', MPX_AI_GENERATED: 'saved', MPX_AI_DUMP: 'inspectable', MPX_TEMP: 'disposable', MPX_SESSION_ID: 'obsolete', MPX_OWNER: 'old', PI_MODEL: 'parent-only' } });
     assert.deepEqual(spec.args, ['--skill', packs.paths[0], ...args]);
     const verbose = await createLaunchSpec({ root: f.root, cwd: join(f.root, 'personal'), harness: 'pi', account: 'personal', config: f.config, project: registered, selection: packs, args: ['--verbose'] });
     assert.deepEqual(verbose.args, ['--skill', packs.paths[0], '--verbose']);
@@ -31,6 +31,9 @@ test('additive arguments and selected native roots preserve all caller argument 
     assert.equal(spec.env.MPX_ACCOUNT, 'personal');
     assert.equal(spec.env.MPX_ACTIVE_CONTENT_ROOT, f.root);
     assert.equal(spec.env.MPX_PROJECTS, 'preserved');
+    assert.equal(spec.env.MPX_AI_GENERATED, 'saved');
+    assert.equal(spec.env.MPX_AI_DUMP, 'inspectable');
+    assert.equal(spec.env.MPX_TEMP, 'disposable');
     assert.equal(spec.env.MPX_SESSION_ID, undefined);
     assert.equal(spec.env.MPX_OWNER, undefined);
     assert.equal(spec.env.PI_MODEL, undefined);
@@ -88,6 +91,61 @@ test('project diagnostics survive pack selection and do not falsely claim missin
       assert.deepEqual(spec.warnings.map(warning => warning.code), [code]);
       assert.equal(spec.requiresConfirmation, true);
     }
+  } finally { await f.cleanup(); }
+});
+
+test('shared domains suppress ownership warnings for both accounts and harnesses, but not project warnings', async () => {
+  const f = await fixture();
+  try {
+    const shared = join(f.root, 'shared');
+    const child = join(shared, 'nested');
+    await mkdir(child, { recursive: true });
+    f.config.domains.shared = [shared];
+    for (const harness of ['pi', 'claude'] as const) {
+      for (const account of ['personal', 'work'] as const) {
+        const base = { root: f.root, cwd: child, harness, account, config: f.config,
+          selection: { packs: [], paths: [], warnings: [] }, args: [] };
+        const configured = await createLaunchSpec({ ...base, project: registered });
+        assert.deepEqual(configured.warnings, []);
+        assert.equal(configured.requiresConfirmation, false);
+        const missing = await createLaunchSpec({ ...base, project: { warnings: [] } });
+        assert.deepEqual(missing.warnings.map(warning => warning.code), [LAUNCH_WARNING_CODE.projectConfigMissing]);
+        const invalid = await createLaunchSpec({ ...base, project: {
+          warnings: [{ code: LAUNCH_WARNING_CODE.projectConfigInvalid, severity: WARNING_SEVERITY.orange, message: 'Invalid manifest.' }],
+        } });
+        assert.deepEqual(invalid.warnings.map(warning => warning.code), [LAUNCH_WARNING_CODE.projectConfigInvalid]);
+        const omitted = await createLaunchSpec({ ...base, project: { warnings: [], configOmitted: true } });
+        assert.deepEqual(omitted.warnings, []);
+        const sibling = await createLaunchSpec({ ...base, cwd: join(f.root, 'shared-sibling'), project: registered });
+        assert.deepEqual(sibling.warnings.map(warning => warning.code), [LAUNCH_WARNING_CODE.ownershipUnknown]);
+      }
+    }
+  } finally { await f.cleanup(); }
+});
+
+test('explicit ownership wins over shared domains in cwd and main checkout', async () => {
+  const f = await fixture();
+  try {
+    f.config.domains.shared = [join(f.root, 'shared'), join(f.root, 'personal', 'nested-shared')];
+    f.config.domains.work.push(join(f.root, 'shared', 'work-owned'));
+    const base = { root: f.root, harness: 'pi' as const, config: f.config, project: registered,
+      selection: { packs: [], paths: [], warnings: [] }, args: [] };
+    const personal = await createLaunchSpec({ ...base, cwd: join(f.root, 'personal', 'nested-shared', 'child'), account: 'work' });
+    assert.deepEqual(personal.warnings.map(warning => warning.code), [LAUNCH_WARNING_CODE.workInPersonal]);
+    const work = await createLaunchSpec({ ...base, cwd: join(f.root, 'shared', 'work-owned', 'child'), account: 'personal' });
+    assert.deepEqual(work.warnings.map(warning => warning.code), [LAUNCH_WARNING_CODE.personalInWork]);
+    const mainWork = await createLaunchSpec({ ...base, cwd: join(f.root, 'shared'), account: 'personal',
+      project: { ...registered, mainCheckout: join(f.root, 'work', 'main') } });
+    assert.deepEqual(mainWork.warnings.map(warning => warning.code), [LAUNCH_WARNING_CODE.personalInWork]);
+    const mainPersonal = await createLaunchSpec({ ...base, cwd: join(f.root, 'shared'), account: 'work',
+      project: { ...registered, mainCheckout: join(f.root, 'personal', 'main') } });
+    assert.deepEqual(mainPersonal.warnings.map(warning => warning.code), [LAUNCH_WARNING_CODE.workInPersonal]);
+    const workOverPersonal = await createLaunchSpec({ ...base, cwd: join(f.root, 'personal'), account: 'personal',
+      project: { ...registered, mainCheckout: join(f.root, 'shared', 'work-owned') } });
+    assert.deepEqual(workOverPersonal.warnings.map(warning => warning.code), [LAUNCH_WARNING_CODE.personalInWork]);
+    const sharedMain = await createLaunchSpec({ ...base, cwd: join(f.root, 'elsewhere'), account: 'work',
+      project: { ...registered, mainCheckout: join(f.root, 'shared') } });
+    assert.deepEqual(sharedMain.warnings, []);
   } finally { await f.cleanup(); }
 });
 
@@ -169,6 +227,17 @@ test('all Git Bash wrapper entrypoints forward account and hostile-looking argum
       assert.equal(actual.account, wrapper === 'xpi' ? undefined : account);
       assert.equal(actual.cwd, launchDirectories[account]);
     }
+  } finally { await f.cleanup(); }
+});
+
+test('Claude launches root their scratchpad at MPX_TEMP unless CLAUDE_CODE_TMPDIR is already set', async () => {
+  const f = await fixture();
+  try {
+    const launch = (harness: 'pi' | 'claude', env: NodeJS.ProcessEnv) => createLaunchSpec({ root: f.root, cwd: f.root, harness, account: 'personal', config: f.config, project: registered, selection: { packs: [], paths: [], warnings: [] }, args: [], env });
+    assert.equal((await launch('claude', { MPX_TEMP: 'C:\\temp' })).env.CLAUDE_CODE_TMPDIR, 'C:\\temp');
+    assert.equal((await launch('claude', { MPX_TEMP: 'C:\\temp', CLAUDE_CODE_TMPDIR: 'D:\\own' })).env.CLAUDE_CODE_TMPDIR, 'D:\\own');
+    assert.equal((await launch('claude', {})).env.CLAUDE_CODE_TMPDIR, undefined);
+    assert.equal((await launch('pi', { MPX_TEMP: 'C:\\temp' })).env.CLAUDE_CODE_TMPDIR, undefined);
   } finally { await f.cleanup(); }
 });
 

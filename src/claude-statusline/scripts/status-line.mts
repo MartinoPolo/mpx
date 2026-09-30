@@ -223,7 +223,7 @@ const CI_STATE_BY_PIPELINE: Record<string, { color: string; text: string }> = {
 
 // --- Cache layout ------------------------------------------------------------
 
-const CACHE_DIR = process.env.TMPDIR || tmpdir();
+const CACHE_DIR = tmpdir();
 
 /**
  * ASCII Unit Separator. The on-disk caches (written here and by

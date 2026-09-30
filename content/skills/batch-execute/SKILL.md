@@ -90,15 +90,18 @@ author/executor; request fresh review of changed scope when the reviewed diff ch
 
 When live verification is needed, main discovers the relevant app and command from repository
 instructions and project configuration, reuses only a URL confirmed for this checkout, or starts and
-verifies the server while keeping logs and artifacts outside tracked content. Main owns its
-lifecycle, stops only processes it started, and preserves user-owned processes.
+verifies the server. Resolve `MPX_AI_DUMP` and `MPX_TEMP` from the environment: keep logs and evidence
+in `<MPX_AI_DUMP>/_VERIFICATION/<run>` for a unique run, and disposable runners and scratch under
+`MPX_TEMP`. If a required root is unset, relative, or unwritable, report a blocker; never guess a
+fallback.
+Main owns the server lifecycle, stops only processes it started, and preserves user-owned processes.
 
 After final formatting leaves stable source, dispatch one `mpx-visual-verifier` using its
 declared model settings when the batch changes rendered appearance or visually
 observable interaction. This one-time visual acceptance is independent of persistent E2E results,
 `--no-tdd`, and `--no-review`; skip it for nonvisual changes. Supply the latest requirements, Design
 Mapping, affected feature, states, and viewports, checkout identity, main's verified URL, only
-explicitly approved project test-auth context, and an artifact location outside tracked content.
+explicitly approved project test-auth context, and the resolved evidence and scratch paths.
 The verifier never manages server processes or source. It uses the project's raw Playwright by
 default and captures and inspects screenshots in the same worker; do not dispatch a separate
 analyzer.

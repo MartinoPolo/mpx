@@ -10,6 +10,21 @@ single `prompt.md`, with the same columns the chosen mode produces, in the video
 
 ## Step 1: Subtitles first
 
+Require an absolute `MPX_TEMP` from the environment; stop and name it when missing or relative.
+Create a unique child scratch directory in Bash:
+
+```bash
+: "${MPX_TEMP:?MPX_TEMP is required for scratch}"
+case "$MPX_TEMP" in
+  /*|[[:alpha:]]:/*|[[:alpha:]]:'\'*) ;;
+  *) printf '%s\n' 'MPX_TEMP must be absolute' >&2; exit 1 ;;
+esac
+mkdir -p -- "$MPX_TEMP" && scratch_dir=$(mktemp -d -- "$MPX_TEMP/video-to-image.XXXXXX")
+```
+
+Stop if creation fails. Use its returned path for every `<scratchpad>` and `<scratch-dir>` below;
+intermediates stay there, while final deliverables remain under `MPX_AI_GENERATED`.
+
 Subtitles carry the exercise names and the counts the presenter says out loud, and they cost one
 small download:
 

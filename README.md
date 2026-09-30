@@ -118,15 +118,39 @@ To avoid committing project metadata, add:
 {
   "projectOverrides": [
     { "path": "${MPX_WORK}/example", "config": { "projectId": "example" } },
-    { "path": "${MPX_AI_GENERATED}", "omitConfig": true }
+    { "path": "${MPX_AI_DUMP}", "omitConfig": true }
   ]
 }
 ```
 
 Use either `config` or `omitConfig: true` (accept missing metadata). An existing `mpxconfig.json`
 always takes precedence, even if invalid. Repository overrides cover linked worktrees; folder
-overrides cover subfolders but not nested repositories. Account-domain warnings still apply.
-Inspect the result with `mpx project config <directory>`.
+overrides cover subfolders but not nested repositories.
+
+For locations usable by either account, add an optional shared domain alongside the existing
+`domains.personal` and `domains.work` arrays:
+
+```json
+{ "domains": { "personal": ["${MPX_PROJECTS}"], "work": ["${MPX_WORK}"], "shared": ["${MPX_AI_DUMP}"] } }
+```
+
+Shared roots accept absolute paths or approved `MPX_*` expansions. They suppress only ownership
+warnings (including for descendants); explicit personal/work ownership of the current path or
+main checkout still takes precedence. Shared roots cannot duplicate personal/work roots. To also
+accept missing project metadata, use a matching `projectOverrides` entry with `omitConfig: true`
+as above; shared domains do not suppress project configuration warnings. Inspect the result with
+`mpx project config <directory>`.
+
+### Generated outputs
+
+- `MPX_AI_GENERATED`: saved media and the durable tutorial library.
+- `MPX_AI_DUMP`: general AI scratchpad worth keeping, such as plans, reports, verification, backups, and imports.
+- `MPX_TEMP`: disposable scratch files; Claude launches use it unless `CLAUDE_CODE_TMPDIR` is set.
+
+Resolve roots from the environment, not hardcoded paths. After changing Windows user variables,
+restart the terminal host so new sessions inherit them; existing processes retain their old values.
+Changing a root does not migrate existing files. A shared domain removes MPX ownership warnings,
+not native harness permissions or organizational data restrictions.
 
 ## Safety and troubleshooting
 

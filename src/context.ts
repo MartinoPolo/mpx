@@ -9,7 +9,9 @@ const MACHINE_ROOTS = [
   ['MPX_CLONED', 'cloned OSS repositories'],
   ['MPX_APPS', 'local apps'],
   ['MPX_ONEDRIVE', 'OneDrive root'],
-  ['MPX_AI_GENERATED', 'AI-generated assets (skill deliverables)'],
+  ['MPX_AI_GENERATED', 'saved AI-generated media and durable tutorials'],
+  ['MPX_AI_DUMP', 'general AI scratchpad worth keeping (plans, reports, artifacts)'],
+  ['MPX_TEMP', 'disposable temporary files'],
   ['MPX_OBSIDIAN_VAULT', 'Obsidian vault'],
 ] as const;
 

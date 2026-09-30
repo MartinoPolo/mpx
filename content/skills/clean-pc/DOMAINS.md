@@ -1,7 +1,7 @@
 # Cleanup Domains
 
 Detection rules and safety heuristics for each domain. Platform-neutral — concrete commands live in
-`WINDOWS.md`, `MACOS.md`, `LINUX.md`.
+`WINDOWS.md`.
 
 Every domain sub-agent returns groups in this shape:
 
@@ -33,8 +33,8 @@ Apply before anything reaches an approval question.
   `favorites`/`favourites`, `album`, or a year-named photo folder is protected even when its
   contents match a deletion pattern.
 - **Active project = git `HEAD` within 3 months** → regenerable caches only; build output stays.
-- **Quarantine roots are excluded from every scan** so pending items never resurface as fresh
-  candidates.
+- **Quarantine roots and both resolved run directories are excluded from every scan** so pending
+  items never resurface as fresh candidates and the sweep never targets its own reports or scratch.
 - **Local fixed disks only.** Network shares, mapped drives and removable media are skipped.
 - **Cloud-synced paths carry a propagation warning** on every group: a delete there reaches every
   synced device and the cloud copy.
@@ -56,7 +56,7 @@ downloads (Playwright, Puppeteer), GPU shader caches, and system temp.
 - Keep globally-installed tooling. The pnpm store is cache; `pnpm/global` is installed programs.
 - Keep the newest browser-engine build, remove superseded ones. Off-by-one here has removed the
   in-use build; harmless but worth avoiding.
-- Skip the session scratchpad — the sweep's own working files live there.
+- Skip the sweep's report and scratch directories resolved in `SKILL.md`.
 - Browser asset caches only. Cookies, history and logins are never touched.
 
 **Locked files:** browsers and editors hold their caches open; deletion silently reclaims nothing

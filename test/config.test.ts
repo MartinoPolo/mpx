@@ -143,7 +143,7 @@ test('readUserConfig expands only approved variables and returns normalized path
         claude: '${MPX_WORK}/../accounts/work-claude',
       },
     },
-    domains: { personal: ['${MPX_PROJECTS}'], work: ['${MPX_WORK}', '${MPX_PROJECTS}/shared'] },
+    domains: { personal: ['${MPX_PROJECTS}'], work: ['${MPX_WORK}', '${MPX_PROJECTS}/owned'], shared: ['${MPX_AI_DUMP}', '${MPX_TEMP}'] },
     defaultPacks: { personal: ['development', 'personal'], work: [] },
     executables: { pi: '${MPX_PI_EXECUTABLE}', claude: '${MPX_CLAUDE_EXECUTABLE}' },
   }));
@@ -151,11 +151,14 @@ test('readUserConfig expands only approved variables and returns normalized path
   const config = await readUserConfig(file, {
     MPX_PROJECTS: projects,
     MPX_WORK: work,
+    MPX_AI_DUMP: path.join(root, 'apps', '..', 'shared'),
+    MPX_TEMP: path.join(root, 'scratch'),
     MPX_PI_EXECUTABLE: path.join(root, 'bin', '..', 'pi'),
     MPX_CLAUDE_EXECUTABLE: path.join(root, 'bin', 'claude'),
   });
   assert.equal(config.accounts.personal.pi, path.normalize(path.join(root, 'accounts', 'personal-pi')));
-  assert.equal(config.domains.work[1], path.normalize(path.join(projects, 'shared')));
+  assert.equal(config.domains.work[1], path.normalize(path.join(projects, 'owned')));
+  assert.deepEqual(config.domains.shared, [path.join(root, 'shared'), path.join(root, 'scratch')]);
   assert.equal(config.executables?.pi, path.normalize(path.join(root, 'pi')));
   assert.deepEqual(config.defaultPacks?.work, []);
 });
@@ -171,6 +174,8 @@ test('readUserConfig rejects missing paths, unsupported expansion, aliases, and 
     domains: { personal: [path.join(root, 'personal')], work: [path.join(root, 'work')] },
   };
 
+  await writeFile(file, JSON.stringify(base));
+  assert.equal((await readUserConfig(file)).domains.shared, undefined);
   await writeFile(file, JSON.stringify({ ...base, accounts: { personal: base.accounts.personal } }));
   await assert.rejects(readUserConfig(file), /accounts\.work/);
   await writeFile(file, JSON.stringify({ ...base, domains: { ...base.domains, personal: ['${HOME}/guess'] } }));
@@ -214,6 +219,27 @@ test('readUserConfig rejects missing paths, unsupported expansion, aliases, and 
     domains: { personal: [path.join(root, 'same')], work: [path.join(root, 'same', '.')] },
   }));
   await assert.rejects(readUserConfig(file), /ambiguous.*domain/i);
+
+  for (const [shared, message] of [
+    [null, /domains\.shared must be an array/],
+    ['not an array', /domains\.shared must be an array/],
+    [[null], /domains\.shared\[0\].*non-empty string/],
+    [['relative/shared'], /domains\.shared\[0\].*absolute path/],
+    [['${HOME}/shared'], /domains\.shared\[0\].*unsupported environment variable/],
+    [['${MPX_APPS}/shared'], /domains\.shared\[0\].*MPX_APPS.*not set/],
+    [['${MPX_APPS/shared'], /domains\.shared\[0\].*malformed environment expansion/],
+  ] as const) {
+    await writeFile(file, JSON.stringify({ ...base, domains: { ...base.domains, shared } }));
+    await assert.rejects(readUserConfig(file, {}), message);
+  }
+
+  await mkdir(path.join(root, 'personal'));
+  const personalAlias = path.join(root, 'personal-alias');
+  await symlink(path.join(root, 'personal'), personalAlias, 'junction');
+  for (const owned of [path.join(root, 'personal', '.'), personalAlias, path.join(root, 'work', '..', 'work')]) {
+    await writeFile(file, JSON.stringify({ ...base, domains: { ...base.domains, shared: [owned] } }));
+    await assert.rejects(readUserConfig(file), /ambiguous.*shared.*domain/i);
+  }
 });
 
 test('readUserConfig retains safely identifiable malformed project overrides as local diagnostics', async () => {

@@ -5,7 +5,7 @@
  *
  * Compiles a compact `<slug>.source.md` (see reference/SOURCE_FORMAT.md) into a
  * self-contained interactive HTML tutorial using TEMPLATE.html, then regenerates
- * the OneDrive tutorials index. Zero runtime dependencies in the output.
+ * the durable tutorials index. Zero runtime dependencies in the output.
  */
 
 import {
@@ -15,11 +15,11 @@ import {
   readdirSync,
   statSync,
   mkdirSync,
+  mkdtempSync,
   rmSync,
 } from 'node:fs';
 import { dirname, join, resolve, basename, relative, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { tmpdir } from 'node:os';
 import { parse as parseYaml } from 'yaml';
 import { createHighlighter, bundledLanguages } from 'shiki';
 
@@ -601,9 +601,13 @@ async function renderMermaid(code) {
     );
     return '<!-- mermaid diagram skipped: @mermaid-js/mermaid-cli not installed -->';
   }
+  const scratchRoot = process.env.MPX_TEMP?.trim();
+  if (!scratchRoot || !isAbsolute(scratchRoot)) {
+    throw new Error('MPX_TEMP must be set to an absolute path for Mermaid rendering scratch.');
+  }
   mermaidCounter++;
-  const workDir = join(tmpdir(), `tutorial-mermaid-${process.pid}`);
-  mkdirSync(workDir, { recursive: true });
+  mkdirSync(scratchRoot, { recursive: true });
+  const workDir = mkdtempSync(join(scratchRoot, 'tutorial-mermaid-'));
   try {
     const lightSvg = await renderMermaidVariant(renderer, code, workDir, 'light');
     const darkSvg = await renderMermaidVariant(renderer, code, workDir, 'dark');

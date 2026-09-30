@@ -39,7 +39,7 @@ await session.prompt('changed roots');
 process.env.MPX_PROJECTS = 'C:/fixture-A';
 await session.prompt('restored roots');
 assert.equal(roots().length, 3);
-for (const key of ['MPX_PROJECTS', 'MPX_WORK', 'MPX_CLONED', 'MPX_APPS', 'MPX_ONEDRIVE', 'MPX_AI_GENERATED', 'MPX_OBSIDIAN_VAULT']) delete process.env[key];
+for (const key of ['MPX_PROJECTS', 'MPX_WORK', 'MPX_CLONED', 'MPX_APPS', 'MPX_ONEDRIVE', 'MPX_AI_GENERATED', 'MPX_AI_DUMP', 'MPX_TEMP', 'MPX_OBSIDIAN_VAULT']) delete process.env[key];
 await session.prompt('unset roots');
 await session.prompt('still unset');
 assert.equal(roots().length, 4);

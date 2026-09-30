@@ -4,8 +4,8 @@
 // The settings file is inserted into as text rather than re-serialised, so Windows
 // Terminal's own formatting, key order and any comments survive a run untouched.
 
-import { readFileSync, writeFileSync, copyFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync, writeFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync } from 'node:fs';
+import { join, isAbsolute } from 'node:path';
 
 function settingsPath() {
   const localAppData = process.env.LOCALAPPDATA;
@@ -97,6 +97,10 @@ function listColors() {
 }
 
 function addProfile({ name, directory, icon, color }) {
+  const backupRoot = process.env.MPX_AI_DUMP?.trim();
+  if (!backupRoot || !isAbsolute(backupRoot)) {
+    throw new Error('MPX_AI_DUMP must be set to an absolute path for Windows Terminal backups.');
+  }
   const path = settingsPath();
   const raw = readFileSync(path, 'utf8');
   const settings = parsed(raw);
@@ -114,7 +118,9 @@ function addProfile({ name, directory, icon, color }) {
     throw new Error(`tabColor must be #RRGGBB, got: ${color}`);
   }
 
-  const backup = `${path}.bak-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+  const backupDirectory = join(backupRoot, '_PROJECT_REGISTER');
+  mkdirSync(backupDirectory, { recursive: true });
+  const backup = join(mkdtempSync(join(backupDirectory, 'windows-terminal-')), 'settings.json.bak');
   copyFileSync(path, backup);
 
   const guid = `{${crypto.randomUUID()}}`;

@@ -94,8 +94,10 @@ component replacement and recurring-pattern evidence instead of duplicating it.
    **C-judgment** (the proposed abstraction is debatable — leave as a recommendation). Report an
    `A+C` finding once under A when its direct replacement is primary, or once under C when its
    recurring abstraction is primary; never in both sections.
-3. Write `COMPONENT-AUDIT.md` only if findings exist; otherwise report a clean result in
-   conversation.
+3. Write `<MPX_AI_DUMP>/_COMPONENT_AUDITS/<run>/COMPONENT-AUDIT.md` only if findings exist,
+   using a unique run and `MPX_AI_DUMP` resolved from the environment. If unset, relative, or
+   unwritable, report a blocker; never guess a fallback. Link the report with its absolute `file:///`
+   URL. With no findings, report a clean result in conversation without a report file.
 
 Report shape:
 
@@ -161,6 +163,6 @@ Findings:
 - C recommendations: [N]
 - D color bypass: [N]
 
-Report: [COMPONENT-AUDIT.md | none] Autofix: [applied A/B/D/C-clear: N | report only | not
+Report: [absolute report path | none] Autofix: [applied A/B/D/C-clear: N | report only | not
 requested] New variants added: [list | none] Validation: [clean | N new errors | unavailable/not run]
 ```

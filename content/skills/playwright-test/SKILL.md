@@ -49,9 +49,14 @@ context; authentication should be programmatic unless login itself is the change
 
 ## 3. Delegate visual acceptance
 
+Resolve `MPX_AI_DUMP` and `MPX_TEMP` from the environment. Keep screenshots, measurements, and
+logs in `<MPX_AI_DUMP>/_VERIFICATION/<run>` for a unique run; disposable runners and scratch belong
+under `MPX_TEMP`. If a required root is unset, relative, or unwritable, report `BLOCKED`; never guess
+a fallback.
+
 Invoke `mpx-visual-verifier` with the requirements, design constraints, affected routes and states,
-checkout identity, verified URL, project runner/auth details, and an untracked task-local artifact
-directory. Use its declared model settings; reserve an advanced override for unresolved visual
+checkout identity, verified URL, project runner/auth details, and the resolved evidence and scratch
+paths. Use its declared model settings; reserve an advanced override for unresolved visual
 reasoning, not routine capture. Give it these acceptance expectations:
 
 - Use raw project Playwright with isolated Chrome contexts; missing prerequisites are `BLOCKED`,

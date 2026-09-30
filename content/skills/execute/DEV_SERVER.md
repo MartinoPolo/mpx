@@ -1,6 +1,10 @@
 # Development server
 
 Main owns server startup and cleanup. Prepare a server only when verification needs one.
+Resolve `MPX_AI_DUMP` and `MPX_TEMP` from the environment. Keep logs and verification evidence in
+`<MPX_AI_DUMP>/_VERIFICATION/<run>` for a unique run; disposable runners and scratch belong under
+`MPX_TEMP`. If a required root is unset, relative, or unwritable, report a blocker; never guess a
+fallback.
 
 ## Prepare
 
@@ -9,13 +13,14 @@ Main owns server startup and cleanup. Prepare a server only when verification ne
 - Respect project restrictions and resource isolation. Serialize shared resources when no isolation
   contract exists. Do not compete with a test runner's managed server.
 - Reuse a server only after confirming its owner, checkout, and configuration. Otherwise start one
-  with supported background controls; retain its process handle and keep logs outside tracked files.
+  with supported background controls; retain its process handle and keep logs in the evidence
+  directory.
 - Use configured ports or framework defaults. Optional MPX port metadata is not required.
   Leave occupied ports alone; use a supported isolated alternative or follow section 4's bounded wait.
 - Confirm the intended route is ready and serves the current implementation, not just any response.
   Bound startup to the project limit, default two minutes.
-- Give browser agents the verified URL, relevant app/auth configuration, isolation rules, an artifact
-  directory outside tracked files, and execution/cleanup limits. Use only approved test access.
+- Give browser agents the verified URL, relevant app/auth configuration, isolation rules, resolved
+  evidence and scratch paths, and execution/cleanup limits. Use only approved test access.
 - Serialize builds and servers that share generated output. Stop only owned servers and verify
   readiness again after restarting.
 

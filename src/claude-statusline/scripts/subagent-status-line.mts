@@ -190,7 +190,7 @@ const COMPACTION_STYLE: CompactionStyle = {
 };
 
 /** Matches status-line.mts: the compaction scan caches its byte offset here. */
-const CACHE_DIR = process.env.TMPDIR || tmpdir();
+const CACHE_DIR = tmpdir();
 
 const CONFIG_DIR =
     process.env.CLAUDE_CONFIG_DIR || `${process.env.HOME || homedir()}/.claude`;

@@ -25,7 +25,7 @@ Author the page from the contract below in words, every run. There is no templat
 ## Modes
 
 - **artifact** — publish the page through the runtime's artifact-publishing capability. The reviewer feedback loop is then that capability's **native** comment system (a reader comments and routes the thread back to the agent); build nothing for it in the page.
-- **local** — write one self-contained `.html` to the repo root and return a `file:///` link. No feedback loop.
+- **local** — write one self-contained `.html` under `MPX_AI_DUMP` and return a `file:///` link. No feedback loop.
 
 Default: **artifact when the runtime can publish artifacts, local otherwise.** Honor `--mode` when given. Page content is identical across modes; only delivery differs.
 
@@ -58,7 +58,11 @@ Then ask for approval or adjustments; re-show if the shape changes.
 
 ### Step 4: Build the page — design contract
 
-Author one HTML file. In **local** mode write it to `<repo root>/<slug>-walkthrough.html` (a temporary, uncommitted file). In **artifact** mode write it to that same path, then publish it (favicon, a two-to-four-word title, one-sentence description).
+Resolve `MPX_AI_DUMP` from the environment. If unset, relative, or unwritable, report a blocker;
+never guess a fallback. Author one HTML file at
+`<MPX_AI_DUMP>/_WALKTHROUGHS/<run>/<slug>-walkthrough.html` for a unique run. In **local** mode
+return that file. In **artifact** mode write it to that same path, then publish it (favicon, a
+two-to-four-word title, one-sentence description).
 
 Every rule below is fixed. Do not re-litigate them per run.
 

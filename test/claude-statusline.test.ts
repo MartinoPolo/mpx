@@ -32,7 +32,7 @@ async function isolatedFixture(): Promise<{ root: string; config: string; cache:
   await writeFile(join(config, 'settings.json'), JSON.stringify({ effortLevel: 'high' }));
   await writeFile(join(cache, 'claude-czk-cache.txt'), '23\n');
   await writeFile(transcript, '');
-  return { root, config, cache, repository, transcript, env: { PATH: '', HOME: root, USERPROFILE: root, CLAUDE_CONFIG_DIR: config, MPX_ACCOUNT: 'personal', TMPDIR: cache, COLUMNS: '160' } };
+  return { root, config, cache, repository, transcript, env: { PATH: '', HOME: root, USERPROFILE: root, CLAUDE_CONFIG_DIR: config, MPX_ACCOUNT: 'personal', TMPDIR: cache, TEMP: cache, TMP: cache, COLUMNS: '160' } };
 }
 
 test('isolated main entrypoint keeps latest layout without real account or network effects', async () => {

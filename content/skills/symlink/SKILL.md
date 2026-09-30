@@ -26,8 +26,8 @@ If the invocation input supplies a link path and a target, resolve both paths, d
 as the how-to reference below.
 
 For paths outside the working directory, use the supplied machine-root environment variables
-(`MPX_PROJECTS`, `MPX_WORK`, `MPX_CLONED`, `MPX_APPS`, `MPX_ONEDRIVE`, `MPX_AI_GENERATED`, or
-`MPX_OBSIDIAN_VAULT`) and join the requested relative path beneath the appropriate root. Verify the
+(`MPX_PROJECTS`, `MPX_WORK`, `MPX_CLONED`, `MPX_APPS`, `MPX_ONEDRIVE`, `MPX_AI_GENERATED`,
+`MPX_AI_DUMP`, `MPX_TEMP`, or `MPX_OBSIDIAN_VAULT`) and join the requested relative path beneath the appropriate root. Verify the
 selected variable is set and the target exists before creating anything. If the root is missing, the
 requested path cannot be placed beneath an explicit root, or multiple roots plausibly match, stop
 and ask for the exact root; never guess a drive, profile directory, or legacy installation path.

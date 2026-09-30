@@ -5,7 +5,7 @@ import { createInterface, type Interface, type Key } from 'node:readline';
 import type { Account, Harness, LaunchSpec, LaunchWarning, PackSelection, ProjectSelection, UserConfig } from './contracts.js';
 import { LAUNCH_WARNING_CODE, sortLaunchWarnings, WARNING_SEVERITY } from './contracts.js';
 
-const retainedMpx = new Set(['MPX_PROJECTS', 'MPX_WORK', 'MPX_CLONED', 'MPX_APPS', 'MPX_ONEDRIVE', 'MPX_AI_GENERATED', 'MPX_OBSIDIAN_VAULT', 'MPX_PI_EXECUTABLE', 'MPX_CLAUDE_EXECUTABLE']);
+const retainedMpx = new Set(['MPX_PROJECTS', 'MPX_WORK', 'MPX_CLONED', 'MPX_APPS', 'MPX_ONEDRIVE', 'MPX_AI_GENERATED', 'MPX_AI_DUMP', 'MPX_TEMP', 'MPX_OBSIDIAN_VAULT', 'MPX_PI_EXECUTABLE', 'MPX_CLAUDE_EXECUTABLE']);
 export function cleanEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const result: NodeJS.ProcessEnv = {};
   const removed = new Set(['PI_SESSION_ID', 'PI_SESSION_FILE', 'PI_MODEL', 'PI_PROVIDER', 'PI_REASONING_LEVEL', 'PI_CODING_AGENT_SESSION_DIR', 'PI_CODING_AGENT_DIR', 'CLAUDE_CONFIG_DIR']);
@@ -27,7 +27,7 @@ async function canonical(value: string): Promise<string> {
   return realpath(value).catch(() => resolve(value));
 }
 
-interface LocationOwnership { owner?: Account; current: string; main?: string }
+interface LocationOwnership { owner?: Account | 'shared'; current: string; main?: string }
 async function locationOwnership(cwd: string, mainCheckout: string | undefined, config: UserConfig): Promise<LocationOwnership> {
   const current = await canonical(cwd);
   const main = mainCheckout === undefined ? undefined : await canonical(mainCheckout);
@@ -37,7 +37,9 @@ async function locationOwnership(cwd: string, mainCheckout: string | undefined, 
   const owners = locations.map(location => roots
     .filter(root => inside(location, root.path))
     .sort((left, right) => right.path.length - left.path.length)[0]?.account);
-  const owner = owners.includes('work') ? 'work' : owners.includes('personal') ? 'personal' : undefined;
+  const sharedRoots = await Promise.all((config.domains.shared ?? []).map(canonical));
+  const owner = owners.includes('work') ? 'work' : owners.includes('personal') ? 'personal'
+    : locations.some(location => sharedRoots.some(root => inside(location, root))) ? 'shared' : undefined;
   return { owner, current, ...(main === undefined ? {} : { main }) };
 }
 
@@ -87,6 +89,8 @@ export async function createLaunchSpec(options: {
   const normalizedWarnings = sortLaunchWarnings(warnings);
   const env = cleanEnvironment(sourceEnv);
   env[harness === 'pi' ? 'PI_CODING_AGENT_DIR' : 'CLAUDE_CONFIG_DIR'] = accountRoot;
+  // Claude Code roots its session scratchpad and task output at CLAUDE_CODE_TMPDIR.
+  if (harness === 'claude' && env.MPX_TEMP && !env.CLAUDE_CODE_TMPDIR) env.CLAUDE_CODE_TMPDIR = env.MPX_TEMP;
   if (!native) {
     env.MPX_ACCOUNT = account;
     env.MPX_ACTIVE_CONTENT_ROOT = resolve(root);

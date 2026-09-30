@@ -143,9 +143,9 @@ node "<resolved skill directory>/scripts/rayconfig.mjs" encode \
     '<passphrase>'
 ```
 
-Resolve `MPX_AI_GENERATED` from the process environment (PowerShell: `$env:MPX_AI_GENERATED`; POSIX:
-`$MPX_AI_GENERATED`)—the variable name is not a path until looked up. Write the rebuilt file to a
-per-run folder under `MPX_AI_GENERATED/_RAYCAST/`, and fail with the variable's name when that root
+Resolve `MPX_AI_DUMP` from the process environment (PowerShell: `$env:MPX_AI_DUMP`; POSIX:
+`$MPX_AI_DUMP`)—the variable name is not a path until looked up. Write the rebuilt file to a
+per-run folder under `MPX_AI_DUMP/_RAYCAST/`, and fail with the variable's name when that root
 is unresolvable. Copy the original export alongside it as the rollback.
 
 Then tell the user, in these words: **Raycast → Ctrl+, → Advanced → Import Settings & Data → pick

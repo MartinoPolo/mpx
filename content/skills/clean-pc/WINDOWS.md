@@ -2,6 +2,11 @@
 
 The verified platform path. Domain rules live in [DOMAINS.md](DOMAINS.md).
 
+Resolve output roots as required by [SKILL.md](SKILL.md) before running commands:
+`<scratch>` is `<MPX_TEMP>/_CLEAN_PC/<run>` for disposable scans and staging;
+`<reports>` is `<MPX_AI_DUMP>/_CLEAN_PC/<run>` for the dashboard, removal logs, and elevated handoff.
+Pass these resolved paths explicitly to the bundled scripts.
+
 ## Two rules that govern everything here
 
 **1. Run every deletion through the bundled removal helper.** Invoke PowerShell from public Git
@@ -120,7 +125,7 @@ Get-Command TreeSizeFree -ErrorAction SilentlyContinue
 WizTree reads the NTFS MFT directly and maps a full drive in seconds:
 
 ```powershell
-& "C:\Program Files\WizTree\WizTree64.exe" "C:\" /export="$env:TEMP\wiztree-c.csv" /admin=1
+& "C:\Program Files\WizTree\WizTree64.exe" "C:\" /export="<scratch>\wiztree-c.csv" /admin=1
 ```
 
 Offer once when absent, then fall back without asking again:
@@ -276,7 +281,7 @@ powershell -NoProfile -File scripts/Invoke-Removal.ps1 -InputCsv "<scratch>\shot
 powershell -NoProfile -File scripts/Invoke-Removal.ps1 `
     -InputCsv "<scratch>\shots.csv" `
     -Destination Quarantine `
-    -LogCsv "<scratch>\removed.csv"
+    -LogCsv "<reports>\removed.csv"
 ```
 
 `-DryRun` is an explicit switch, not `SupportsShouldProcess`/`-WhatIf`: `-WhatIf` sets

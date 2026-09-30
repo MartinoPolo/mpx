@@ -57,6 +57,14 @@ verify readiness, and pass its URL to browser agents without an initial user pro
 restrictions, preserve user-owned processes, and clean up only servers started by the workflow.
 Missing optional MPX port metadata is not a startup blocker.
 
+## Files outside repositories
+
+- `MPX_TEMP`: disposable files (scripts, screenshots, logs); may be deleted tomorrow.
+- `MPX_AI_DUMP`: general AI scratchpad worth keeping (plans, reports, artifacts, build workspaces).
+- `MPX_AI_GENERATED`: final outputs only (rendered videos, podcasts, images), never build workspaces.
+
+Prefer grouping a task's files in one folder named `<project>.<task-or-worktree>`, or just `<task>`.
+
 ## Project instructions and skills
 
 Follow applicable project instructions, including nested instructions for files changed. Private
@@ -77,6 +85,6 @@ only when needed. For external-tool implementation questions, check a relevant c
 
 ## Preferences
 
-Commands suggested for manual execution use Bash; use PowerShell for Windows-native tooling. Use conventional commits when authorized. When
+Commands suggested for manual execution use Bash; use PowerShell for Windows-native tooling. In Bash, redirect to `/dev/null`, never `nul`. Use conventional commits when authorized. When
 workflow friction recurs, fix the immediate issue, then propose a durable rule for instructions or
 memory.

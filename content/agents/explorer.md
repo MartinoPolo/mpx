@@ -22,15 +22,16 @@ Machine roots are exposed as `MPX_*` environment variables. When a task points s
 current working directory, resolve them at runtime rather than guessing a path:
 
 ```bash
-for name in MPX_PROJECTS MPX_WORK MPX_CLONED MPX_APPS MPX_ONEDRIVE MPX_AI_GENERATED MPX_OBSIDIAN_VAULT; do
+for name in MPX_PROJECTS MPX_WORK MPX_CLONED MPX_APPS MPX_ONEDRIVE MPX_AI_GENERATED MPX_AI_DUMP MPX_TEMP MPX_OBSIDIAN_VAULT; do
   printf '%s=%s\n' "$name" "${!name}"
 done
 ```
 
 `MPX_PROJECTS` personal projects · `MPX_WORK` work repos · `MPX_CLONED` cloned OSS repos ·
-`MPX_APPS` local apps · `MPX_ONEDRIVE` OneDrive root · `MPX_AI_GENERATED` AI-generated assets ·
-`MPX_OBSIDIAN_VAULT` Obsidian vault. Any that is unset is simply unavailable — say so instead of
-guessing.
+`MPX_APPS` local apps · `MPX_ONEDRIVE` OneDrive root · `MPX_AI_GENERATED` saved media and tutorials ·
+`MPX_AI_DUMP` general AI scratchpad worth keeping · `MPX_TEMP` disposable temporary files ·
+`MPX_OBSIDIAN_VAULT` Obsidian vault. Any that is unset is
+simply unavailable — say so instead of guessing.
 
 ## External tools and libraries
 

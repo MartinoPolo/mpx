@@ -45,10 +45,8 @@ whole Windows Terminal window.
 
 ## Step 2: Preflight the backend and scratch space
 
-Create an explicit, unique session scratch directory with the platform's temporary-directory
-facility (for example `mktemp -d` in a compatible shell), retain its returned absolute path as
-`<scratch-dir>`, and put every intermediate artifact there. Do not write a made-up environment
-variable such as `$SCRATCHPAD` into commands.
+Require an absolute `MPX_TEMP` from the environment; stop and name it when missing or relative.
+Create a unique child scratch directory and put every intermediate artifact there. Do not write a made-up environment variable such as `$SCRATCHPAD` into commands.
 
 Only the NotebookLM backend needs NotebookLM authentication:
 
