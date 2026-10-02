@@ -114,6 +114,7 @@ the event adds no model message or desktop notification. Reentrant handlers and 
 cannot prevent native cancellation. SDK/RPC abort and an otherwise unclaimed empty-editor Escape
 use the same boundary; modal and custom-editor key behavior remains native.
 
+Rebase both the SDK distribution and bundled CLI runtime: they execute separate core copies.
 The runtime activity adapter consumes this signal without posting to Orca. Restart Pi after changing
 the native dependency patch; reloading extensions alone does not replace the running core.
 

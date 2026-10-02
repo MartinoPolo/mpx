@@ -349,14 +349,17 @@ test('an unclaimed idle Escape routes through public session abort', () => {
   assert.equal(abortCount, 1);
 });
 
-test('bundled CLI RPC abort notifies once while idle compaction stays silent', { timeout: 30_000 }, async () => {
+test('bundled CLI RPC abort survives handler failures and reentrancy while idle compaction stays silent', { timeout: 30_000 }, async () => {
   const root = await mkdtemp(join(tmpdir(), 'mpx-bundled-cancellation-'));
   const extension = join(root, 'cancellation.mjs');
   await writeFile(extension, `export default function (pi) {
+    pi.on('session_abort', () => { throw new Error('bundled synchronous handler failure'); });
     pi.on('session_abort', (_event, ctx) => {
       ctx.ui.notify('session-abort', 'info');
       ctx.abort();
     });
+    pi.on('session_abort', async () => { throw new Error('bundled asynchronous handler failure'); });
+    pi.on('session_abort', (_event, ctx) => { ctx.ui.notify('later-handler', 'info'); });
   }\n`);
   const child = spawn(process.execPath, [
     join(installedPackageRoot, 'dist', 'bundle', 'cli.js'), '--mode', 'rpc', '--no-session',
@@ -412,13 +415,13 @@ test('bundled CLI RPC abort notifies once while idle compaction stays silent', {
   };
   try {
     assert.deepEqual(await command('abort'), { id: '1', type: 'response', command: 'abort', success: true });
-    assert.deepEqual(notifications, ['session-abort']);
+    assert.deepEqual(notifications, ['session-abort', 'later-handler']);
     const compact = await command('compact');
     assert.equal(compact.success, false);
     assert.match(compact.error ?? '', /Nothing to compact|No model/i);
-    assert.deepEqual(notifications, ['session-abort']);
+    assert.deepEqual(notifications, ['session-abort', 'later-handler']);
     assert.equal((await command('abort')).success, true);
-    assert.deepEqual(notifications, ['session-abort', 'session-abort']);
+    assert.deepEqual(notifications, ['session-abort', 'later-handler', 'session-abort', 'later-handler']);
   } finally {
     clearTimeout(deadline);
     child.stdin.end();
