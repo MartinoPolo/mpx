@@ -33,6 +33,9 @@ All documentation should be very concise and should pass a test if this will be 
 
 ## Execution
 
+Agents may run in sandboxes. Report inaccessible paths or websites, why access was needed, and any
+available error or block details.
+
 Requests to answer, explain, inspect, or report are read-only. Requested changes include
 implementation and verification. Commits, pushes, PRs, and merges require a request or an explicitly
 invoked workflow.
