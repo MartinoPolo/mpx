@@ -157,6 +157,22 @@ Add `mpxconfig.json` to the repository root (linked worktrees share the main che
   empty arrays. Entries look like `{ "command": "pnpm test", "cwd": "." }`, relative to the repository
   root. Full verification runs both; put only deferred checks in `full_checks`.
 
+### Orca worktree setup
+
+Each repository's Orca setup script runs `node "$MPX_PROJECTS/mpx/scripts/prepare-worktree.mjs"`,
+which copies missing `.vscode`, `.cursor`, and `.local` files from the root checkout. To give every
+worktree its own dev-server ports, pass the file and each port's root-checkout default:
+
+```bash
+node "$MPX_PROJECTS/mpx/scripts/prepare-worktree.mjs" --port-file .env.development.local \
+  --port VITE_COMPONENTS_PORT=8100 --port VITE_DOCS_PORT=8101
+```
+
+Worktree slot _n_ gets `default + offset + 10n`, so defaults must be less than 10 apart. The lowest
+slot not used by any checkout's port file wins; slot 0 stays with the root checkout. Set
+`MPX_PORT_OFFSET` per machine, such as 1000 in a sandbox, so forwarded ports never collide with host
+ones; `--port-offset` overrides it. A file that already sets one of the ports is left unchanged.
+
 ### Machine-local configuration
 
 `$APPDATA/mpx/config.json` holds account roots, account domains, default packs, and local overrides.

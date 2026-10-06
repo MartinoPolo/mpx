@@ -10,6 +10,8 @@ conventions belong in `AGENTS.md`; rollout evidence and recovery belong in `migr
 - **Keep MPX stateless and Orca operational.** Orca owns worktrees, terminals, server visibility,
   orchestration status, and desktop attention. MPX may emit thin status events, but has no daemon,
   credential router, session or port registry, worktree service, or competing notification writer.
+  Orca's setup script may ask `prepare-worktree.mjs` for per-worktree dev ports; the slot is derived
+  from sibling worktrees' own port files at setup time and never recorded elsewhere.
 - **Keep independently chosen utilities independent.** MPX installation and retirement must not
   uninstall user utilities or absorb their state; ownership does not follow functional overlap.
 - **Support Git Bash as the Windows shell contract.** Preserve shell identity so native hooks run
