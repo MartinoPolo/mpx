@@ -1,5 +1,5 @@
 import type { LaunchWarning } from './contracts.js';
-import { LAUNCH_WARNING_CODE, WARNING_SEVERITY } from './contracts.js';
+import { LAUNCH_WARNING_CODE, launchWarningsRequireConfirmation, WARNING_SEVERITY } from './contracts.js';
 import { confirmLaunch, formatLaunchWarning } from './launch.js';
 
 const warningCodes = new Set<string>(Object.values(LAUNCH_WARNING_CODE));
@@ -30,7 +30,8 @@ export function parseLaunchWarnings(arguments_: readonly string[]): LaunchWarnin
 async function main(): Promise<void> {
   const warnings = parseLaunchWarnings(process.argv.slice(2));
   for (const warning of warnings) console.error(formatLaunchWarning(warning));
-  await confirmLaunch({ requiresConfirmation: true });
+  // An empty list is an explicit acknowledgement request from a caller without diagnostics.
+  await confirmLaunch({ requiresConfirmation: warnings.length === 0 || launchWarningsRequireConfirmation(warnings) });
 }
 
 main().catch(error => {

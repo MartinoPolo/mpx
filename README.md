@@ -100,7 +100,8 @@ mpx sync --runtime-only --account personal --harness pi --preview
 mpx sync --orca-hooks-only --harness pi --preview
 ```
 
-Launch warnings require Enter to continue; Ctrl+C or Escape cancels. They never switch accounts.
+Launch warnings require Enter to continue; Ctrl+C or Escape cancels. A work account in a
+personal-owned location only displays its warning and launches. Warnings never switch accounts.
 Use `mpx launch-preview pi personal` to inspect without launching, or `pi --verbose` for expanded
 startup details.
 

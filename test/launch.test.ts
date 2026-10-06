@@ -48,7 +48,7 @@ test('additive arguments and selected native roots preserve all caller argument 
   } finally { await f.cleanup(); }
 });
 
-test('ownership and configuration warnings are typed, prioritized, deduplicated, and all require confirmation', async () => {
+test('ownership and configuration warnings are typed, prioritized, deduplicated, and require confirmation unless work reaches personal', async () => {
   const f = await fixture();
   try {
     const base = { root: f.root, harness: 'pi' as const, config: f.config, selection: { packs: [], paths: [], warnings: [] }, args: [] };
@@ -58,9 +58,13 @@ test('ownership and configuration warnings are typed, prioritized, deduplicated,
     ]);
     assert.equal(red.requiresConfirmation, true);
     const orange = await createLaunchSpec({ ...base, cwd: join(f.root, 'personal', 'repo'), account: 'work', project: registered });
-    assert.equal(orange.warnings[0]?.code, 'work-in-personal');
+    assert.deepEqual(orange.warnings.map(warning => warning.code), ['work-in-personal']);
+    assert.equal(orange.requiresConfirmation, false);
+    const orangeWithoutConfig = await createLaunchSpec({ ...base, cwd: join(f.root, 'personal', 'repo'), account: 'work', project: { warnings: [] } });
+    assert.equal(orangeWithoutConfig.requiresConfirmation, true);
     const unknown = await createLaunchSpec({ ...base, cwd: join(f.root, 'elsewhere'), account: 'personal', project: registered });
     assert.equal(unknown.warnings[0]?.code, 'ownership-unknown');
+    assert.equal(unknown.requiresConfirmation, true);
     assert.match(formatLaunchWarning(red.warnings[0]!), /^\x1b\[31m\[personal-in-work\]: /);
   } finally { await f.cleanup(); }
 });

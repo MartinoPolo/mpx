@@ -70,7 +70,8 @@ conventions belong in `AGENTS.md`; rollout evidence and recovery belong in `migr
   domain roots, defaults, and executables; repository manifests own project identity and integrations.
 - **Determine account ownership independently of manifests.** Recursive account domains identify
   personal and work locations. Mismatches are overridable warnings, and launch warnings require
-  acknowledgement before a fullscreen UI can hide them.
+  acknowledgement before a fullscreen UI can hide them. A work account reaching personal locations
+  is routine, so that warning is displayed without acknowledgement.
 - **Keep exceptional project metadata machine-local.** Explicit user overrides may supply missing
   metadata or accept its absence; repository manifests remain authoritative. Avoid parent-manifest
   inheritance because it can route unrelated repositories through the wrong providers.

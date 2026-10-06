@@ -55,6 +55,10 @@ export const LAUNCH_WARNING_CODE = {
 } as const;
 export type LaunchWarningCode = (typeof LAUNCH_WARNING_CODE)[keyof typeof LAUNCH_WARNING_CODE];
 export interface LaunchWarning { code: LaunchWarningCode; severity: WarningSeverity; message: string }
+const INFORMATIONAL_LAUNCH_WARNING_CODES: ReadonlySet<LaunchWarningCode> = new Set([LAUNCH_WARNING_CODE.workInPersonal]);
+export function launchWarningsRequireConfirmation(warnings: readonly LaunchWarning[]): boolean {
+  return warnings.some(warning => !INFORMATIONAL_LAUNCH_WARNING_CODES.has(warning.code));
+}
 const WARNING_PRIORITY = { red: 0, orange: 1, yellow: 2 } satisfies Record<WarningSeverity, number>;
 export function sortLaunchWarnings(warnings: readonly LaunchWarning[]): LaunchWarning[] {
   const unique = new Map<string, LaunchWarning>();

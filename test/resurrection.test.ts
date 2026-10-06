@@ -179,6 +179,33 @@ test('non-TTY warning acknowledgement fails without spawning the native process'
   }
 });
 
+test('work-in-personal warning is displayed and launches native without acknowledgement', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'mpx-resurrection-informational-'));
+  try {
+    const capture = join(directory, 'native-capture.json');
+    const script = join(directory, 'capture.mjs');
+    writeFileSync(script, `import { writeFileSync } from 'node:fs'; writeFileSync(process.argv[2], 'spawned');`);
+    const source = prepared();
+    source.plan.cwd = directory;
+    source.spec.cwd = directory;
+    source.plan.args = [script, capture];
+    source.spec.executable = process.execPath;
+    source.spec.args = [script, capture];
+    source.spec.warnings = [{ code: 'work-in-personal', severity: 'orange', message: 'visible warning' }];
+    source.spec.requiresConfirmation = false;
+    source.spec.env = { ...process.env, PI_CODING_AGENT_DIR: source.plan.accountRoot };
+    const command = buildPreparedLaunchCommand(adaptPreparedPiResurrection(source), source.spec.env);
+    const result = spawnSync('bash', ['--noprofile', '--norc', '-c', command], {
+      cwd: directory, env: source.spec.env, encoding: 'utf8', timeout: 20_000,
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stderr, /\[work-in-personal\]: visible warning/);
+    assert.equal(readFileSync(capture, 'utf8'), 'spawned');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('warning-free recipe executes native directly with exact arguments and environment', () => {
   const directory = mkdtempSync(join(tmpdir(), 'mpx-resurrection-native-'));
   try {

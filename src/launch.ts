@@ -3,7 +3,7 @@ import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { spawn } from 'node:child_process';
 import { createInterface, type Interface, type Key } from 'node:readline';
 import type { Account, Harness, LaunchSpec, LaunchWarning, PackSelection, ProjectSelection, UserConfig } from './contracts.js';
-import { LAUNCH_WARNING_CODE, sortLaunchWarnings, WARNING_SEVERITY } from './contracts.js';
+import { LAUNCH_WARNING_CODE, launchWarningsRequireConfirmation, sortLaunchWarnings, WARNING_SEVERITY } from './contracts.js';
 
 const retainedMpx = new Set(['MPX_PROJECTS', 'MPX_WORK', 'MPX_CLONED', 'MPX_APPS', 'MPX_ONEDRIVE', 'MPX_AI_GENERATED', 'MPX_AI_DUMP', 'MPX_TEMP', 'MPX_OBSIDIAN_VAULT', 'MPX_PI_EXECUTABLE', 'MPX_CLAUDE_EXECUTABLE']);
 export function cleanEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
@@ -102,7 +102,7 @@ export async function createLaunchSpec(options: {
     executable, args: [...injected, ...args], cwd, env,
     label: native ? 'Native Pi · extension discovery-disabled · explicit extensions may load; see native startup list' : `MPX · ${account.toUpperCase()} · ${harness === 'pi' ? 'Pi' : 'Claude'}`,
     warnings: normalizedWarnings,
-    requiresConfirmation: normalizedWarnings.length > 0,
+    requiresConfirmation: launchWarningsRequireConfirmation(normalizedWarnings),
   };
 }
 
