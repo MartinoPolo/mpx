@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<script src="/frame-setup.js" data-bundle="<bundle.css> <bundle.js>" data-hold-timers="500"></script>
+<style>
+	html, body { margin: 0; height: 100%; background: #ffffff; font: 400 15px 'Segoe UI', sans-serif; color: #1f2937; }
+	body { display: flex; flex-direction: column; }
+	.section-title { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6b7280; }
+	.live { padding: 16px 22px 22px; }
+	.component { display: flex; justify-content: center; padding-top: 12px; zoom: 1.6; }
+	/* The readouts sit apart from the component, so it is clear which part is the real thing. */
+	.notes { flex: 1; padding: 16px 22px; background: #f9fafb; border-top: 1px dashed #d1d5db; }
+	.rows { display: grid; grid-template-columns: 128px minmax(0, 1fr); gap: 8px 14px; margin-top: 10px; }
+	.label { align-self: center; font-size: 12px; font-weight: 600; text-transform: uppercase; color: #6b7280; }
+	.value { min-height: 22px; padding: 7px 12px; border-radius: 8px; background: #ffffff; border: 1px solid #e5e7eb; font: 400 14px Consolas, monospace; }
+	.value.good { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
+	.value.bad { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+</style>
+</head>
+<body>
+	<section class="live">
+		<div class="section-title">The component</div>
+		<div class="component" data-region="component"><my-component></my-component></div>
+	</section>
+	<section class="notes">
+		<div class="section-title">What the demo observed</div>
+		<div class="rows">
+			<div class="label">Result</div>
+			<div class="value" id="readout" data-region="readout"></div>
+			<div class="label">Console errors</div>
+			<div class="value" id="errors" data-region="errors"></div>
+		</div>
+	</section>
+	<script>
+		const readout = document.getElementById('readout');
+		const errors = document.getElementById('errors');
+		window.addEventListener('unhandledrejection', (event) => {
+			errors.textContent = `Uncaught (in promise) ${event.reason?.name ?? event.reason}`;
+			errors.className = 'value bad';
+		});
+		/* Replace real system resources (clipboard, network, storage) with in-page fakes here, per scene condition. */
+		let observed = null;
+		window.demo = {
+			observed: () => observed,
+			async reset(scene) {
+				demoFrame.releaseHeldTimers();
+				await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+				observed = null;
+				readout.className = 'value';
+				readout.textContent = 'not tried yet';
+				errors.className = 'value';
+				errors.textContent = 'none';
+			},
+			show(good) {
+				readout.className = `value ${good ? 'good' : 'bad'}`;
+				readout.textContent = String(observed);
+			},
+		};
+	</script>
+</body>
+</html>

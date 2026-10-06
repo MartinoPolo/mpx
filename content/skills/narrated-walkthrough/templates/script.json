@@ -1,0 +1,124 @@
+{
+	"title": "<What the change does, as a title>",
+	"subtitle": "<project> · <type(scope)> · <base>, <head>",
+	"review": {
+		"repository": "<absolute repository path>",
+		"base": "<base revision>",
+		"head": "<head revision>"
+	},
+	"voice": "Charon",
+	"style": "A calm, friendly senior software engineer walking a colleague through a code change on a screen share. Clear, measured pace with natural pauses, warm but focused. Read code identifiers precisely and naturally, the way developers say them aloud.",
+	"files": {
+		"main": { "path": "<repository-relative path>" },
+		"helper": { "path": "<repository-relative path>" }
+	},
+	"scenes": [
+		{
+			"card": "overview",
+			"title": "Overview",
+			"points": [
+				{ "label": "Problem", "text": "<what was wrong, as a user or caller saw it>" },
+				{ "label": "Fix", "text": "<what the change does about it>" },
+				{ "label": "<Consequence>", "text": "<the behaviour a reviewer must know about>" }
+			],
+			"beats": [
+				{
+					"say": "<This walkthrough covers ... and the problem.>",
+					"highlights": [{ "at": "<phrase from say>", "targets": ["Problem"] }],
+					"note": "<short label>"
+				},
+				{
+					"say": "<The fix, then what comes next.>",
+					"highlights": [{ "at": "<phrase from say>", "targets": ["Fix"] }],
+					"note": "<short label>"
+				}
+			]
+		},
+		{
+			"card": "changes",
+			"title": "What changed",
+			"groups": [
+				{ "label": "The change", "files": ["main", "helper"] },
+				{ "label": "Tests and config, not narrated", "rest": true }
+			],
+			"beats": [
+				{
+					"say": "<Where the heart of the change is, and the order we will take.>",
+					"highlights": [{ "at": "<phrase from say>", "targets": ["The change"] }],
+					"note": "<short label>"
+				}
+			]
+		},
+		{
+			"title": "<One idea, as a chapter title>",
+			"panes": ["main", "helper"],
+			"beats": [
+				{
+					"say": "<What the old code did and why it was wrong.>",
+					"file": "main",
+					"lines": "o10-o12",
+					"token": { "old": 11, "text": "<text on old line 11>" },
+					"note": "<short label>"
+				},
+				{
+					"say": "<What replaces it, and where it is defined.>",
+					"file": "main",
+					"lines": "14",
+					"token": { "line": 14, "text": "<call on new line 14>" },
+					"then": { "at": 2.5, "file": "helper", "lines": "3-8", "token": { "line": 3, "text": "<definition name>" }, "link": true },
+					"pause": 2.5,
+					"note": "<short label>"
+				}
+			]
+		},
+		{
+			"card": "alternatives",
+			"title": "Other ways to fix it",
+			"options": [
+				{
+					"label": "<The chosen fix>",
+					"origin": "chosen",
+					"summary": "<one sentence>",
+					"sketch": { "language": "ts", "code": "<two to five lines>" },
+					"pros": ["<pro>"],
+					"cons": ["<con>"]
+				},
+				{
+					"label": "<Another way>",
+					"origin": "suggestion",
+					"summary": "<one sentence>",
+					"sketch": { "language": "ts", "code": "<two to five lines>" },
+					"pros": ["<pro>"],
+					"cons": ["<con>"]
+				}
+			],
+			"beats": [
+				{
+					"say": "<The chosen fix and why.>",
+					"highlights": [{ "at": "<phrase from say>", "targets": ["<The chosen fix>"] }],
+					"note": "chosen: <short label>"
+				},
+				{
+					"say": "<This one is a suggestion from this walkthrough, not an option the author weighed. ...>",
+					"highlights": [{ "at": "<phrase from say>", "targets": ["<Another way>"] }],
+					"note": "suggestion: <short label>"
+				}
+			]
+		},
+		{
+			"card": "notes",
+			"title": "Review notes",
+			"points": [
+				{ "label": "Tests", "text": "<what is covered and how>" },
+				{ "label": "Behaviour change", "text": "<what callers will notice>" }
+			],
+			"beats": [
+				{
+					"say": "<What to check when reviewing.>",
+					"highlights": [{ "at": "<phrase from say>", "targets": ["Tests"] }],
+					"note": "<short label>"
+				}
+			]
+		}
+	]
+}

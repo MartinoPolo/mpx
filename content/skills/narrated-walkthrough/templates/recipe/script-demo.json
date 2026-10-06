@@ -1,0 +1,42 @@
+{
+	"demo": {
+		"recipe": "recipe",
+		"kicker": "The change, live",
+		"sides": { "before": "Before the change", "after": "After the change" },
+		"bundle": "<repository-relative bundle folder>",
+		"builtFile": "<file in the bundle folder>",
+		"build": ["<command run in each revision snapshot>"],
+		"environment": {},
+		"holdAfterAction": 1.6,
+		"scenes": [{ "id": "main", "title": "<What the scene shows>", "subtitle": "<the condition it sets up>" }],
+		"live": {
+			"text": "<How to try it yourself:>",
+			"command": "<dev server command>",
+			"stories": [{ "label": "<story name>", "url": "<story URL>" }]
+		}
+	},
+	"demoScene": {
+		"title": "The change, live",
+		"demo": true,
+		"beats": [
+			{
+				"say": "<Both builds side by side, and the condition this scene sets up.>",
+				"video": { "clip": "main" },
+				"highlights": [{ "at": "<phrase>", "targets": ["before.column"] }, { "at": "<phrase>", "targets": ["subtitle"] }],
+				"note": "<short label>"
+			},
+			{
+				"say": "<What the old build does.>",
+				"video": { "clip": "main-before" },
+				"highlights": [{ "at": "<phrase>", "targets": ["before.readout"] }],
+				"note": "<short label>"
+			},
+			{
+				"say": "<What the new build does.>",
+				"video": { "clip": "main-after" },
+				"highlights": [{ "at": "<phrase>", "targets": ["after.readout", "after.verdict"] }],
+				"note": "<short label>"
+			}
+		]
+	}
+}

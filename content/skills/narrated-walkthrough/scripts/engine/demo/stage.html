@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+	:root { --stage: #f3f4f6; --card: #ffffff; --border: #e5e7eb; --text: #111827; --muted: #6b7280; --accent: #2563eb; --success: #059669; --error: #dc2626; }
+	html, body { margin: 0; height: 100%; background: var(--stage); color: var(--text); font: 400 16px 'Segoe UI', sans-serif; overflow: hidden; }
+	header { padding: 26px 40px 0; }
+	.kicker { font-size: 13px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
+	h1 { margin: 6px 0 0; font-size: 30px; font-weight: 700; }
+	.subtitle { margin-top: 6px; color: var(--muted); font-size: 16px; min-height: 22px; }
+	main { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; padding: 22px 40px; }
+	.column { background: var(--card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; transition: box-shadow 0.3s, border-color 0.3s; }
+	.column.active { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15); }
+	.column-header { display: flex; align-items: baseline; gap: 10px; padding: 14px 20px; border-bottom: 1px solid var(--border); }
+	.column-title { font-weight: 700; font-size: 18px; }
+	.column-revision { font: 400 13px Consolas, monospace; color: var(--muted); }
+	iframe { display: block; width: 100%; height: 340px; border: 0; }
+	.verdict { padding: 12px 20px; font-weight: 600; min-height: 22px; border-top: 1px solid var(--border); color: var(--muted); }
+	.verdict.good { color: var(--success); }
+	.verdict.bad { color: var(--error); }
+	#cursor { position: fixed; left: 640px; top: 700px; width: 26px; height: 26px; pointer-events: none; z-index: 10; transition: left 0.9s cubic-bezier(0.3, 0.7, 0.4, 1), top 0.9s cubic-bezier(0.3, 0.7, 0.4, 1); }
+	#cursor svg { filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35)); }
+	.ripple { position: fixed; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; border: 3px solid var(--accent); pointer-events: none; animation: ripple 0.6s ease-out forwards; z-index: 9; }
+	@keyframes ripple { from { transform: scale(0.3); opacity: 1; } to { transform: scale(1.4); opacity: 0; } }
+</style>
+</head>
+<body>
+	<header>
+		<div class="kicker" id="kicker"></div>
+		<h1 id="title"></h1>
+		<div class="subtitle" id="subtitle" data-region="subtitle"></div>
+	</header>
+	<main>
+		<section class="column" id="before" data-region="column">
+			<div class="column-header"><span class="column-title" id="before-title"></span><span class="column-revision" id="before-revision"></span></div>
+			<iframe data-side="before"></iframe>
+			<div class="verdict" id="before-verdict" data-region="verdict"></div>
+		</section>
+		<section class="column" id="after" data-region="column">
+			<div class="column-header"><span class="column-title" id="after-title"></span><span class="column-revision" id="after-revision"></span></div>
+			<iframe data-side="after"></iframe>
+			<div class="verdict" id="after-verdict" data-region="verdict"></div>
+		</section>
+	</main>
+	<div id="cursor"><svg viewBox="0 0 24 24" width="26" height="26"><path d="M4 2 L4 20 L9 15 L12.5 22 L15.5 20.5 L12 13.5 L19 13.5 Z" fill="#111827" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/></svg></div>
+	<script>
+		window.stage = {
+			scene(title, subtitle) {
+				document.getElementById('title').textContent = title;
+				document.getElementById('subtitle').textContent = subtitle;
+				for (const side of ['before', 'after']) {
+					document.getElementById(`${side}-verdict`).textContent = '';
+					document.getElementById(`${side}-verdict`).className = 'verdict';
+				}
+			},
+			/* The recipe's frame runs once per side, each loading the bundle of its own revision. */
+			setup(kicker, sides) {
+				document.getElementById('kicker').textContent = kicker;
+				for (const [side, { title, revision }] of Object.entries(sides)) {
+					document.getElementById(`${side}-title`).textContent = title;
+					document.getElementById(`${side}-revision`).textContent = revision;
+					document.querySelector(`iframe[data-side="${side}"]`).src = `recipe/frame.html?side=${side}`;
+				}
+			},
+			focus(side) {
+				for (const name of ['before', 'after']) document.getElementById(name).classList.toggle('active', name === side);
+			},
+			moveCursor(x, y) {
+				const cursor = document.getElementById('cursor');
+				cursor.style.left = `${x - 4}px`;
+				cursor.style.top = `${y - 2}px`;
+			},
+			ripple(x, y) {
+				const ripple = document.createElement('div');
+				ripple.className = 'ripple';
+				ripple.style.left = `${x}px`;
+				ripple.style.top = `${y}px`;
+				document.body.append(ripple);
+				setTimeout(() => ripple.remove(), 700);
+			},
+			verdict(side, text, good) {
+				const verdict = document.getElementById(`${side}-verdict`);
+				verdict.textContent = text;
+				verdict.className = `verdict ${good ? 'good' : 'bad'}`;
+			},
+		};
+	</script>
+</body>
+</html>
