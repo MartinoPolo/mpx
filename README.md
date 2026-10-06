@@ -2,6 +2,55 @@
 
 Shared skills, account-aware launchers, and project configuration for Pi and Claude Code.
 
+## Updating Pi and packages
+
+`pi`, `piw`, and `xpi` share one MPX-managed Pi installation. Personal and work settings remain
+separate; `xpi` disables extension discovery, not the account profile.
+
+### Update Pi itself
+
+Pi itself is patched and pinned in MPX. There is **no one-command core updater** for this setup;
+`update:pi-extensions` does not update Pi itself.
+
+The recommended approach is to open an agent in MPX from Git Bash:
+
+```bash
+cd "$MPX_PROJECTS/mpx"
+pi
+```
+
+Then ask:
+
+> Update the shared Pi core to the latest release. Keep its companion packages aligned, rebase
+> the existing cancellation patch for both SDK and bundled CLI, update the lockfile, and run the
+> repository checks. Preserve account settings and unrelated changes.
+
+For a manual update, work from `"$MPX_PROJECTS/mpx"`:
+
+1. Check the latest release with `pnpm view @earendil-works/pi-coding-agent version`.
+2. Update the Pi dependency pins in `package.json`; keep Pi companion versions aligned.
+3. Rebase the core patch with `pnpm patch` / `pnpm patch-commit`, updating the lockfile and
+   patch registration in `pnpm-workspace.yaml`. Preserve both SDK and bundled CLI fixes.
+4. Run `pnpm install --frozen-lockfile`, `pnpm run typecheck`, `pnpm build`, and `pnpm test`.
+5. Verify `./node_modules/.bin/pi --version`, `mpx launch-preview pi personal`, and
+   `mpx launch-preview pi work`, then restart Pi. One core update serves both accounts.
+
+Do not use `pi update`, `xpi update`, `pi update --self`, `pi update --all`, or a global npm
+installation to update this shared core: those bypass MPX's dependency and patch workflow.
+
+### Update extensions and packages
+
+Run from any Git Bash directory, regardless of Pi aliases:
+
+```bash
+(cd "$MPX_PROJECTS/mpx" && pnpm run update:pi-extensions)
+```
+
+This updates personal then work packages, preserving account settings and explicit version pins.
+Unpinned packages receive newer releases when this command runs; updates are not scheduled or run
+at startup. For checkout-local patched extensions, update their repository dependency pins and
+rebase their patches using the same maintenance steps as core. Restart Pi after updating.
+
 ## Development
 
 Requirements: Node 22.20 or newer, pnpm, and Git Bash on Windows. From this repository:
@@ -41,20 +90,6 @@ Run from Git Bash in your project:
 | `mpx project setup . --preview` | Preview optional project setup |
 | `mpx project config <directory>` | Inspect resolved project configuration |
 
-From this repository, run `pnpm run update:pi-extensions` to update native Pi extensions for
-personal then work using separate account roots; native package pins and account configs remain intact.
-
-Pi core for `pi` and `piw` is pinned in this repository, including a checkout-local cancellation
-patch. To update core, change the Pi dependency pins here, rebase the patch with `pnpm patch` /
-`pnpm patch-commit`, run `pnpm install --frozen-lockfile` and the repository checks, then verify
-`./node_modules/.bin/pi --version`, `mpx launch-preview pi personal`, and
-`mpx launch-preview pi work`. Do not use `pi update`, `xpi update`,
-`pi update --self`, or `pi update --all` to update this installation: those commands target Pi's
-native self-updater rather than this repository's package and patch lockfile. Current Pi releases
-reject self-updates from project-local pnpm installations when they are not under a global package
-root, but use the repository workflow even if that native safeguard changes. For native packages
-only, use `pnpm run update:pi-extensions` rather than a core self-update command.
-
 The account shortcuts require MPX's `bin/` to precede native launchers on `PATH`. Check with
 `type -a pi`; use `mpx launch pi personal` to bypass a shadowed `pi` shortcut.
 Preview sync/setup before allowing writes; preserve unrelated native and project files.
@@ -68,6 +103,16 @@ mpx sync --orca-hooks-only --harness pi --preview
 Launch warnings require Enter to continue; Ctrl+C or Escape cancels. They never switch accounts.
 Use `mpx launch-preview pi personal` to inspect without launching, or `pi --verbose` for expanded
 startup details.
+
+## Codex hooks
+
+Codex can reuse the current safeguard engine through `src/codex-hooks.ts`. A local Node bootstrap
+loads it with this repository's `tsx` loader; register `PreToolUse`, `PostToolUse`, `SessionStart`,
+and `UserPromptSubmit` in `~/.codex/hooks.json`. Match shell calls as `Bash` and patches as
+`apply_patch`. The adapter normalizes Codex patch and unified-exec inputs before invoking the
+shared policies, and supplies canonical compaction guidance without replacing Codex instructions.
+Review and trust changed registrations in Codex before use. This is a hooks integration;
+`mpx sync` still targets Pi and Claude Code accounts.
 
 ## Delivery skills
 
