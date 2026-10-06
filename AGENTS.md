@@ -15,6 +15,12 @@ When asked to update Pi extensions, run `pnpm run update:pi-extensions` from thi
 updates personal then work via native Pi, preserving pins, patches, and separate account configs.
 Verify installed versions in both accounts and report any remaining drift.
 
+When asked to build or sync MPX on the host, also update each running Docker Sandbox (`sbx ls`)
+checkout at `$MPX_PROJECTS/mpx`: it pulls from `origin`, so unpushed host commits do not reach it.
+Through `sbx exec <sandbox> bash -lc`, fast-forward, `pnpm install --frozen-lockfile`, `pnpm build`,
+and `mpx sync`; report its commit. Never discard sandbox-local edits without confirming they are
+already upstream. Set `MSYS_NO_PATHCONV=1` from Git Bash so Linux paths survive.
+
 ## Source map
 
 - `content/` is the authored skill, specialist, rule, and shared-instruction source.
