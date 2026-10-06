@@ -5,8 +5,9 @@ import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import type { Harness, UserConfig } from './contracts.js';
 
+const PI_STATUS_FILE = 'orca-agent-status.ts';
 const PI_FILES = [
-  'orca-agent-status.ts',
+  PI_STATUS_FILE,
   'orca-prefill.ts',
   'orca-titlebar-spinner.ts',
 ] as const;
@@ -21,6 +22,7 @@ export type OrcaMirrorStatus =
   | 'created'
   | 'updated'
   | 'conflict'
+  | 'skipped'
   | 'failed';
 
 export interface OrcaMirrorEntry {
@@ -300,6 +302,10 @@ async function mirrorPi(config: UserConfig, preview: boolean): Promise<OrcaMirro
     const destination = path.join(destinationBase, 'extensions', name);
     try {
       const sourceSnapshot = await boundedFile(sourceRoot, path.join('extensions', name), EXTENSION_LIMIT);
+      if (!sourceSnapshot.exists && name !== PI_STATUS_FILE) {
+        results.push({ harness: 'pi', source, destination, status: 'skipped', error: 'optional Pi source extension is not installed; destination preserved' });
+        continue;
+      }
       if (!sourceSnapshot.exists || !sourceSnapshot.bytes.includes(PI_MARKER)) {
         results.push(failed('pi', source, destination, 'managed Pi source extension is missing or invalid'));
         continue;

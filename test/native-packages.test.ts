@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { DefaultResourceLoader, SettingsManager } from '@earendil-works/pi-coding-agent';
@@ -142,6 +142,35 @@ test('native package status is portable for absent artifacts and requires explic
   } finally {
     await rm(fixture, { recursive: true, force: true });
   }
+});
+
+test('status resolves a declared directory index exactly as the native loader does', async () => {
+  const fixture = await mkdtemp(join(tmpdir(), 'mpx-native-directory-entry-'));
+  try {
+    const account = resolve(fixture, 'agent');
+    await makeAccount(account, versions('0.35.0'));
+    const packageRoot = join(account, 'npm', 'node_modules', 'pi-web-access');
+    const entryPoint = join(packageRoot, 'dist', 'index.ts');
+    await mkdir(dirname(entryPoint));
+    await rename(join(packageRoot, 'index.ts'), entryPoint);
+    await put(join(packageRoot, 'package.json'), JSON.stringify({
+      name: 'pi-web-access', version: '0.35.0', pi: { extensions: ['./dist'] },
+    }));
+    const inspected = await inspectNativePackages([{ account: 'fixture', root: account }]);
+    assert.equal(inspected.ok, true);
+    const web = inspected.packages.find(entry => entry.packageName === 'pi-web-access');
+    assert.deepEqual(web?.loadTargets, [entryPoint]);
+    const loader = new DefaultResourceLoader({
+      cwd: fixture, agentDir: resolve(fixture, 'isolated-agent'), settingsManager: SettingsManager.inMemory({}),
+      additionalExtensionPaths: [packageRoot], noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true,
+    });
+    await loader.reload();
+    assert.deepEqual(loader.getExtensions().errors, []);
+    assert.equal(loader.getExtensions().extensions[0]?.resolvedPath, entryPoint);
+    await rm(entryPoint);
+    const missing = await inspectNativePackages([{ account: 'fixture', root: account }]);
+    assert.equal(missing.packages.find(entry => entry.packageName === 'pi-web-access')?.status, 'missing');
+  } finally { await rm(fixture, { recursive: true, force: true }); }
 });
 
 test('status load target supports explicit package-directory extension loading', async () => {

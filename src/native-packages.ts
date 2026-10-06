@@ -58,6 +58,20 @@ async function isFile(path: string): Promise<boolean> {
   try { return (await stat(path)).isFile(); } catch { return false; }
 }
 
+async function extensionEntryPoint(target: string): Promise<string | undefined> {
+  try {
+    const metadata = await stat(target);
+    if (metadata.isFile()) return target;
+    if (metadata.isDirectory()) {
+      for (const name of ['index.ts', 'index.js']) {
+        const entryPoint = join(target, name);
+        if (await isFile(entryPoint)) return entryPoint;
+      }
+    }
+  } catch { return undefined; }
+  return undefined;
+}
+
 const MAX_JSON_BYTES = 1024 * 1024;
 
 async function readJson(path: string): Promise<unknown> {
@@ -165,8 +179,9 @@ async function inspectOne(input: NativePackageRoot, packageName: RetainedNativeP
           continue;
         }
         const target = containedFile(packagePath, entry);
-        if (!target || !(await isFile(target))) missing.push(`extension target: ${entry}`);
-        else loadTargets.push(target);
+        const entryPoint = target && await extensionEntryPoint(target);
+        if (!entryPoint) missing.push(`extension target: ${entry}`);
+        else loadTargets.push(entryPoint);
       }
     }
   } catch {

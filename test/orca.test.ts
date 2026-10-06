@@ -255,6 +255,28 @@ test('missing account roots are not created and do not block the other harness',
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test('status-only SSH sources skip absent optional extensions and preserve existing destinations', async () => {
+  const { root, config } = await fixture();
+  try {
+    await put(path.join(config.accounts.personal.pi, 'extensions', piNames[0]), `// ${marker}\nstatus`);
+    const preserved = path.join(config.accounts.work.pi, 'extensions', piNames[1]);
+    await put(preserved, '// user-owned destination');
+    await sourceClaude(config, { hooks: { Stop: [{ hooks: [{ type: 'command', command: '/x/agent-hooks/claude-hook.sh' }] }] } });
+    const preview = await mirrorOrcaHooks(config);
+    assert.equal(preview.ok, true);
+    assert.deepEqual(preview.results.map(entry => entry.status), ['would-create', 'skipped', 'skipped', 'would-create']);
+    await absent(path.join(config.accounts.work.pi, 'extensions', piNames[0]));
+    const applied = await mirrorOrcaHooks(config, { preview: false });
+    assert.equal(applied.ok, true);
+    assert.deepEqual(applied.results.map(entry => entry.status), ['created', 'skipped', 'skipped', 'created']);
+    assert.equal(await readFile(preserved, 'utf8'), '// user-owned destination');
+    await absent(path.join(config.accounts.work.pi, 'extensions', piNames[2]));
+    const repeated = await mirrorOrcaHooks(config, { preview: false });
+    assert.equal(repeated.ok, true);
+    assert.deepEqual(repeated.results.map(entry => entry.status), ['unchanged', 'skipped', 'skipped', 'unchanged']);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test('missing and unmarked Pi sources fail independently of a healthy file and Claude', async () => {
   const { root, config } = await fixture();
   try {
