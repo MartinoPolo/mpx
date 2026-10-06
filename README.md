@@ -190,7 +190,7 @@ as above; shared domains do not suppress project configuration warnings. Inspect
 ### Generated outputs
 
 - `MPX_AI_GENERATED`: saved media and the durable tutorial library.
-- `MPX_AI_DUMP`: general AI scratchpad worth keeping, such as plans, reports, verification, backups, and imports.
+- `MPX_AI_DUMP`: retained non-project AI work, such as verification, backups, and imports; project plans and reports stay in their repository.
 - `MPX_TEMP`: disposable scratch files; Claude launches use it unless `CLAUDE_CODE_TMPDIR` is set.
 
 Resolve roots from the environment, not hardcoded paths. After changing Windows user variables,

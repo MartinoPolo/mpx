@@ -62,8 +62,11 @@ Missing optional MPX port metadata is not a startup blocker.
 
 ## Files outside repositories
 
+Project-specific plans, research, reports and demo specs belong in the owning repository
+(`docs/plans` when no layout exists); for cross-repo work, pick one coordinating repo and link the
+others. `MPX_AI_DUMP` only for retained non-project work.
+
 - `MPX_TEMP`: disposable files (scripts, screenshots, logs); may be deleted tomorrow.
-- `MPX_AI_DUMP`: general AI scratchpad worth keeping (plans, reports, artifacts, build workspaces).
 - `MPX_AI_GENERATED`: final outputs only (rendered videos, podcasts, images), never build workspaces.
 
 Prefer grouping a task's files in one folder named `<project>.<task-or-worktree>`, or just `<task>`.

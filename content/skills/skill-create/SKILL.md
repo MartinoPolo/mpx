@@ -51,8 +51,8 @@ and delegation mechanics.
 
    Require every field to be answered or marked not applicable. Resolve contradictory requirements
    before drafting. Default to explicit invocation unless autonomous discovery is needed.
-   For saved generated media and durable tutorials, use `MPX_AI_GENERATED`; for temporary
-   results worth keeping (plans, reports, verification, backups, files to import), use `MPX_AI_DUMP`.
+   For saved generated media and durable tutorials, use `MPX_AI_GENERATED`; for retained
+   non-project results (verification, backups, files to import), use `MPX_AI_DUMP`.
    Under either root, use an underscore-prefixed, all-caps category and a per-run folder unless
    the skill maintains a stable library. Put disposable intermediates under `MPX_TEMP`; keep
    repository deliverables in the repository. Stop the affected branch if a required root is
