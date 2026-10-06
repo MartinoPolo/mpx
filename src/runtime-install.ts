@@ -5,6 +5,9 @@ import { realpathSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import type { Account, Harness, UserConfig } from './contracts.js';
+import { AUTO_COMPACT_RESERVE } from './claude-statusline/scripts/lib/compaction.mts';
+
+export const CLAUDE_AUTO_COMPACT_TRIGGER_TOKENS = 250_000;
 
 export interface RuntimeScope { account: Account; harness: Harness }
 export interface RuntimeInstallEntry { account: Account; harness: Harness; source: string; destination: string; status: 'installed' | 'planned' | 'unchanged' | 'conflict'; diagnostic?: string }
@@ -180,7 +183,7 @@ async function runRuntime(root: string, config: UserConfig, preview: boolean, sc
           const legacy = LEGACY_CLAUDE_STATUS_LINES[field as keyof typeof LEGACY_CLAUDE_STATUS_LINES];
           return [field, existing === undefined || legacy.some(value => isDeepStrictEqual(value, existing)) || ownedRegistrationEquals(existing, expected) ? expected : existing];
         }));
-        return { ...current, ...statusLineSettings, hooks, permissions: { defaultMode: 'default', ...permissions }, outputStyle: 'mpx-terse' };
+        return { ...current, ...statusLineSettings, hooks, permissions: { defaultMode: 'default', ...permissions }, outputStyle: 'mpx-terse', autoCompactWindow: CLAUDE_AUTO_COMPACT_TRIGGER_TOKENS + AUTO_COMPACT_RESERVE };
       }, preview));
     }
   }

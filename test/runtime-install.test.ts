@@ -5,8 +5,9 @@ import { pathToFileURL } from 'node:url';
 import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { claudeHookEntries, claudeStatusLineEntries, piRuntimeBootstrap, syncRuntime, syncRuntimeScope, validateRuntimeScope } from '../src/runtime-install.js';
+import { CLAUDE_AUTO_COMPACT_TRIGGER_TOKENS, claudeHookEntries, claudeStatusLineEntries, piRuntimeBootstrap, syncRuntime, syncRuntimeScope, validateRuntimeScope } from '../src/runtime-install.js';
 import type { UserConfig } from '../src/contracts.js';
+import { autoCompactLimit } from '../src/claude-statusline/scripts/lib/compaction.mts';
 
 test('Pi runtime registration uses the canonical MPX ownership marker', () => {
   const root = resolve('fixture-root');
@@ -76,6 +77,7 @@ test('Claude scopes preserve native permission modes and initialize only an abse
       const after = JSON.parse(await readFile(join(selected, 'settings.json'), 'utf8'));
       assert.deepEqual(after.permissions, { defaultMode, allow: ['Read'], deny: ['Bash(secret-command)'] });
       assert.equal(after.unrelated, true);
+      assert.equal(autoCompactLimit(Number.MAX_SAFE_INTEGER, after.autoCompactWindow), CLAUDE_AUTO_COMPACT_TRIGGER_TOKENS);
     }
     await writeFile(join(selected, 'settings.json'), JSON.stringify({ permissions: { allow: ['Read'] } }));
     assert.equal((await syncRuntimeScope(resolve('.'), config, { account: 'personal', harness: 'claude' }, false)).ok, true);
