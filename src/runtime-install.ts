@@ -78,12 +78,11 @@ async function ownedPiRuntime(root: string, destination: string, preview: boolea
 }
 function quote(value: string): string { return `'${value.replaceAll("'", "'\\''")}'`; }
 function canonicalNodePath(): string { return realpathSync(process.execPath).replaceAll('\\', '/'); }
+// Version managers install each Node release at its own path, so an owned command is identified by
+// its MPX arguments alone; otherwise installing under another Node version duplicates every hook.
 function canonicalizeOwnedNodeCommand(command: string): string {
-  const match = /^'([^']+)' (.+)$/.exec(command);
-  if (!match) return command;
-  try {
-    return realpathSync(match[1]!).replaceAll('\\', '/') === canonicalNodePath() ? `${quote(canonicalNodePath())} ${match[2]}` : command;
-  } catch { return command; }
+  const match = /^'[^']+' (.+)$/.exec(command);
+  return match ? `${quote(canonicalNodePath())} ${match[1]}` : command;
 }
 function canonicalizeOwnedRegistration(value: unknown): unknown {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
@@ -174,7 +173,9 @@ async function runRuntime(root: string, config: UserConfig, preview: boolean, sc
         for (const [event, expected] of Object.entries(claudeHookEntries(root))) {
           const existing = hooks[event] ?? [];
           if (!Array.isArray(existing)) throw new Error(`invalid ${event} registrations; preserved`);
-          const upgraded = existing.map(value => previousRegistrations[event]?.some(previous => ownedRegistrationEquals(value, previous)) || expected.some(entry => ownedRegistrationEquals(value, entry)) ? expected[0] : value);
+          const isOwned = (value: unknown) => previousRegistrations[event]?.some(previous => ownedRegistrationEquals(value, previous)) || expected.some(entry => ownedRegistrationEquals(value, entry));
+          const firstOwnedIndex = existing.findIndex(isOwned);
+          const upgraded = existing.flatMap((value, index) => !isOwned(value) ? [value] : index === firstOwnedIndex ? [expected[0]] : []);
           hooks[event] = [...upgraded, ...expected.filter(entry => !upgraded.some(value => ownedRegistrationEquals(value, entry)))];
         }
         const statusLines = claudeStatusLineEntries(root);

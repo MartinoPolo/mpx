@@ -151,6 +151,22 @@ test('Claude registrations converge when an owned command uses an alias to the s
   } finally { await rm(scratch, { recursive: true, force: true }); }
 });
 
+test('Claude hook registrations installed under another Node version collapse into one current entry', async () => {
+  const scratch = await mkdtemp(join(tmpdir(), 'mpx-runtime-node-version-'));
+  const config: UserConfig = { accounts: { personal: { pi: join(scratch, 'unused-pi'), claude: scratch }, work: { pi: join(scratch, 'unused-work-pi'), claude: join(scratch, 'unused-work-claude') } }, domains: { personal: [], work: [] } };
+  try {
+    const root = resolve('.');
+    const expected = claudeHookEntries(root);
+    const otherNodeVersion = JSON.parse(JSON.stringify(expected).replace(/'[^']+node(?:\.exe)?'/gi, "'C:/fnm/node-versions/v1.0.0/installation/node.exe'"));
+    const unrelated = { hooks: [{ type: 'command', command: 'preserve-native-owner' }] };
+    const hooks = Object.fromEntries(Object.keys(expected).map(event => [event, [...expected[event]!, ...otherNodeVersion[event], unrelated]]));
+    await writeFile(join(scratch, 'settings.json'), JSON.stringify({ hooks }));
+    assert.equal((await syncRuntimeScope(root, config, { account: 'personal', harness: 'claude' }, false)).ok, true);
+    const after = JSON.parse(await readFile(join(scratch, 'settings.json'), 'utf8'));
+    for (const event of Object.keys(expected)) assert.deepEqual(after.hooks[event], [...expected[event]!, unrelated]);
+  } finally { await rm(scratch, { recursive: true, force: true }); }
+});
+
 test('runtime upgrades exact old Windows loader registrations without retaining duplicate broken hooks', async () => {
   const scratch = await mkdtemp(join(tmpdir(), 'mpx-runtime-hook-upgrade-'));
   const config: UserConfig = { accounts: { personal: { pi: join(scratch, 'unused-pi'), claude: scratch }, work: { pi: join(scratch, 'unused-work-pi'), claude: join(scratch, 'unused-work-claude') } }, domains: { personal: [], work: [] } };
