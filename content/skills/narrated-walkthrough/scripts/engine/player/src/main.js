@@ -149,7 +149,8 @@ const editorOptions = {
 	overviewRulerBorder: false,
 	cursorBlinking: 'solid',
 };
-const diffColors = { [ADDED]: 'rgba(115, 201, 145, 0.7)', [REMOVED]: 'rgba(242, 135, 114, 0.7)' };
+/* Hex only: Monaco parses minimap decoration colors with Color.fromHex, which paints anything else red. */
+const diffColors = { [ADDED]: '#73c991b3', [REMOVED]: '#f28772b3' };
 
 /*
  * A unified model numbers each row by the revision it shows. Line numbers are an editor option that peek
@@ -413,29 +414,62 @@ const pauseLimit = () => {
 };
 
 const onInteraction = () => enterFree();
-const showPanes = (filePaths, force) => {
+/* A media pane fits its capture into the pane at its own aspect ratio, so region outlines stay on what they mark. */
+const createMediaPane = (media) => {
+	const pane = element('section', 'pane media-pane');
+	pane.dataset.target = `media:${media.id}`;
+	const header = element('div', 'pane-header', pane);
+	element('span', 'pane-file', header, media.title);
+	if (media.link) {
+		const anchor = element('a', 'media-link', header, `${media.link.label ?? 'Open'} ↗`);
+		Object.assign(anchor, { href: media.link.url, target: '_blank', rel: 'noopener' });
+	}
+	const body = element('div', 'pane-body media-body', pane);
+	const frame = element('div', 'media-frame', body);
+	const visual = element(media.kind === 'video' ? 'video' : 'img', 'media-visual', frame);
+	visual.src = media.src;
+	if (media.kind === 'video') Object.assign(visual, { muted: true, loop: true, autoplay: true, playsInline: true });
+	for (const [name, region] of Object.entries(media.regions)) {
+		const outline = element('div', 'demo-region', frame);
+		outline.dataset.target = `media:${media.id}.${name}`;
+		Object.assign(outline.style, { left: `${region.x * 100}%`, top: `${region.y * 100}%`, width: `${region.width * 100}%`, height: `${region.height * 100}%` });
+	}
+	new ResizeObserver(() => {
+		const scale = Math.min(body.clientWidth / media.width, body.clientHeight / media.height);
+		Object.assign(frame.style, { width: `${media.width * scale}px`, height: `${media.height * scale}px` });
+	}).observe(body);
+	return pane;
+};
+let mediaPanes = [];
+const showPanes = (filePaths, force, media = []) => {
 	card?.remove();
 	card = null;
 	demoVideo = null;
-	const key = `${filePaths.join('|')}#${state.columns}`;
+	const key = `${filePaths.join('|')}#${media.map((item) => item.id).join('|')}#${state.columns}`;
 	if (!force && key === paneKey) return;
+	mediaPanes.forEach((pane) => pane.remove());
+	mediaPanes = [];
 	/* Panes that stay keep their editor, so a jump to another file leaves the source where the viewer had it. */
 	const kept = force ? [] : panes.filter((pane) => filePaths.includes(pane.filePath));
 	panes.filter((pane) => !kept.includes(pane)).forEach((pane) => pane.dispose());
 	panes = filePaths.map((filePath) => kept.find((pane) => pane.filePath === filePath) ?? new Pane(stage, filePath, state.columns, onInteraction));
 	panes.forEach((pane) => stage.append(pane.element));
+	mediaPanes = media.map(createMediaPane);
+	stage.append(...mediaPanes);
 	paneKey = key;
 	panes.forEach((pane) => pane.element.classList.toggle('narrating', !state.free));
 };
 const clearStage = () => {
 	panes.forEach((pane) => pane.dispose());
 	panes = [];
+	mediaPanes.forEach((pane) => pane.remove());
+	mediaPanes = [];
 	paneKey = '';
 	card?.remove();
 	demoVideo = null;
 	highlightKey = '';
 };
-/* Cards carry what has no code to show: the overview, the changed files, the alternatives and the review notes. */
+/* Cards carry what has no code to show: the overview, the changed files, the alternatives, the review notes and how to try it. */
 const showCard = (chapter) => {
 	clearStage();
 	card = element('div', `card card-${chapter.card}`, stage);
@@ -447,6 +481,28 @@ const showCard = (chapter) => {
 	if (chapter.points) showPoints(chapter.points);
 	if (chapter.groups) showGroups(chapter.groups);
 	if (chapter.options) showOptions(chapter.options);
+	if (chapter.sections) showSections(chapter.sections);
+};
+/* Steps a reviewer follows to see the change themselves; a section marked collapsed stays closed until opened. */
+const showSections = (sections) => {
+	const list = element('div', 'card-sections', card);
+	for (const section of sections) {
+		const details = element('details', 'card-section', list);
+		details.dataset.target = `section:${section.label}`;
+		details.open = !section.collapsed;
+		element('summary', 'section-label', details, section.label);
+		if (section.text) element('p', 'section-text', details, section.text);
+		const steps = element('ol', 'section-steps', details);
+		for (const step of section.steps ?? []) {
+			const item = element('li', '', steps);
+			if (step.text) element('span', '', item, step.text);
+			if (step.command) element('code', 'demo-command', item, step.command);
+			if (step.link) {
+				const anchor = element('a', 'demo-link', item, step.link.label ?? step.link.url);
+				Object.assign(anchor, { href: step.link.url, target: '_blank', rel: 'noopener' });
+			}
+		}
+	}
 };
 const showPoints = (points) => {
 	const list = element('div', 'card-points', card);
@@ -469,7 +525,7 @@ const showSketch = (parent, sketch) => {
 		code.append('\n');
 	});
 };
-const ORIGIN_LABELS = { chosen: 'Chosen', considered: 'Considered', suggestion: 'Suggestion' };
+const ORIGIN_LABELS = { chosen: 'Chosen', considered: 'Considered', suggestion: 'Suggestion', rejected: 'Rejected' };
 const showOptions = (options) => {
 	const list = element('div', 'card-options', card);
 	for (const option of options) {
@@ -480,6 +536,8 @@ const showOptions = (options) => {
 		element('span', `badge origin-${option.origin}`, header, ORIGIN_LABELS[option.origin]);
 		element('p', 'option-summary', column, option.summary);
 		if (option.sketch) showSketch(column, option.sketch);
+		/* A rejected approach does not solve the problem, so it states why instead of weighing trade-offs. */
+		if (option.why) element('p', 'option-why', column, option.why);
 		const tradeOffs = element('ul', 'trade-offs', column);
 		for (const pro of option.pros ?? []) element('li', 'pro', tradeOffs, pro);
 		for (const con of option.cons ?? []) element('li', 'con', tradeOffs, con);
@@ -568,7 +626,7 @@ const setScene = (force) => {
 	const chapter = currentChapter();
 	if (chapter.card) showCard(chapter);
 	else if (chapter.demo) showDemo(chapter);
-	else showPanes(chapter.panes, force);
+	else showPanes(chapter.panes, force, chapter.media);
 };
 
 const showSteps = (animate) => {

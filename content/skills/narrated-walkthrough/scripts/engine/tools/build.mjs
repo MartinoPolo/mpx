@@ -192,6 +192,21 @@ if (demoRecording) {
 	mkdirSync(path.join(outputDirectory, 'demo'), { recursive: true });
 	copyFileSync(path.join('cache/demo', demoRecording.video), path.join(outputDirectory, 'demo', demoRecording.video));
 }
+/* Media panes show what tools/capture.mjs captured beside the code; script.media adds a pane title and an optional link. */
+const mediaManifest = script.scenes.some((scene) => scene.media) ? JSON.parse(readFileSync('cache/media/media.json', 'utf8')) : null;
+const copiedMedia = new Set();
+const mediaOf = (scene) =>
+	scene.media?.map((id) => {
+		const entry = mediaManifest[id];
+		if (!entry) throw new Error(`media "${id}" is not captured yet, run tools/capture.mjs`);
+		if (!copiedMedia.has(id)) {
+			mkdirSync(path.join(outputDirectory, 'media'), { recursive: true });
+			copyFileSync(path.join('cache/media', entry.file), path.join(outputDirectory, 'media', entry.file));
+			copiedMedia.add(id);
+		}
+		const { title = id, link = null } = script.media?.[id] ?? {};
+		return { id, title, link, kind: entry.kind, src: `media/${entry.file}`, width: entry.width, height: entry.height, regions: entry.regions };
+	}) ?? [];
 const clipRange = (id) => {
 	if (!demoRecording.clips[id]) throw new Error(`demo has no clip "${id}"`);
 	return demoRecording.clips[id];
@@ -203,12 +218,18 @@ const phraseAt = (beat, timing, phrase) => {
 	if (index < 0) throw new Error(`"${phrase}" is not in: ${beat.say}`);
 	return Number(((timing.speech * index) / beat.say.length).toFixed(2));
 };
-/* Highlight targets are script file ids, card group, point or option labels, recorded demo regions, or the live box. */
+/*
+ * Highlight targets are script file ids, card group, point, option or section labels, recorded demo regions, the
+ * live box, a media pane id, or "<media id>.<region>" for a region captured in it.
+ */
 const targetOf = (scene, name) => {
 	if (script.files[name]) return `file:${script.files[name].path}`;
 	if (scene.groups?.some((group) => group.label === name)) return `group:${name}`;
 	if (scene.points?.some((point) => point.label === name)) return `point:${name}`;
 	if (scene.options?.some((option) => option.label === name)) return `option:${name}`;
+	if (scene.sections?.some((section) => section.label === name)) return `section:${name}`;
+	const [mediaId, ...region] = name.split('.');
+	if (scene.media?.includes(mediaId) && (region.length === 0 || mediaManifest[mediaId].regions[region.join('.')])) return `media:${name}`;
 	if (scene.demo && demoRecording.regions[name]) return `region:${name}`;
 	if (scene.demo && script.demo.live && name === 'live') return 'live';
 	throw new Error(`unknown highlight target "${name}" in "${scene.title}"`);
@@ -255,6 +276,8 @@ const chapters = script.scenes.map(({ beats, ...scene }) => {
 		panes,
 		points: scene.points ?? null,
 		options: optionsOf(scene),
+		sections: scene.sections ?? null,
+		media: mediaOf(scene),
 		demo: scene.demo ? { video: `demo/${demoRecording.video}`, regions: demoRecording.regions, live: script.demo.live } : null,
 		beats: beats.map((beat) => {
 			beatCount++;

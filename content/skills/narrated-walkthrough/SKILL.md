@@ -8,7 +8,7 @@ triggers:
   narrated code walkthrough; voiced MR walkthrough; code review video
 metadata:
   author: MartinoPolo
-  version: '0.2'
+  version: '0.3'
   category: utility
   mpx:
     schemaVersion: 1
@@ -34,6 +34,9 @@ either is unset or problematic, ask the user where to work and generate.
 in a run folder `<MPX_AI_DUMP>/_WALKTHROUGHS/<project>.<slug>/` and call the tools from there:
 
 - `node <engine>/tools/demo-record.mjs`: visible changes only; records `cache/demo/` from the recipe.
+- `node <engine>/tools/capture.mjs [name...]`: runs `capture/capture.mjs` against both revisions'
+  builds and writes screenshots, recordings, real DevTools panels and stacked compositions to
+  `cache/media/`, each a media name for `scene.media`.
 - `node <engine>/tools/narrate.mjs`: synthesises sentences that have no clip yet and writes
   `timeline.json`. It prints each clip's words per second; an outlier usually means a misread
   identifier or a bad split.
@@ -41,9 +44,9 @@ in a run folder `<MPX_AI_DUMP>/_WALKTHROUGHS/<project>.<slug>/` and call the too
 
 Start from [script.json](templates/script.json). A visible change adds the demo block and chapter
 from [script-demo.json](templates/recipe/script-demo.json) and a `recipe/` folder from
-[frame.html](templates/recipe/frame.html) and [recipe.mjs](templates/recipe/recipe.mjs); an earlier
-run's recipe for the same repository is a better start. The tools are the authoritative readers of
-these files.
+[frame.html](templates/recipe/frame.html) and [recipe.mjs](templates/recipe/recipe.mjs); media start
+from [capture.mjs](templates/capture/capture.mjs). An earlier run's recipe or capture for the same
+repository is a better start. The tools are the authoritative readers of these files.
 
 ## Content
 
@@ -59,9 +62,21 @@ these files.
   properties and types it reads, the callers that reach it), and last the supporting edits such as
   tests, stories and config. Each chapter builds on the ones before it; jump between files whenever
   the explanation does.
+- Put a visual beside the code whenever the narration talks about something that can be seen: a
+  screenshot, a recording, or the page in a real app. Code stays on the left, the visual on the
+  right; three columns only when two files and a visual are all needed at once. When the change
+  alters DOM structure, show the real DevTools Elements panel around the element, before and after.
+- Capture only from local or development environments that hold no real user data, and never show
+  credentials, tokens or personal data in a capture.
 - An alternatives card only when more than one reasonable fix existed. It is a record, not a vote:
   the chosen fix, ones the author weighed (PR description, commits, linked issue), and your own
-  ideas marked `suggestion`, also said aloud.
+  ideas marked `suggestion`, also said aloud, each with pros and cons. An approach that does not
+  solve the problem is `rejected` with a `why`, included only when its failure explains the
+  design; title the card for what it holds, such as "Why not simpler?" when nothing else fixes it.
+- End with a `reproduce` card: every step you took to see or capture the change, complete enough
+  for the reader to repeat, with local URLs because the change may not be deployed. Steps that need
+  heavier infrastructure (Docker, VPN, other repositories) go in `collapsed` sections. Never write
+  credential values.
 - Visual chapters run on with short gaps; code beats leave time to read.
 - Every claim must be true of the diff. Demo verdicts come from what the recipe observed.
 
@@ -74,6 +89,9 @@ these files.
   row; `then.at` is seconds into the beat; `link` keeps the previous mark as a ghost.
 - Demo clips are `<scene>`, `<scene>-before` and `<scene>-after`; `data-region` elements in the
   frame become highlight targets `before.<name>` and `after.<name>`.
+- Media regions become targets `<media>.<region>`; a composition prefixes them with each part's
+  `key`, as in `dom.after.hidden`. `devtools().reveal` takes `rowsAbove` to keep context above the
+  selected row; a lower `treeHeight` keeps unrelated nodes (fingerprint blobs, debug toolbars) out.
 - The frame fakes every system resource the component touches (clipboard, network, storage), so a
   demo never writes to the machine or reaches real services. Revision builds run with Sentry
   variables blanked; add other telemetry keys to `demo.environment`.
@@ -89,6 +107,6 @@ one, a `file:///` link to `page/index.html` otherwise; honor `--mode`. An artifa
 `page/index.html` with the rest of `page/` as its files. The page contains the repository's code:
 say so, and never share it more widely than the user asks.
 
-Report the link first, then chapter and beat count, whether a demo was recorded, TTS requests spent,
-and what needs a human: listening for mispronounced identifiers and checking that suggested
-alternatives are fair.
+Report the link first, then chapter and beat count, whether a demo was recorded, the media captured,
+TTS requests spent, and what needs a human: listening for mispronounced identifiers, checking that
+suggested and rejected alternatives are fair, and that the reproduce steps work on their machine.

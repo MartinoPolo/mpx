@@ -114,6 +114,27 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .option-name { font-weight: 700; font-size: 17px; color: var(--text-primary); }
 .badge.origin-chosen { background: rgba(115, 201, 145, 0.14); color: var(--added); }
 .badge.origin-considered, .badge.origin-suggestion { background: rgba(255, 255, 255, 0.06); color: var(--text-muted); }
+.badge.origin-rejected { background: rgba(242, 135, 114, 0.14); color: var(--removed); }
+.option-why { line-height: 1.5; color: var(--text-primary); padding-left: 12px; border-left: 3px solid var(--removed); }
+.media-pane { transition: border-color 0.3s, box-shadow 0.3s; }
+/* Code needs the width to stay readable; the visual scales down instead. */
+.media-pane:not(:only-child) { flex: 0.67; }
+.media-pane.highlighted { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+.media-link { margin-left: auto; color: var(--accent); font: 600 13px 'Inter', sans-serif; text-decoration: none; }
+.media-link:hover { text-decoration: underline; }
+.media-body { display: flex; align-items: center; justify-content: center; padding: 12px; overflow: hidden; }
+.media-frame { position: relative; flex: none; }
+.media-visual { display: block; width: 100%; height: 100%; border-radius: 6px; }
+.card-sections { display: flex; flex-direction: column; gap: 14px; max-width: 980px; }
+.card-section { padding: 14px 18px; border: 1px solid var(--border); border-radius: 10px; background: var(--editor); line-height: 1.5; transition: border-color 0.3s, box-shadow 0.3s, opacity 0.3s; }
+.card-section.highlighted { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+.highlighting .card-section:not(.highlighted) { opacity: 0.45; }
+.section-label { cursor: pointer; font-weight: 700; font-size: 16px; color: var(--text-primary); }
+.section-text { margin: 10px 0 0; color: var(--text-secondary); }
+.section-steps { margin: 10px 0 0; padding-left: 22px; display: flex; flex-direction: column; gap: 8px; color: var(--text-secondary); }
+.section-steps li > * + * { margin-left: 10px; }
+.section-steps .demo-command { display: inline-block; margin-top: 4px; }
+.section-steps li::marker { color: var(--text-muted); }
 .option-summary { line-height: 1.5; color: var(--text-secondary); }
 .sketch { font: 400 13px 'JetBrains Mono', monospace; line-height: 1.55; padding: 10px 12px; border-radius: 6px; background: var(--stage); white-space: pre-wrap; overflow-wrap: anywhere; }
 .trade-offs { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 6px; line-height: 1.45; }

@@ -8,6 +8,9 @@
 	},
 	"voice": "Charon",
 	"style": "A calm, friendly senior software engineer walking a colleague through a code change on a screen share. Clear, measured pace with natural pauses, warm but focused. Read code identifiers precisely and naturally, the way developers say them aloud.",
+	"media": {
+		"<capture name>": { "title": "<pane title>", "link": { "label": "<Open in ...>", "url": "<local URL the reader can open>" } }
+	},
 	"files": {
 		"main": { "path": "<repository-relative path>" },
 		"helper": { "path": "<repository-relative path>" }
@@ -52,6 +55,7 @@
 		{
 			"title": "<One idea, as a chapter title>",
 			"panes": ["main", "helper"],
+			"media": ["<capture name>"],
 			"beats": [
 				{
 					"say": "<What the old code did and why it was wrong.>",
@@ -67,13 +71,14 @@
 					"token": { "line": 14, "text": "<call on new line 14>" },
 					"then": { "at": 2.5, "file": "helper", "lines": "3-8", "token": { "line": 3, "text": "<definition name>" }, "link": true },
 					"pause": 2.5,
+					"highlights": [{ "at": "<phrase from say>", "targets": ["<capture name>.<region>"] }],
 					"note": "<short label>"
 				}
 			]
 		},
 		{
 			"card": "alternatives",
-			"title": "Other ways to fix it",
+			"title": "<Other ways to fix it, or Why not simpler? when the others do not solve it>",
 			"options": [
 				{
 					"label": "<The chosen fix>",
@@ -82,6 +87,13 @@
 					"sketch": { "language": "ts", "code": "<two to five lines>" },
 					"pros": ["<pro>"],
 					"cons": ["<con>"]
+				},
+				{
+					"label": "<An approach that does not solve it>",
+					"origin": "rejected",
+					"summary": "<one sentence, including who raised it>",
+					"sketch": { "language": "ts", "code": "<two to five lines>" },
+					"why": "<Does not fix it: the concrete failure>"
 				},
 				{
 					"label": "<Another way>",
@@ -97,6 +109,11 @@
 					"say": "<The chosen fix and why.>",
 					"highlights": [{ "at": "<phrase from say>", "targets": ["<The chosen fix>"] }],
 					"note": "chosen: <short label>"
+				},
+				{
+					"say": "<Why the tempting simpler idea fails, and what that explains about the chosen design.>",
+					"highlights": [{ "at": "<phrase from say>", "targets": ["<An approach that does not solve it>"] }],
+					"note": "rejected: <short label>"
 				},
 				{
 					"say": "<This one is a suggestion from this walkthrough, not an option the author weighed. ...>",
@@ -117,6 +134,34 @@
 					"say": "<What to check when reviewing.>",
 					"highlights": [{ "at": "<phrase from say>", "targets": ["Tests"] }],
 					"note": "<short label>"
+				}
+			]
+		},
+		{
+			"card": "reproduce",
+			"title": "Try it yourself",
+			"sections": [
+				{
+					"label": "<Where to see it, e.g. Storybook>",
+					"steps": [
+						{ "text": "<Check out the change and install>", "command": "<command>" },
+						{ "text": "<One-time setup a fresh checkout needs>", "command": "<command>" },
+						{ "text": "<Start the local server>", "command": "<command>" },
+						{ "text": "<Open the page and what to do there>", "link": { "label": "<page>", "url": "<local URL>" } }
+					]
+				},
+				{
+					"label": "<Infrastructure-heavy setup, e.g. a Docker stack>",
+					"collapsed": true,
+					"text": "<What it shows and why it needs more setup>",
+					"steps": [{ "text": "<Each step taken, never a credential value>", "command": "<command>" }]
+				}
+			],
+			"beats": [
+				{
+					"say": "<The quickest way to see it yourself; the heavier setup is folded below.>",
+					"highlights": [{ "at": "<phrase from say>", "targets": ["<Where to see it, e.g. Storybook>"] }],
+					"note": "try it yourself"
 				}
 			]
 		}
