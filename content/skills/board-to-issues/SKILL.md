@@ -20,8 +20,8 @@ input.
 
 First:
 
-1. Read [Provider Routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md) and the bundled canonical
-   [Issue template](ISSUE_TEMPLATE.md). Resolve bundled assets relative to this loaded skill.
+1. Read [Provider Routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md) and
+   [the Issue template]({{MPX_SHARED_INSTRUCTIONS}}/ISSUE_TEMPLATE.md).
 2. Resolve project configuration as specified by Provider Routing, then select `issues.provider`.
    Load its selected native guide under `{{MPX_SHARED_INSTRUCTIONS}}/providers/`. Use only that guide's native Issue
    operations; never invent an MPX facade command or substitute the repository provider.
@@ -62,9 +62,7 @@ unsupported, report that bounded gap and require explicit confirmation before cr
 
 For each proposed issue:
 
-- **Body** — follow the canonical Issue template structure (`## Description`, `## Requirements` as
-  REQ-1..N, `## Acceptance Criteria`, `## Notes`). Reference screenshots in `## Notes`. Encode
-  hierarchy with explicit parent/child body links; never assume provider-native sub-Issue support.
+- **Body** — follow the Issue template. Put each screenshot in the section it supports.
 - **Size** — estimate `size:S` (single file / few lines), `size:M` (multi-file, contained), or
   `size:L` (cross-cutting) from complexity.
 - **AFK vs HITL** — AFK when scope is clear; HITL when a requirement question is unanswered (add the

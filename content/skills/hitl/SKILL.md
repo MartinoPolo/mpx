@@ -1,7 +1,7 @@
 ---
 name: hitl
 description: Resolve human decisions blocking Issues and make confirmed work autonomous
-argument-hint: '[epic reference] [lowest|most-blocking]'
+argument-hint: '[epic or issue reference] [lowest|most-blocking]'
 metadata:
   author: MartinoPolo
   version: '0.6'
@@ -19,9 +19,11 @@ and `repository.provider` from `mpxconfig.json`; this workflow uses the selected
 native guide in `{{MPX_SHARED_INSTRUCTIONS}}/providers/`. Never invent facade actions. Parent/child relationships are
 body links, not assumed provider-native sub-Issues. Preserve the native authenticated environment, explicit provider target, and privacy.
 
-Parameters: optional Epic reference and ordering `lowest` (default) or `most-blocking`.
+Parameters: optional Epic or Issue reference and ordering `lowest` (default) or `most-blocking`.
+An Issue is HITL when it carries `HITL` or an `> **Unanswered questions:**` blockquote.
 
-1. If an Epic is supplied, fetch it natively. Otherwise list open Epic-labeled Issues; ask when
+1. If a non-Epic Issue is supplied, fetch it natively and continue at step 5 with that Issue alone.
+   If an Epic is supplied, fetch it natively. Otherwise list open Epic-labeled Issues; ask when
    ambiguous and stop if none. Read its body, especially implementation decisions.
 2. Broadly list open task Issues with labels and bodies. Parse `## Blocking Relationships` and
    parent/child body links into a graph. Fetch blocker states as needed.
@@ -30,16 +32,17 @@ Parameters: optional Epic reference and ordering `lowest` (default) or `most-blo
 4. Sort eligible Issues by ascending provider ID for `lowest`, or descending transitive unblock
    count for `most-blocking`, and present a useful queue, for example `1. issue:3 — Dashboard CRUD`
    or `1. issue:3 — Dashboard CRUD (unblocks 6 downstream)`.
-5. For each Issue, extract ambiguities from notes, acceptance criteria, and description; remove
-   decisions already settled by Epic context. Before asking questions, invoke named agent
-   `mpx-explorer` to inspect relevant code and report evidence. If external
-   library facts are uncertain, route to Context7.
+5. For each Issue, extract ambiguities from the blockquote, description, and acceptance criteria;
+   remove decisions already settled by Epic context. Before asking questions, invoke named agent
+   `mpx-explorer` to inspect relevant code and report evidence. If external library facts are
+   uncertain, route to Context7.
 6. Present thematic batches of numbered questions with evidence-backed recommendations. Ask a
    follow-up round only when prior answers materially affect it.
-7. If all decisions resolve, append `## Resolved Decisions` to the Issue body and replace `HITL`
-   with `AFK` using native provider commands. If experimentation remains, append both
-   `## Resolved Decisions` and `## Unresolved — Needs Implementation`, retaining `HITL`. Preserve
-   existing body and links exactly.
+7. Delete each answered question from the blockquote and put its answer where it belongs in the
+   body, usually the Description or Acceptance Criteria. When no question remains, remove the
+   blockquote and replace `HITL` with `AFK` using native provider commands; where the provider has
+   no `HITL` label, add `AFK`. Otherwise keep the remaining questions and `HITL`. Preserve the rest
+   of the body and its links exactly.
 8. Ask whether to continue. Recompute the graph after every update and enqueue newly unblocked HITL
    Issues.
 9. Report concrete outcomes by category, for example `Resolved/AFK: issue:3 — Dashboard CRUD`,

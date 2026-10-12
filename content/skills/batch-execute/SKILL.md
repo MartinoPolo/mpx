@@ -33,7 +33,8 @@ exactly.
 
 Parse range, comma list, `label:<x>`, or `board`, plus optional size and flags. In Issue mode, use
 the selected issues provider's native broad open-Issue listing, then filter client-side by requested
-range/list/label. Keep `AFK`; before filtering, route `HITL` or `design needed` through the gate
+range/list/label. Keep `AFK`; before filtering, route `HITL`, an unanswered-questions blockquote, or
+`design needed` through the gate
 unless that exact label was explicitly selected. Parse `## Blocking Relationships`/body links and
 drop Issues with open blockers. Apply size last while preserving provider order.
 

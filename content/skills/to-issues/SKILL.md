@@ -16,7 +16,8 @@ metadata:
 
 # Decompose an Epic
 
-Argument: explicit Epic Issue number or URL. Use [the Issue template](ISSUE_TEMPLATE.md).
+Argument: explicit Epic Issue number or URL. Write every child per
+[the Issue template]({{MPX_SHARED_INSTRUCTIONS}}/ISSUE_TEMPLATE.md).
 
 ## Content and provider discovery
 
@@ -67,10 +68,8 @@ locations and one alternate naming convention.
 ### 4. Design and classify slices
 
 Target 3–15 tracer-bullet slices. Put the riskiest assumption first. For each define plain-English
-title (no Epic number or conventional-commit prefix), outcome, mapped requirements, observable
-acceptance criteria, body-link relationships, and labels. HITL means an unresolved human
-decision—not manual testing, review, QA, or visual inspection. Put unanswered questions only in HITL
-Issues.
+title, outcome, the Epic requirements it covers, observable acceptance criteria, body-link
+relationships, and labels. Put unanswered questions only in HITL Issues.
 
 ### 5. Approval gate
 
@@ -93,7 +92,7 @@ gh label create AFK --repo <target> --description "Ready for autonomous executio
 KanbanFlow supports label listing but not label creation. If any required label is absent, stop child
 creation and return the exact manual label handoff.
 
-Build body files from [ISSUE_TEMPLATE.md](ISSUE_TEMPLATE.md), including the final Epic section, then
+Build body files from the Issue template, always including `## Epic`, then
 create sequentially enough to capture every immutable ID and URL. Use the selected guide's
 target-bound GitHub or KanbanFlow Issue-create form. On ambiguous creation outcome, reconcile before
 retrying.

@@ -16,17 +16,17 @@ obsolete binary; `kf --version` alone is insufficient.
 
 ```text
 kf board --json
-kf issue list [--open | --state todo|wip|review|done|archive | --column <name-or-id>] [--mine] --json
+kf issue list [--open | --state backlog|todo|wip|review|done|archive | --column <name-or-id>] [--mine] --json
 kf issue view <issue> [--json] [--download-attachments <directory>]
 kf issue create --name <title> --description <body> \
-    [--to todo|wip|review|done|archive] [--label <existing-label>] \
-    [--responsible me|none|<user-id>] [--json]
+    [--to backlog|todo|wip|review|done|archive] [--label <existing-label>] [--color <color>] \
+    [--responsible me|none|<user-id>] [--attach <file>] [--json]
 kf issue edit <issue> [--name <title>] [--description <body>] \
     [--append-description <text>] [--add-label <existing-label>] \
     [--remove-label <label>] [--responsible me|none|<user-id>] [--json]
 kf comment add <issue> (--text <text>|--file <file>)
-kf issue move <issue> --to todo|wip|review|done|archive
-kf issue finish <issue> [--comment-file <file>] [--to todo|wip|review|done|archive]
+kf issue move <issue> --to backlog|todo|wip|review|done|archive
+kf issue finish <issue> [--comment-file <file>] [--to backlog|todo|wip|review|done|archive]
 kf label list [--json]
 ```
 
@@ -46,8 +46,9 @@ Run `kf` at the repository root. Before every read or write, require the single 
 `issues.metadata.boardId`; stop on absence, duplication, or mismatch. Issue identifiers may be a displayed
 number such as `E613` or native issue ID. Labels must already exist; `kf` has no label-create
 command. Use only canonical state names whose mappings are present in `mpxconfig.json` or its local override; optional
-`archive` is unsupported when not configured. `--force`, deletion, assignment changes, attachments,
-subtasks, and `grab` require separate explicit workflow authorization.
+`backlog` and `archive` are unsupported when not configured. Attaching existing evidence files on create needs no
+further authorization. `--force`, deletion, assignment changes, subtasks, and `grab` require separate
+explicit workflow authorization.
 
 ## Version boundary
 

@@ -1,8 +1,7 @@
 ---
 name: bug-report
 description:
-  "Investigates a bug's root cause, designs a TDD fix plan, and opens an issue/task labelled bug in
-  the..."
+  "Investigates a bug's root cause and opens an issue/task labelled bug in the..."
 metadata:
   author: MartinoPolo
   version: '0.6'
@@ -15,8 +14,7 @@ metadata:
 
 # Bug Report
 
-Investigate each bug from the invocation input to its root cause, design a TDD fix plan, and create
-or update an Issue through the selected Issue provider.
+Investigate each bug from the invocation input to its root cause, and create or update an Issue through the selected Issue provider.
 
 ## Provider routing
 
@@ -60,19 +58,7 @@ Give each agent the parsed problem and require it to:
 Reconcile the agent result with repository evidence. If the root cause remains uncertain, label it
 as a hypothesis and identify the missing evidence rather than asserting certainty.
 
-### 3. Design the TDD fix plan
-
-Create ordered RED-GREEN cycles. Each cycle is a vertical behavioral slice:
-
-- **RED:** add one test through a public interface that demonstrates the broken or missing behavior;
-- **GREEN:** make the smallest production change that satisfies that behavior;
-- repeat for distinct behaviors;
-- **REFACTOR:** clean up only after all cycles pass.
-
-Tests must survive internal refactors. Include regression boundaries and relevant error cases
-without prescribing brittle implementation details.
-
-### 4. Search for duplicates
+### 3. Search for duplicates
 
 Before creating anything, search open and closed Issues through the selected provider using the
 symptom, domain terms, diagnostics, and root-cause concepts. View plausible matches.
@@ -83,47 +69,17 @@ symptom, domain terms, diagnostics, and root-cause concepts. View plausible matc
 - If provider search, edit, or comment is unsupported, report that limitation and do not claim
   duplicate resolution.
 
-### 5. Create or update the Issue
+### 4. Create or update the Issue
 
-Use title format `bug: [concise description]`. Ensure the `bug` label exists using only the selected
-provider's supported label operation, and include relevant existing area labels discovered during
-investigation. KanbanFlow labels must already exist. If label creation is unsupported, report the
-gap truthfully.
+Write the title and body per [the Issue template]({{MPX_SHARED_INSTRUCTIONS}}/ISSUE_TEMPLATE.md).
+Investigation carries the reproduction, expected and actual behavior, and the root cause.
+Acceptance Criteria include the regression boundary. Ensure the `bug` label exists using only the
+selected provider's supported label operation, and include relevant existing area labels discovered
+during investigation. KanbanFlow labels must already exist. If label creation is unsupported, report
+the gap truthfully.
 
-Use this durable body:
-
-```markdown
-## Problem
-
-**Actual behavior:** [what happens] **Expected behavior:** [what should happen]
-
-**How to reproduce:**
-
-1. [step 1]
-2. [step 2]
-
-## Root Cause Analysis
-
-[Why the code path fails and contributing contract or state conditions, expressed in durable module
-and behavior terms]
-
-## TDD Fix Plan
-
-1. **RED:** [public behavior to verify] **GREEN:** [minimal behavioral change]
-
-2. **RED:** [next public behavior] **GREEN:** [next minimal change]
-
-3. **REFACTOR:** [cleanup after all tests pass]
-
-## Acceptance Criteria
-
-- [ ] [independently observable outcome]
-- [ ] [regression boundary]
-```
-
-Omit unsupported or unknown details rather than fabricating them. Do not put file paths, line
-numbers, transient implementation details, or machine-specific data in the Issue. Use project domain
-language, including `.mpx/CONTEXT.md` when present. Review multiline content before submission.
+Omit unsupported or unknown details rather than fabricating them. Never include machine-specific
+data. Use project domain language, including `.mpx/CONTEXT.md` when present.
 
 Create or update only through the selected guide. Capture the immutable Issue ID and canonical URL
 from the successful response. A successful creation remains valid if a later optional label,
