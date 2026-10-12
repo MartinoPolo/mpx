@@ -24,7 +24,7 @@ const exposures: Record<(typeof names)[number], 'normal' | 'name-only' | 'explic
   decompose: 'name-only',
   'epic-create': 'explicit-only',
   execute: 'normal',
-  'issue-create': 'name-only',
+  'issue-create': 'normal',
   pr: 'name-only',
   review: 'normal',
   ship: 'name-only',
@@ -95,7 +95,7 @@ test('private support closure is copied into every consuming skill', async () =>
   assert.deepEqual(await filesBelow(path.join(skillsRoot, 'execute')), [
     'DEV_SERVER.md', 'SKILL.md', 'mocking.md', 'tests.md',
   ]);
-  assert.deepEqual(await filesBelow(path.join(skillsRoot, 'board-to-issues')), ['ISSUE_TEMPLATE.md', 'SKILL.md']);
+  assert.deepEqual(await filesBelow(path.join(skillsRoot, 'board-to-issues')), ['SKILL.md']);
   assert.deepEqual(await filesBelow(path.join(skillsRoot, 'review')), ['SKILL.md', 'scripts/detect-base-branch.js']);
 
   assert.equal(
@@ -151,6 +151,6 @@ test('compiler closure resolves skill prefixes without a placeholder fallback', 
   assert.match(projected.get('dist/packs/development/pi/skills/mpx-mockup/SKILL.md')!, /\/skill:mpx-design-refine/);
   assert.match(projected.get('dist/packs/development/claude/.claude/skills/mpx-mockup/SKILL.md')!, /\/mpx-design-refine/);
   assert.match(projected.get('dist/packs/development/pi/skills/mpx-design-init/SKILL.md')!, /mpx-design-brief/);
-  assert.ok([...projected.keys()].some(item => item.endsWith('/skills/mpx-board-to-issues/ISSUE_TEMPLATE.md')));
+  assert.ok([...projected.keys()].some(item => item.endsWith('/skills/mpx-board-to-issues/references/instructions/shared/ISSUE_TEMPLATE.md')));
   assert.ok(![...projected.keys()].some(item => item.includes('/skills/mpx-grill-voice/')));
 });

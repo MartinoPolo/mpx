@@ -42,6 +42,7 @@ test('shared instruction, provider, rule, output-style, and helper closure is ca
     'pi/APPEND_SYSTEM.md',
     'shared/AGENTS.md',
     'shared/COMPACT.md',
+    'shared/ISSUE_TEMPLATE.md',
     'shared/PROJECT_DOC_TEMPLATES.md',
     'shared/PROVIDER_ROUTING.md',
     'shared/SENTRY.md',
