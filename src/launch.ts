@@ -97,7 +97,8 @@ export async function createLaunchSpec(options: {
   }
   const injected: string[] = [];
   if (native) injected.push('--no-extensions');
-  else for (const path of selection.paths) injected.push(harness === 'pi' ? '--skill' : '--add-dir', path);
+  // Claude's --add-dir is variadic; only the `=` form stops it from swallowing a positional prompt.
+  else for (const path of selection.paths) injected.push(...(harness === 'pi' ? ['--skill', path] : [`--add-dir=${path}`]));
   return {
     executable, args: [...injected, ...args], cwd, env,
     label: native ? 'Native Pi · extension discovery-disabled · explicit extensions may load; see native startup list' : `MPX · ${account.toUpperCase()} · ${harness === 'pi' ? 'Pi' : 'Claude'}`,

@@ -40,7 +40,9 @@ test('additive arguments and selected native roots preserve all caller argument 
     assert.equal(spec.requiresConfirmation, false);
     assert.equal(spec.label, 'MPX · PERSONAL · Pi');
     const cc = await createLaunchSpec({ root: f.root, cwd: f.root, harness: 'claude', account: 'personal', config: f.config, project: registered, selection: packs, args, env: { SHELL: '/usr/bin/bash', MSYSTEM: 'MINGW64' } });
-    assert.deepEqual(cc.args, ['--add-dir', packs.paths[0], ...args]);
+    assert.deepEqual(cc.args, [`--add-dir=${packs.paths[0]}`, ...args]);
+    const prompted = await createLaunchSpec({ root: f.root, cwd: f.root, harness: 'claude', account: 'personal', config: f.config, project: registered, selection: packs, args: ['do the task'] });
+    assert.deepEqual(prompted.args, [`--add-dir=${packs.paths[0]}`, 'do the task']);
     assert.equal(cc.env.CLAUDE_CONFIG_DIR, f.config.accounts.personal.claude);
     assert.equal(cc.label, 'MPX · PERSONAL · Claude');
     assert.equal(cc.env.SHELL, '/usr/bin/bash');
