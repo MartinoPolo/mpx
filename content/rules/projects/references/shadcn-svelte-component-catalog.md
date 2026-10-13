@@ -1,12 +1,17 @@
 ---
 scope: reference
 selector: shadcn-svelte
+paths:
+  - '**/*.svelte'
+  - '**/*.svelte.ts'
+  - '**/*.svelte.js'
+  - '**/*_variants.ts'
+  - '**/*.stories.svelte'
 ---
 
 # shadcn-svelte Component Catalog
 
-Reference lookup — not auto-loaded. Consult when choosing which component to reach for; linked from
-the `shadcn-svelte.md` rule.
+Reference lookup for the `shadcn-svelte.md` rule. Consult when choosing which component to reach for.
 
 ## Prefer Built-in Components
 

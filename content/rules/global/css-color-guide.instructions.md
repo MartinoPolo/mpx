@@ -2,6 +2,14 @@
 scope: global
 selector: global
 description: 'Color and styling rules for accessible, professional web designs'
+paths:
+  - '**/*.css'
+  - '**/*.scss'
+  - '**/*.tsx'
+  - '**/*.jsx'
+  - '**/*.vue'
+  - '**/*.html'
+  - '**/*.svelte'
 applyTo: '**/*.css, **/*.scss, **/*.tsx, **/*.jsx, **/*.vue, **/*.html, **/*.svelte'
 ---
 
