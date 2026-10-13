@@ -67,6 +67,7 @@ test('Claude native event transport preserves policy and nonblocking context fal
     assert.match(roots.stdout, /C:\/fixture/);
     assert.match(roots.stdout, /Conversation compaction only/);
     assert.match(roots.stdout, /Key Decisions/);
+    assert.doesNotMatch(roots.stdout, /# Working principles/, 'shared instructions arrive through the native CLAUDE.md import');
     assert.equal((await handleClaudeHook({ hook_event_name: 'PreCompact', cwd }, resolve('.'))).stdout, '', 'unsupported PreCompact stdout is not instruction delivery');
     const style = await handleClaudeHook({ hook_event_name: 'UserPromptSubmit', cwd });
     assert.match(style.stdout, /concise/);

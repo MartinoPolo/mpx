@@ -20,12 +20,14 @@ async function fixture(harness: 'pi' | 'claude' = 'pi') {
   await mkdir(path.join(root, 'dist/claude/agents'), { recursive: true });
   await mkdir(path.join(root, 'dist/claude/rules/languages'), { recursive: true });
   await mkdir(path.join(root, 'dist/claude/output-styles'), { recursive: true });
+  await mkdir(path.join(root, 'dist/claude/instructions/shared'), { recursive: true });
   await mkdir(accountRoot, { recursive: true });
   await mkdir(legacy, { recursive: true });
   await writeFile(path.join(root, 'extensions/pi-runtime.ts'), 'export default {}');
   await writeFile(path.join(root, 'dist/pi/agents/mpx-worker.md'), 'pi generated');
   await writeFile(path.join(root, 'dist/claude/agents/mpx-worker.md'), 'claude generated');
   await writeFile(path.join(root, 'dist/claude/output-styles/mpx-terse.md'), 'new terse');
+  await writeFile(path.join(root, 'dist/claude/instructions/shared/AGENTS.md'), 'shared instructions');
   await writeFile(path.join(root, 'dist/claude/rules/languages/typescript.md'), 'new ts');
   const config: UserConfig = { accounts: { personal: { pi: accountRoot, claude: accountRoot }, work: { pi: accountRoot, claude: accountRoot } }, domains: { personal: [], work: [] } };
   const protectCalls: string[] = [];

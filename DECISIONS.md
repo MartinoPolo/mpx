@@ -42,6 +42,9 @@ conventions belong in `AGENTS.md`; rollout evidence and recovery belong in `migr
   Reserve `mpx-` for MPX-owned skills and agents, and use project-owned names for new project skills.
 - **Propagate selected packs to subagents.** Parent and child sessions need the same effective
   workflow vocabulary; discovery and named-skill preloading must preserve that selection.
+- **Deliver each instruction once, scoped natively.** Claude imports shared `AGENTS.md` through the
+  account `CLAUDE.md`, which also reaches subagents; the SessionStart hook adds only compaction
+  guidance and machine roots. File-specific rules declare Claude `paths` alongside `applyTo`.
 
 ## Execution and delivery
 

@@ -91,6 +91,22 @@ test('Claude scopes preserve native permission modes and initialize only an abse
   } finally { await rm(scratch, { recursive: true, force: true }); }
 });
 
+test('Claude scopes import shared instructions natively while preserving authored CLAUDE.md content', async () => {
+  const scratch = await mkdtemp(join(tmpdir(), 'mpx-runtime-claude-instructions-'));
+  const selected = join(scratch, 'claude');
+  const config: UserConfig = { accounts: { personal: { pi: join(scratch, 'unused-pi'), claude: selected }, work: { pi: join(scratch, 'unused-work-pi'), claude: join(scratch, 'unused-work-claude') } }, domains: { personal: [], work: [] } };
+  try {
+    await mkdir(selected);
+    await writeFile(join(selected, 'CLAUDE.md'), '# Personal notes');
+    assert.equal((await syncRuntimeScope(resolve('.'), config, { account: 'personal', harness: 'claude' }, true)).ok, true);
+    assert.equal(await readFile(join(selected, 'CLAUDE.md'), 'utf8'), '# Personal notes');
+    assert.equal((await syncRuntimeScope(resolve('.'), config, { account: 'personal', harness: 'claude' }, false)).ok, true);
+    assert.equal(await readFile(join(selected, 'CLAUDE.md'), 'utf8'), '# Personal notes\n@AGENTS.md\n');
+    assert.equal(await readFile(join(selected, 'AGENTS.md'), 'utf8'), await readFile(resolve('dist/claude/instructions/shared/AGENTS.md'), 'utf8'));
+    assert.ok((await syncRuntimeScope(resolve('.'), config, { account: 'personal', harness: 'claude' }, false)).entries.every(entry => entry.status === 'unchanged'));
+  } finally { await rm(scratch, { recursive: true, force: true }); }
+});
+
 test('generated Claude hook commands load through native Node and fail closed before handler startup', () => {
   const root = resolve('.');
   const registrations = claudeHookEntries(root) as Record<string, Array<{ hooks: Array<{ command: string }> }>>;

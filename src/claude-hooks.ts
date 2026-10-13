@@ -20,11 +20,9 @@ export async function handleClaudeHook(event: ClaudeHookInput, contentRoot = roo
 
   } else if (event.hook_event_name === 'SessionStart') {
     const roots = machineRootContext(env);
-    try { result.stdout = await readFile(path.join(contentRoot, 'dist/claude/instructions/shared/AGENTS.md'), 'utf8'); }
-    catch { result.stderr = 'MPX canonical instructions unavailable; native context retained.\n'; }
     try {
       const compact = await readFile(path.join(contentRoot, 'dist/claude/instructions/shared/COMPACT.md'), 'utf8');
-      result.stdout += `\n\n## Conversation compaction only\nWhen native manual or automatic compaction occurs, apply the following guidance. User-supplied compaction instructions take precedence; preserve native summary behavior. These instructions do not request a summary during ordinary work.\n\n${compact}`;
+      result.stdout += `## Conversation compaction only\nWhen native manual or automatic compaction occurs, apply the following guidance. User-supplied compaction instructions take precedence; preserve native summary behavior. These instructions do not request a summary during ordinary work.\n\n${compact}`;
     } catch { result.stderr += 'MPX compaction guidance unavailable; continuing with native compaction.\n'; }
     if (roots) result.stdout += `\n\n${roots}`;
   } else if (event.hook_event_name === 'PreToolUse') {

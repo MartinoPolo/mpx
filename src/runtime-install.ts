@@ -56,6 +56,16 @@ async function ownedLink(source: string, destination: string, preview: boolean, 
   await symlink(source, destination, folder ? (process.platform === 'win32' ? 'junction' : 'dir') : 'file');
   return 'installed';
 }
+async function ownedImportLine(file: string, line: string, preview: boolean): Promise<RuntimeInstallEntry['status']> {
+  const info = await lstat(file).catch(error => { if (error.code !== 'ENOENT') throw error; return undefined; });
+  if (info && (!info.isFile() || info.isSymbolicLink() || info.size > 1024 * 1024)) throw new Error('instructions file is not a bounded physical file');
+  const before = info ? await readFile(file, 'utf8') : '';
+  if (before.split(/\r?\n/).some(existing => existing.trim() === line)) return 'unchanged';
+  if (preview) return 'planned';
+  await physicalDirectory(path.dirname(file));
+  await writeFile(file, `${before}${before && !before.endsWith('\n') ? '\n' : ''}${line}\n`, { flag: info ? 'w' : 'wx' });
+  return 'installed';
+}
 export function piRuntimeBootstrap(root: string): string {
   return `// MPX-owned Pi runtime registration.\nexport { default } from ${JSON.stringify(path.join(root, 'extensions/pi-runtime.ts').replaceAll('\\', '/'))};\n`;
 }
@@ -158,11 +168,13 @@ async function runRuntime(root: string, config: UserConfig, preview: boolean, sc
         return { ...current, 'tui.input.newLine': [...new Set([...(typeof value === 'string' ? [value] : Array.isArray(value) ? value : []), 'shift+enter', 'ctrl+j', 'ctrl+enter'])] };
       }, preview));
     } else {
-      for (const [relative, target, folder] of [['rules', 'rules/mpx', true], ['output-styles/mpx-terse.md', 'output-styles/mpx-terse.md', false]] as const) {
+      for (const [relative, target, folder] of [['rules', 'rules/mpx', true], ['output-styles/mpx-terse.md', 'output-styles/mpx-terse.md', false], ['instructions/shared/AGENTS.md', 'AGENTS.md', false]] as const) {
         const source = path.join(root, 'dist/claude', relative);
         const destination = path.join(accountRoot, target);
         await perform(source, destination, () => ownedLink(source, destination, preview, folder));
       }
+      // Native CLAUDE.md delivery reaches subagents and survives compaction without a hook process.
+      await perform('MPX shared instructions import', path.join(accountRoot, 'CLAUDE.md'), () => ownedImportLine(path.join(accountRoot, 'CLAUDE.md'), '@AGENTS.md', preview));
       await perform('MPX native Claude hook registrations', path.join(accountRoot, 'settings.json'), () => mergeJson(path.join(accountRoot, 'settings.json'), current => {
         if (current.hooks !== undefined && (!current.hooks || typeof current.hooks !== 'object' || Array.isArray(current.hooks))) throw new Error('invalid hooks object; preserved');
         if (current.permissions !== undefined && (!current.permissions || typeof current.permissions !== 'object' || Array.isArray(current.permissions))) throw new Error('invalid permissions object; preserved');
