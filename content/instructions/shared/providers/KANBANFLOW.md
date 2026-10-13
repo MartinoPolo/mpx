@@ -18,10 +18,10 @@ obsolete binary; `kf --version` alone is insufficient.
 kf board --json
 kf issue list [--open | --state backlog|todo|wip|review|done|archive | --column <name-or-id>] [--mine] --json
 kf issue view <issue> [--json] [--download-attachments <directory>]
-kf issue create --name <title> --description <body> \
+kf issue create --name <title> --description-file <file> \
     [--to backlog|todo|wip|review|done|archive] [--label <existing-label>] [--color <color>] \
     [--responsible me|none|<user-id>] [--attach <file>] [--json]
-kf issue edit <issue> [--name <title>] [--description <body>] \
+kf issue edit <issue> [--name <title>] [--description-file <file>] \
     [--append-description <text>] [--add-label <existing-label>] \
     [--remove-label <label>] [--responsible me|none|<user-id>] [--json]
 kf comment add <issue> (--text <text>|--file <file>)
@@ -32,8 +32,9 @@ kf label list [--json]
 
 For listing, `--open`, `--state`, and `--column` are mutually exclusive; `--state` is repeatable.
 Omit `--mine` for broad board discovery unless the user requests an ownership filter.
-`--description` and `--append-description` are mutually exclusive on edit. Move and finish do not
-accept `--json`.
+Pass multi-line bodies with `--description-file` and `--file`; shell command substitution is
+blocked. `--description-file` and `--append-description` are mutually exclusive on edit. Move and
+finish do not accept `--json`.
 
 JSON results have operation-specific shapes: board returns an object with `_id`; issue list returns
 an array of issue objects; view returns `{issue, comments, attachments}`; create returns `{issueId}`
@@ -48,7 +49,11 @@ number such as `E613` or native issue ID. Labels must already exist; `kf` has no
 command. Use only canonical state names whose mappings are present in `mpxconfig.json` or its local override; optional
 `backlog` and `archive` are unsupported when not configured. Attaching existing evidence files on create needs no
 further authorization. `--force`, deletion, assignment changes, subtasks, and `grab` require separate
-explicit workflow authorization.
+explicit workflow authorization. Attachment links are presigned and expire, so a description cannot
+embed an attached image; name the file instead. Descriptions and comments use headings, bold, and
+plain bullets only: the board renders inline code, code blocks, and `[ ]` checkboxes poorly, so
+write identifiers as plain text. Write placeholders as `{name}`; Markdown can read `<name>` as an
+HTML tag.
 
 ## Version boundary
 

@@ -4,7 +4,7 @@ description:
   "Investigates a bug's root cause and opens an issue/task labelled bug in the..."
 metadata:
   author: MartinoPolo
-  version: '0.6'
+  version: '0.7'
   category: issue-management
   mpx:
     schemaVersion: 1
@@ -71,9 +71,11 @@ symptom, domain terms, diagnostics, and root-cause concepts. View plausible matc
 
 ### 4. Create or update the Issue
 
-Write the title and body per [the Issue template]({{MPX_SHARED_INSTRUCTIONS}}/ISSUE_TEMPLATE.md).
-Investigation carries the reproduction, expected and actual behavior, and the root cause.
-Acceptance Criteria include the regression boundary. Ensure the `bug` label exists using only the
+Write the title, body, and comments per
+[the Issue template]({{MPX_SHARED_INSTRUCTIONS}}/ISSUE_TEMPLATE.md). The description carries
+expected and actual behavior and where to see it, with a screenshot when the bug is visible in a UI.
+One comment carries the reproduction steps and the root cause as short pointers. Acceptance criteria
+include the regression boundary. Ensure the `bug` label exists using only the
 selected provider's supported label operation, and include relevant existing area labels discovered
 during investigation. KanbanFlow labels must already exist. If label creation is unsupported, report
 the gap truthfully.

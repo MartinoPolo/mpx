@@ -43,7 +43,7 @@ Ask if a checkout mismatch or overlapping changes prevents safe execution. Do no
 While awaiting input, continue independent authorized work and retain background task handles.
 Collect their results before resuming dependent work.
 
-If the Issue has `HITL`, an unanswered-questions blockquote, or `design needed`, ask whether to abort,
+If the Issue has `HITL`, a HITL section, or `design needed`, ask whether to abort,
 run HITL grilling, or finish design.
 Establish the delivery endpoint before implementation:
 

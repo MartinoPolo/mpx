@@ -33,10 +33,10 @@ exactly.
 
 Parse range, comma list, `label:<x>`, or `board`, plus optional size and flags. In Issue mode, use
 the selected issues provider's native broad open-Issue listing, then filter client-side by requested
-range/list/label. Keep `AFK`; before filtering, route `HITL`, an unanswered-questions blockquote, or
+range/list/label. Keep `AFK`; before filtering, route `HITL`, a HITL section, or
 `design needed` through the gate
-unless that exact label was explicitly selected. Parse `## Blocking Relationships`/body links and
-drop Issues with open blockers. Apply size last while preserving provider order.
+unless that exact label was explicitly selected. Parse the Blocking relationships section and body
+links and drop Issues with open blockers. Apply size last while preserving provider order.
 
 In board-direct mode, read `.mpx/BOARD.md` and select only unchecked top-level items beginning with
 `- [ ]` under `# To Process`; ignore checked, nested, annotated, and downstream items. Capture each

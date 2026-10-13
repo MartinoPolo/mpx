@@ -3,46 +3,45 @@
 The body of every task Issue. Keep only the sections that apply; no other headings.
 
 ```markdown
-> **Unanswered questions:**
->
-> - [A decision only a human can make]
-
-## Description
-
 [What is wrong or wanted, and why, in one to five sentences. Where it happens: module, symbol, or
-affected page, with repo-relative paths as hints.]
+affected page, with repo-relative paths as hints. Where to see it: URL or story, and the attached
+screenshot.]
 
-## Investigation
+### Acceptance criteria
 
-[Repro steps or the failing command. Expected and actual behavior with evidence. The cause, labelled
-as a hypothesis until confirmed.]
-
-## Acceptance Criteria
-
-- [ ] [Observable condition]
+- [Observable condition]
 - Out of scope: [what to leave alone]
 
-## Epic
+### Epic
 
 - Parent: [Epic title and canonical URL or immutable ID]
 
-## Blocking Relationships
+### Blocking relationships
 
 - Blocked by [Issue title and canonical URL or immutable ID] (reason)
 - Blocks [Issue title and canonical URL or immutable ID] (reason)
+
+### HITL (unanswered questions)
+
+- [A decision only a human can make]. Recommendation: [answer]
 ```
 
 ## Rules
 
 - Title: one line naming the area and the symptom or outcome, without an Epic number or a
   conventional-commit prefix.
-- Describe the outcome; the executor chooses the implementation. No user stories, requirement IDs,
-  implementation plans, or content repeated across sections.
-- Put each link and screenshot in the section it supports.
+- No heading above the description. Plain bullets; KanbanFlow does not render `[ ]` checkboxes.
+- Describe the outcome; the executor explores the code and chooses the implementation. No user
+  stories, requirement IDs, implementation plans, or content repeated across sections.
+- Findings worth keeping, such as reproduction details, a cause hypothesis, or entry points, go into
+  Issue comments as short pointers, one topic per comment. Never put probe results or session
+  history in the body.
+- Put each link and screenshot in the section or comment it supports. Name each attached image in
+  the text when the provider cannot embed it.
 - Paths are repo-relative hints, never absolute. The code is the source of truth.
-- `## Epic` and `## Blocking Relationships` hold body links for real relationships only; they do not
-  create provider-native hierarchy.
-- HITL means an unresolved human decision, recorded in the blockquote. Manual testing, visual
+- `### Epic` and `### Blocking relationships` hold body links for real relationships only; they do
+  not create provider-native hierarchy.
+- HITL means an unresolved human decision, recorded in the HITL section. Manual testing, visual
   inspection, review, and QA are not HITL.
-- When the user answers a question, delete it from the blockquote and put the answer where it
-  belongs in the body. Remove the blockquote when no question remains.
+- When the user answers a question, delete it from the HITL section and put the answer where it
+  belongs in the body. Remove the section when no question remains.

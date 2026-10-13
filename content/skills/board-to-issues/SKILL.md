@@ -66,7 +66,7 @@ For each proposed issue:
 - **Size** — estimate `size:S` (single file / few lines), `size:M` (multi-file, contained), or
   `size:L` (cross-cutting) from complexity.
 - **AFK vs HITL** — AFK when scope is clear; HITL when a requirement question is unanswered (add the
-  `> **Unanswered questions:**` blockquote).
+  `### HITL (unanswered questions)` section).
 - **Type** — infer from the note's content: a defect → `bug`, a chore/audit/refactor → `task`, and a
   new capability or improvement → `enhancement`. The note's position on the board carries no type
   information.

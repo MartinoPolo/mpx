@@ -41,7 +41,7 @@ item under `could_not_route`.
 2. Parse sibling and tracking Issue links from the epic body. Fetch open linked Issues. Siblings
    exclude source and any Issue labeled/tagged `unresolved`; at most one open linked tracking Issue
    may be reused.
-3. For each item, compare sibling `## Description` and `## Acceptance Criteria`. If directly in
+3. For each item, compare the sibling description and acceptance criteria. If directly in
    scope, append (or idempotently merge) this section:
 
 ```markdown

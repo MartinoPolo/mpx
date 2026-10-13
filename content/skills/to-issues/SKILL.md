@@ -57,7 +57,7 @@ Issue and comments. Stop if absent or body is empty.
 Inspect contradictions, TBDs, missing details, and open questions. Batch related HITL questions into
 thematic rounds and include a recommended answer. Add a later round only when earlier answers
 materially change it. A large slice-specific question cluster may remain in that slice's
-unanswered-questions blockquote.
+HITL section.
 
 ### 3. Explore
 
@@ -92,7 +92,7 @@ gh label create AFK --repo <target> --description "Ready for autonomous executio
 KanbanFlow supports label listing but not label creation. If any required label is absent, stop child
 creation and return the exact manual label handoff.
 
-Build body files from the Issue template, always including `## Epic`, then
+Build body files from the Issue template, always including `### Epic`, then
 create sequentially enough to capture every immutable ID and URL. Use the selected guide's
 target-bound GitHub or KanbanFlow Issue-create form. On ambiguous creation outcome, reconcile before
 retrying.
@@ -102,11 +102,11 @@ retrying.
 After all IDs exist, edit every child and the Epic so links and dependencies are exact:
 
 ```markdown
-## Epic
+### Epic
 
 - Parent: #<epic-id> — <epic-title>: `<epic-url>`
 
-## Blocking Relationships
+### Blocking relationships
 
 - Blocked by #<id> — <title>: `<url>` (reason)
 - Blocks #<id> — <title>: `<url>` (reason)

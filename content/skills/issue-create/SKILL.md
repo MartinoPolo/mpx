@@ -4,7 +4,7 @@ description: 'Creates one Issue in the configured provider. Use when "create iss
 triggers: creating or recording an Issue
 metadata:
   author: MartinoPolo
-  version: '0.13'
+  version: '0.14'
   category: utility
   mpx:
     schemaVersion: 1
@@ -27,15 +27,24 @@ Load only the selected
 remotes, switch providers, or invent a command. An unsupported provider receives a manual handoff
 with the composed title and body.
 
-## 1. Compose
+## 1. Investigate briefly
 
-Write the title and body per [the Issue template]({{MPX_SHARED_INSTRUCTIONS}}/ISSUE_TEMPLATE.md).
-Feel free to explore the code to understand the root of the problem.
+Investigate only enough to describe the Issue correctly; the executor explores the code, the cause, and the fix itself.
+
+- Find where the Issue is visible: page URL, story, or failing command.
+- When it is visible in a UI, take a screenshot that shows it; the user checks it at a glance.
+- Keep every image the user supplied as evidence, from its source path.
+- Do not probe candidate fixes, write test harnesses, or inventory code unless the user asks.
+
+## 2. Compose
+
+Write the title, body, and optional comments per
+[the Issue template]({{MPX_SHARED_INSTRUCTIONS}}/ISSUE_TEMPLATE.md).
 
 Stop and ask only when you cannot describe the Issue without the user's decision, for example when
-it is unclear what they want. Otherwise create it and put the open questions in its blockquote.
+it is unclear what they want. Otherwise create it and put the open questions in its HITL section.
 
-## 2. Classify
+## 3. Classify
 
 - `task` (`Implementation task`, `0E8A16`) and exactly one of `AFK` (`Can be implemented
   autonomously`, `0E8A16`) or `HITL` (`Requires human interaction`, `FBCA04`). `AFK` when the scope
@@ -45,15 +54,16 @@ it is unclear what they want. Otherwise create it and put the open questions in 
   substantial new UI or a user-facing workflow that needs design exploration.
 
 Where the provider supports label creation, create only missing labels with these exact values.
-Where it does not, apply the labels that exist and report the rest; the blockquote alone marks an
+Where it does not, apply the labels that exist and report the rest; the HITL section alone marks an
 Issue `HITL`.
 
-## 3. Create
+## 4. Create
 
 Skip creation when an open Issue already covers the same problem; report that Issue instead.
 Otherwise create the Issue through the selected provider guide, attaching screenshots or logs
-already on disk where the provider supports it. For an Epic or blocker the user named, write the
-reciprocal body link on the other Issue after re-reading it, preserving its unrelated content.
+already on disk where the provider supports it, then add the comments. For an Epic or blocker the
+user named, write the reciprocal body link on the other Issue after re-reading it, preserving its
+unrelated content.
 
 ## Output
 
