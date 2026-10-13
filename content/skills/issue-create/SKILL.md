@@ -33,7 +33,7 @@ Investigate only enough to describe the Issue correctly; the executor explores t
 
 - Find where the Issue is visible: page URL, story, or failing command.
 - When it is visible in a UI, take a screenshot that shows it; the user checks it at a glance.
-- Keep every image the user supplied as evidence, from its source path.
+- Keep every useful image the user supplied as evidence, from its source path.
 - Do not probe candidate fixes, write test harnesses, or inventory code unless the user asks.
 
 ## 2. Compose
