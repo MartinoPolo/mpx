@@ -23,7 +23,7 @@ one by one. Ask directly in the conversation instead of using AskUserQuestion.
 
 Check for existing `.mpx/` documentation:
 
-- `.mpx/CONTEXT.md` — project summary, domain language, feature index, constraints
+- `.mpx/CONTEXT.md` — project summary, domain language, features (done and planned)
 - `.mpx/DECISIONS.md` — settled architectural and design decisions with rationale
 
 If any exist, read them silently as grilling context. Reference their domain language and
@@ -68,14 +68,16 @@ important context and decisions for the project. If not sure if important enough
 Create missing sections only when confirmed content belongs in them; do not add empty sections or
 placeholders.
 
-**CONTEXT.md** — If new terms, features, or constraints emerged:
+**CONTEXT.md** — If new terms or features emerged:
 
 - § Domain Language: for each candidate term, show the full proposed entry
-  (`**Term** — One-sentence definition.`) and ask the user whether to add it. Write only confirmed
-  terms.
-- § Core Features: update the feature index (name + status + MPX Issue ID).
-- § Key Constraints: add newly settled constraints.
+  (`- **Term** — One-sentence definition.`) and ask the user whether to add it. Write only confirmed
+  terms, one list item each.
+- § Features: add planned features with their Issue link under `### Planned`; move shipped ones into
+  the compact `### Done` list. No version or status columns.
 - § Flagged Ambiguities: record resolved term conflicts.
+
+Settled constraints are decisions: record them in DECISIONS.md, not CONTEXT.md.
 
 **DECISIONS.md** — If architectural or design decisions were settled:
 

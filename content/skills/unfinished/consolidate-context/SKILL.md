@@ -77,11 +77,10 @@ Apply changes supported by authoritative evidence. Ask about unresolved conflict
 the affected content. Create missing sections only when substantive content belongs in them; do not
 add empty sections or placeholders. Produce the consolidated file:
 
-- § Domain Language: one sentence max per definition, definition-list format
-  (`**Term** — Definition.`)
-- § Core Features: index only (name + status + configured-provider Issue ID + design pointer), no
-  implementation details
-- § Key Constraints: concise bullets
+- § Domain Language: one sentence max per definition, one list item per term
+  (`- **Term** — Definition.`)
+- § Features: a compact `### Done` list and `### Planned` with configured-provider Issue links, no
+  versions or implementation details; move constraints into DECISIONS.md
 - § Flagged Ambiguities: resolved term conflicts with rationale
 
 **Content rules:**

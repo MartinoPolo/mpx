@@ -83,8 +83,8 @@ any project memory supplied through an authorized runtime or by the user as comp
 never discover account memory directly.
 
 If a destination file is absent, include creation in the preview rather than creating it
-immediately. Create missing sections only for approved content: Domain Language, Core Features,
-Key Constraints, or Flagged Ambiguities in `CONTEXT.md`, and domain headings in `DECISIONS.md`.
+immediately. Create missing sections only for approved content: Domain Language, Features, or
+Flagged Ambiguities in `CONTEXT.md`, and domain headings in `DECISIONS.md`.
 Do not add empty sections or instructional placeholders.
 
 ## 5. Deduplicate and resolve conflicts
