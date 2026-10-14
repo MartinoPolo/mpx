@@ -91,6 +91,9 @@ export async function createLaunchSpec(options: {
   env[harness === 'pi' ? 'PI_CODING_AGENT_DIR' : 'CLAUDE_CONFIG_DIR'] = accountRoot;
   // Claude Code roots its session scratchpad and task output at CLAUDE_CODE_TMPDIR.
   if (harness === 'claude' && env.MPX_TEMP && !env.CLAUDE_CODE_TMPDIR) env.CLAUDE_CODE_TMPDIR = env.MPX_TEMP;
+  // Personal sessions keep claude.ai connectors off; the work account curates its connectors with
+  // `deniedMcpServers` in its settings instead.
+  if (harness === 'claude' && account === 'personal' && env.ENABLE_CLAUDEAI_MCP_SERVERS === undefined) env.ENABLE_CLAUDEAI_MCP_SERVERS = 'false';
   if (!native) {
     env.MPX_ACCOUNT = account;
     env.MPX_ACTIVE_CONTENT_ROOT = resolve(root);

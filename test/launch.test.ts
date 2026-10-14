@@ -247,6 +247,18 @@ test('Claude launches root their scratchpad at MPX_TEMP unless CLAUDE_CODE_TMPDI
   } finally { await f.cleanup(); }
 });
 
+test('personal Claude launches disable claude.ai connectors unless the caller sets ENABLE_CLAUDEAI_MCP_SERVERS', async () => {
+  const f = await fixture();
+  try {
+    const launch = (harness: 'pi' | 'claude', account: 'personal' | 'work', env: NodeJS.ProcessEnv) => createLaunchSpec({ root: f.root, cwd: f.root, harness, account, config: f.config, project: registered, selection: { packs: [], paths: [], warnings: [] }, args: [], env });
+    assert.equal((await launch('claude', 'personal', {})).env.ENABLE_CLAUDEAI_MCP_SERVERS, 'false');
+    assert.equal((await launch('claude', 'personal', { ENABLE_CLAUDEAI_MCP_SERVERS: 'true' })).env.ENABLE_CLAUDEAI_MCP_SERVERS, 'true');
+    assert.equal((await launch('claude', 'work', {})).env.ENABLE_CLAUDEAI_MCP_SERVERS, undefined);
+    assert.equal((await launch('claude', 'work', { ENABLE_CLAUDEAI_MCP_SERVERS: 'false' })).env.ENABLE_CLAUDEAI_MCP_SERVERS, 'false');
+    assert.equal((await launch('pi', 'personal', {})).env.ENABLE_CLAUDEAI_MCP_SERVERS, undefined);
+  } finally { await f.cleanup(); }
+});
+
 test('mixed-case Windows environment cannot restore stale model/session or account selectors', async () => {
   const f = await fixture();
   try {
