@@ -142,3 +142,5 @@ beyond them unless asked.
 Report the link first, then chapter and beat count, whether a demo was recorded, the media captured,
 TTS requests spent, and what needs a human: listening for mispronounced identifiers, checking that
 suggested and rejected alternatives are fair, and that the reproduce steps work on their machine.
+End with the [result line]({{MPX_SHARED_INSTRUCTIONS}}/RESULT_LINE.md) linking the page; a quota
+stop names the clips still missing, because cached clips let a later run resume.

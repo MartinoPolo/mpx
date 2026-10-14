@@ -4,7 +4,7 @@ description: Execute one Issue or inline work with implementation, testing, revi
 argument-hint: "[issue|inline/checklist] [--no-tdd|--full-review|--no-auto-merge]"
 metadata:
   author: MartinoPolo
-  version: "2.10"
+  version: "2.11"
   category: project-management
   mpx:
     schemaVersion: 1
@@ -140,7 +140,9 @@ Return a summary message, not a report file. Start with the actual outcome, then
 
 Link the Issue and PR when applicable. Include representative final screenshots when visual
 acceptance ran. Put each link on its own line.
-Suggest durable decisions for `DECISIONS.md`; write them only after user approval.
+Suggest durable decisions for `DECISIONS.md`; write them only after user approval. End with the
+[result line]({{MPX_SHARED_INSTRUCTIONS}}/RESULT_LINE.md), naming the endpoint state, such as
+`Draft MR !312 created, CI green` or `MR !312 merged`.
 
 ## Flags
 
