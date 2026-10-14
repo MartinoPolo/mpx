@@ -13,6 +13,8 @@ import { TraceMap, generatedPositionFor, originalPositionFor } from '@jridgewell
  * service on a checkout of one revision. The player only looks the answers up.
  */
 const IDENTIFIER = /[A-Za-z_$][\w$]*/g;
+/* Lockfiles, manifests and other non-code files have no TypeScript source to resolve definitions in. */
+const isSourceFile = (filePath) => /\.(svelte|[cm]?[jt]sx?)$/.test(filePath);
 const shims = ['svelte-shims-v4.d.ts', 'svelte-jsx-v4.d.ts'].map((name) => fileURLToPath(new URL(`../node_modules/svelte2tsx/${name}`, import.meta.url)).replaceAll('\\', '/'));
 const toPosix = (fileName) => fileName.replaceAll('\\', '/');
 
@@ -125,7 +127,7 @@ export const openRevision = (repository, revision) => {
 	/* Repository files that the given files import, for adding them to the review as read-only context. */
 	const importsOf = (files) => {
 		const found = new Set();
-		for (const filePath of files.filter((item) => existsSync(`${root}/${item}`))) {
+		for (const filePath of files.filter((item) => isSourceFile(item) && existsSync(`${root}/${item}`))) {
 			const fileName = virtualName(filePath);
 			const code = filePath.endsWith('.svelte') ? generated(`${root}/${filePath}`).code : readFileSync(fileName, 'utf8');
 			for (const { fileName: specifier } of ts.preProcessFile(code, true, true).importedFiles) {
@@ -136,7 +138,8 @@ export const openRevision = (repository, revision) => {
 		return [...found];
 	};
 
-	const index = (files, isNavigable) => {
+	const index = (changedFiles, isNavigable) => {
+		const files = changedFiles.filter(isSourceFile);
 		for (const filePath of files) roots.add(virtualName(filePath));
 		const targets = [];
 		const targetIndexes = new Map();
