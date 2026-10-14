@@ -7,7 +7,11 @@ export const ready = (frame) =>
 
 export const prepare = (frame, scene) => frame.evaluate((scene) => window.demo.reset(scene), scene);
 
-export const act = ({ locator, click }) => click(locator('my-component button'));
+/* click moves a visible cursor; press shows each key as a keycap, so use it for every key instead of page.keyboard. */
+export const act = async ({ locator, click, press }) => {
+	await click(locator('my-component button'));
+	await press('Tab');
+};
 
 export const result = async (frame) => {
 	const observed = await frame.evaluate(() => window.demo.observed());

@@ -4,23 +4,25 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
 import { buildRevision, run } from './snapshot.mjs';
+import { demoDirectoryOf, parseRoundArgument, roundsOf, sidesOf } from './rounds.mjs';
 
 /*
- * Records a before-and-after demo as a video: the real bundle of each revision runs side by side in the stage,
- * and the run's recipe (script.json demo.recipe, a folder with frame.html and recipe.mjs) sets up each scene,
- * acts on both sides and reports what it observed. Captions come from those observations, not from the script.
+ * Records a before-and-after demo as a video: the real bundle of each side's revision runs side by side in the stage,
+ * and the round's recipe (demo.recipe, a folder with frame.html and recipe.mjs) sets up each scene, acts on every
+ * side and reports what it observed. Captions come from those observations, not from the script.
+ * Usage: node <engine>/tools/demo-record.mjs [--round=<index>]
  */
 const script = JSON.parse(readFileSync('script.json', 'utf8'));
-const { repository, base, head } = script.review;
-const demo = script.demo;
+const { round: roundIndex } = parseRoundArgument(process.argv.slice(2));
+const round = roundsOf(script)[roundIndex];
+const { repository } = script.review;
+const demo = round.demo;
+if (!demo) throw new Error(`round ${roundIndex} has no demo`);
 const stageDirectory = fileURLToPath(new URL('../demo/', import.meta.url));
 const recipeDirectory = path.resolve(demo.recipe);
 const recipe = await import(pathToFileURL(path.join(recipeDirectory, 'recipe.mjs')).href);
-const output = path.resolve('cache/demo');
-const sides = {
-	before: { revision: base, title: demo.sides?.before ?? 'Before the change' },
-	after: { revision: head, title: demo.sides?.after ?? 'After the change' },
-};
+const output = path.resolve(demoDirectoryOf(roundIndex));
+const sides = sidesOf(script, round, demo.sides);
 for (const side of Object.values(sides)) {
 	side.label = run('git', ['-C', repository, 'rev-parse', '--short=8', side.revision]);
 	side.root = buildRevision({ repository, revision: side.revision, commands: demo.build, environment: demo.environment, output: path.join(demo.bundle, demo.builtFile) });
@@ -105,12 +107,24 @@ try {
 		await page.evaluate(([x, y]) => stage.moveCursor(x + 30, y + 45), [x, y]);
 		await page.waitForTimeout(250);
 	};
+	/*
+	 * Keys show as keycaps on the acting side before they reach the page, so the viewer reads which key caused what
+	 * follows. Keys use Playwright names, combinations joined with "+"; gap leaves time to see each press land.
+	 */
+	const press = async (key, { times = 1, gap = 900 } = {}) => {
+		for (let count = 0; count < times; count++) {
+			await page.evaluate((key) => stage.showKey(key), key);
+			await page.waitForTimeout(250);
+			await page.keyboard.press(key);
+			await page.waitForTimeout(gap);
+		}
+	};
 	const actOn = async (side, scene) => {
 		/* A still lead-in absorbs the few frames a player may run past the end of the previous clip. */
 		await page.waitForTimeout(500);
 		const frame = await frameOf(side);
 		await page.evaluate((side) => stage.focus(side), side);
-		await recipe.act({ frame, locator: (selector) => locators[side].locator(selector), click, scene, demo });
+		await recipe.act({ frame, locator: (selector) => locators[side].locator(selector), click, press, scene, demo, side });
 		const { verdict, good, observed } = await recipe.result(frame, demo, scene);
 		await page.evaluate(([side, text, good]) => stage.verdict(side, text, good), [side, verdict, good]);
 		console.log(scene.id, side, observed, verdict);

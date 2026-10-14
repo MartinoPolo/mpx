@@ -1,0 +1,40 @@
+{
+	"review": {
+		"updates": [
+			{
+				"head": "<new head revision>",
+				"title": "<What this update does, as a title>",
+				"subtitle": "<type(scope)> · <previous head>, <new head>",
+				"demo": {
+					"recipe": "<recipe folder for this update>",
+					"kicker": "<The update, live>",
+					"sides": {
+						"before": { "title": "Before the work", "revision": "base" },
+						"after": { "title": "Now", "revision": "head" }
+					},
+					"holdAfterAction": 1.6,
+					"scenes": [{ "id": "main", "title": "<What the scene shows>", "subtitle": "<the condition it sets up>" }]
+				}
+			}
+		]
+	},
+	"scenes": [
+		{
+			"round": 1,
+			"card": "overview",
+			"title": "Update: <one idea>",
+			"points": [
+				{ "label": "Since the walkthrough", "text": "<the commits since the previous round, and whether runtime code changed>" },
+				{ "label": "<Changed>", "text": "<what this update changes>" },
+				{ "label": "Earlier chapters", "text": "<what they still describe that this update replaces>" }
+			],
+			"beats": [
+				{
+					"say": "<This update covers ... made after the walkthrough above.>",
+					"highlights": [{ "at": "<phrase from say>", "targets": ["Since the walkthrough"] }],
+					"note": "what this update covers"
+				}
+			]
+		}
+	]
+}

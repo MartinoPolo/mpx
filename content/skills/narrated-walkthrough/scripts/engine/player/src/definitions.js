@@ -3,28 +3,29 @@ const REMOVED = 2;
 
 /*
  * Serves go to definition, peek, hover and references from the index built by tools/definitions.mjs.
- * Symbols are recorded per revision ("base", "head") in file line numbers; this maps them onto whichever
+ * Symbols are recorded per round and revision ("base", "head") in file line numbers; this maps them onto whichever
  * model shows them: a unified row is the base revision when removed and the head revision otherwise.
  */
 export const registerDefinitions = ({ monaco, review, modelsOf, describeModel, open }) => {
-	const symbolLines = { base: new Map(), head: new Map() };
-	const symbolsOn = (side, filePath, line) => {
-		if (!symbolLines[side].has(filePath)) {
+	const symbolLines = new Map();
+	const symbolsOn = (round, side, filePath, line) => {
+		const key = `${round}:${side}:${filePath}`;
+		if (!symbolLines.has(key)) {
 			const byLine = new Map();
-			for (const symbol of review.definitions[side].symbols[filePath] ?? []) {
+			for (const symbol of review.rounds[round].definitions[side].symbols[filePath] ?? []) {
 				if (!byLine.has(symbol[0])) byLine.set(symbol[0], []);
 				byLine.get(symbol[0]).push(symbol);
 			}
-			symbolLines[side].set(filePath, byLine);
+			symbolLines.set(key, byLine);
 		}
-		return symbolLines[side].get(filePath).get(line) ?? [];
+		return symbolLines.get(key).get(line) ?? [];
 	};
 
 	const symbolAt = (model, position) => {
 		const described = describeModel(model);
 		if (!described) return null;
-		const { filePath, view } = described;
-		const file = review.files[filePath];
+		const { filePath, round, view } = described;
+		const file = review.rounds[round].files[filePath];
 		let side = view === 'original' ? 'base' : 'head';
 		let line = position.lineNumber;
 		if (view === 'unified') {
@@ -35,13 +36,13 @@ export const registerDefinitions = ({ monaco, review, modelsOf, describeModel, o
 		}
 		if (file.status === 'unchanged') side = 'head';
 		const column = position.column - 1;
-		const symbol = symbolsOn(side, filePath, line).find(([, start, end]) => column >= start && column <= end);
-		return symbol ? { side, view, symbol, range: new monaco.Range(position.lineNumber, symbol[1] + 1, position.lineNumber, symbol[2] + 1) } : null;
+		const symbol = symbolsOn(round, side, filePath, line).find(([, start, end]) => column >= start && column <= end);
+		return symbol ? { round, side, view, symbol, range: new monaco.Range(position.lineNumber, symbol[1] + 1, position.lineNumber, symbol[2] + 1) } : null;
 	};
 
-	const locationOf = (side, target, view) => {
-		const file = review.files[target.file];
-		const models = modelsOf(target.file);
+	const locationOf = ({ round, side, view }, target) => {
+		const file = review.rounds[round].files[target.file];
+		const models = modelsOf(target.file, round);
 		const split = view !== 'unified' && models.original;
 		const line = split
 			? target.line
@@ -51,12 +52,13 @@ export const registerDefinitions = ({ monaco, review, modelsOf, describeModel, o
 		const end = target.column + 1 + target.length;
 		return { uri: model.uri, range: new monaco.Range(line, target.column + 1, line, end <= model.getLineMaxColumn(line) ? end : target.column + 1) };
 	};
+	const definitionsOf = (found) => review.rounds[found.round].definitions[found.side];
 
 	monaco.languages.registerDefinitionProvider('*', {
 		provideDefinition: (model, position) => {
 			const found = symbolAt(model, position);
 			if (!found || found.symbol[3] < 0) return null;
-			const location = locationOf(found.side, review.definitions[found.side].targets[found.symbol[3]], found.view);
+			const location = locationOf(found, definitionsOf(found).targets[found.symbol[3]]);
 			return location ? [{ ...location, originSelectionRange: found.range }] : null;
 		},
 	});
@@ -64,15 +66,15 @@ export const registerDefinitions = ({ monaco, review, modelsOf, describeModel, o
 		provideReferences: (model, position) => {
 			const found = symbolAt(model, position);
 			if (!found || found.symbol[5] < 0) return null;
-			const { references, targets } = review.definitions[found.side];
-			return references[found.symbol[5]].map((index) => locationOf(found.side, targets[index], found.view)).filter(Boolean);
+			const { references, targets } = definitionsOf(found);
+			return references[found.symbol[5]].map((index) => locationOf(found, targets[index])).filter(Boolean);
 		},
 	});
 	monaco.languages.registerHoverProvider('*', {
 		provideHover: (model, position) => {
 			const found = symbolAt(model, position);
 			if (!found || found.symbol[4] < 0) return null;
-			const [signature, documentation, where] = review.definitions[found.side].hovers[found.symbol[4]];
+			const [signature, documentation, where] = definitionsOf(found).hovers[found.symbol[4]];
 			const contents = [{ value: `\`\`\`typescript\n${signature}\n\`\`\`` }];
 			if (documentation) contents.push({ value: documentation });
 			if (where) contents.push({ value: `Declared in \`${where}\`` });

@@ -4,26 +4,31 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
 import { buildRevision, run } from './snapshot.mjs';
+import { parseRoundArgument, roundsOf, sidesOf } from './rounds.mjs';
 
 /*
  * Captures the media that code chapters show beside the code: screenshots, short recordings and the real DevTools
- * Elements panel, taken from the real builds of both revisions. The run's capture script (script.json capture,
- * default capture/capture.mjs) decides what to open and what to capture; this tool provides the helpers and writes
- * cache/media/<name>.png|webm with cache/media/media.json. Usage: node <engine>/tools/capture.mjs [name ...]
+ * Elements panel, taken from the real builds of the round's sides. The round's capture script (script.json capture
+ * or an update's capture, default capture/capture.mjs) decides what to open and what to capture; this tool provides the
+ * helpers and writes cache/media/<name>.png|webm with cache/media/media.json, shared by every round.
+ * Usage: node <engine>/tools/capture.mjs [--round=<index>] [name ...]
  */
 const script = JSON.parse(readFileSync('script.json', 'utf8'));
-const { repository, base, head } = script.review;
-const demo = script.demo;
+const { round: roundIndex, rest: names } = parseRoundArgument(process.argv.slice(2));
+const round = roundsOf(script)[roundIndex];
+const { repository } = script.review;
+const demo = round.demo ?? script.demo;
 const output = path.resolve('cache/media');
 const recording = path.resolve('cache/media-recording');
-const capturePath = path.resolve(script.capture ?? 'capture/capture.mjs');
-const only = new Set(process.argv.slice(2));
+const capturePath = path.resolve(round.capture ?? 'capture/capture.mjs');
+const only = new Set(names);
 const manifestPath = path.join(output, 'media.json');
 const manifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')) : {};
 mkdirSync(output, { recursive: true });
 
+/* Captures see the same sides as the round's demo: "before" and "after" by default, "reviewed" when the demo adds it. */
 const revisions = Object.fromEntries(
-	Object.entries({ before: base, after: head }).map(([side, revision]) => {
+	Object.entries(sidesOf(script, round, demo.sides)).map(([side, { revision }]) => {
 		const root = buildRevision({ repository, revision, commands: demo.build, environment: demo.environment, output: path.join(demo.bundle, demo.builtFile) });
 		return [side, { revision, label: run('git', ['-C', repository, 'rev-parse', '--short=8', revision]), root, bundle: path.join(root, demo.bundle) }];
 	}),

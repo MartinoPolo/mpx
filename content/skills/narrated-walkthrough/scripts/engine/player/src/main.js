@@ -63,7 +63,8 @@ class LineState {
 }
 let languageCount = 0;
 const modelDescriptions = new Map();
-const createModel = (filePath, view, lines, tokenLines) => {
+/* Each round shows its own diff, so a file changed in two rounds has a model per round. */
+const createModel = (filePath, round, view, lines, tokenLines) => {
 	const language = `review-${languageCount++}`;
 	monaco.languages.register({ id: language });
 	monaco.languages.setTokensProvider(language, {
@@ -75,21 +76,22 @@ const createModel = (filePath, view, lines, tokenLines) => {
 			return { tokens, endState: new LineState(state.line + 1) };
 		},
 	});
-	const model = monaco.editor.createModel(lines.join('\n'), language, monaco.Uri.from({ scheme: 'review', path: `/${filePath}`, query: view }));
-	modelDescriptions.set(model.uri.toString(), { filePath, view });
+	const model = monaco.editor.createModel(lines.join('\n'), language, monaco.Uri.from({ scheme: 'review', path: `/${filePath}`, query: `${round}-${view}` }));
+	modelDescriptions.set(model.uri.toString(), { filePath, round, view });
 	return model;
 };
 const describeModel = (model) => modelDescriptions.get(model.uri.toString()) ?? null;
 const models = new Map();
-const modelsOf = (filePath) => {
-	if (!models.has(filePath)) {
-		const file = review.files[filePath];
+const modelsOf = (filePath, round) => {
+	const key = `${round}:${filePath}`;
+	if (!models.has(key)) {
+		const file = review.rounds[round].files[filePath];
 		const previousLines = file.previous?.split('\n') ?? [];
 		const currentLines = file.current?.split('\n') ?? [];
 		const textOf = ([kind, oldNumber, newNumber]) => (kind === REMOVED ? previousLines[oldNumber - 1] : currentLines[newNumber - 1]);
 		const tokensOf = ([kind, oldNumber, newNumber]) =>
 			kind === REMOVED ? file.previousTokens[oldNumber - 1] : file.currentTokens[newNumber - 1];
-		const unified = createModel(filePath, 'unified', file.rows.map(textOf), file.rows.map(tokensOf));
+		const unified = createModel(filePath, round, 'unified', file.rows.map(textOf), file.rows.map(tokensOf));
 		/* Ownerless model decorations show in every editor of the model, peek views included. */
 		unified.deltaDecorations(
 			[],
@@ -111,13 +113,13 @@ const modelsOf = (filePath) => {
 						],
 			),
 		);
-		models.set(filePath, {
+		models.set(key, {
 			unified,
-			original: file.status === 'modified' ? createModel(filePath, 'original', previousLines, file.previousTokens) : null,
-			modified: file.status === 'modified' ? createModel(filePath, 'modified', currentLines, file.currentTokens) : null,
+			original: file.status === 'modified' ? createModel(filePath, round, 'original', previousLines, file.previousTokens) : null,
+			modified: file.status === 'modified' ? createModel(filePath, round, 'modified', currentLines, file.currentTokens) : null,
 		});
 	}
-	return models.get(filePath);
+	return models.get(key);
 };
 
 const editorOptions = {
@@ -158,7 +160,7 @@ const diffColors = { [ADDED]: '#73c991b3', [REMOVED]: '#f28772b3' };
  */
 const numberLines = (editor) => {
 	const description = editor.getModel() && describeModel(editor.getModel());
-	const rows = description?.view === 'unified' ? review.files[description.filePath].rows : null;
+	const rows = description?.view === 'unified' ? review.rounds[description.round].files[description.filePath].rows : null;
 	editor.updateOptions({ lineNumbers: rows ? (line) => (rows[line - 1] ? String(rows[line - 1][0] === REMOVED ? rows[line - 1][1] : rows[line - 1][2]) : '') : 'on' });
 };
 monaco.editor.onDidCreateEditor((editor) => {
@@ -188,9 +190,10 @@ const scrollEditor = (editor, target, animate) => {
 
 /* One file in one or two columns. Narrated focus is expressed per unified row and mapped onto whichever editors show it. */
 class Pane {
-	constructor(parent, filePath, columns, onInteraction) {
+	constructor(parent, filePath, round, columns, onInteraction) {
 		this.filePath = filePath;
-		this.file = review.files[filePath];
+		this.round = round;
+		this.file = review.rounds[round].files[filePath];
 		this.element = element('section', 'pane', parent);
 		const header = element('div', 'pane-header', this.element);
 		const slash = filePath.lastIndexOf('/');
@@ -201,7 +204,7 @@ class Pane {
 		if (this.file.added) element('span', 'stat-added', stats, `+${this.file.added}`);
 		if (this.file.removed) element('span', 'stat-removed', stats, `−${this.file.removed}`);
 		const host = element('div', 'editor', element('div', 'pane-body', this.element));
-		const fileModels = modelsOf(filePath);
+		const fileModels = modelsOf(filePath, round);
 		this.split = columns === 2 && this.file.status === 'modified';
 		if (this.split) {
 			this.diffEditor = monaco.editor.createDiffEditor(host, {
@@ -398,6 +401,9 @@ let link = null;
 const allSteps = review.chapters.flatMap((chapter) => chapter.beats.flatMap((beat) => beat.steps));
 const speed = () => SPEEDS[state.speed];
 const currentChapter = () => review.chapters[state.chapter];
+/* Panes, cards and the file tree show the diff of the round the current chapter belongs to. */
+const activeRound = () => currentChapter().round;
+const activeFiles = () => review.rounds[activeRound()].files;
 const currentBeat = () => currentChapter().beats[state.beat];
 const speechLength = (beat) => beat.duration / speed().rate;
 const pauseLength = (beat) =>
@@ -445,14 +451,15 @@ const showPanes = (filePaths, force, media = []) => {
 	card?.remove();
 	card = null;
 	demoVideo = null;
-	const key = `${filePaths.join('|')}#${media.map((item) => item.id).join('|')}#${state.columns}`;
+	const round = activeRound();
+	const key = `${round}#${filePaths.join('|')}#${media.map((item) => item.id).join('|')}#${state.columns}`;
 	if (!force && key === paneKey) return;
 	mediaPanes.forEach((pane) => pane.remove());
 	mediaPanes = [];
 	/* Panes that stay keep their editor, so a jump to another file leaves the source where the viewer had it. */
-	const kept = force ? [] : panes.filter((pane) => filePaths.includes(pane.filePath));
+	const kept = force ? [] : panes.filter((pane) => pane.round === round && filePaths.includes(pane.filePath));
 	panes.filter((pane) => !kept.includes(pane)).forEach((pane) => pane.dispose());
-	panes = filePaths.map((filePath) => kept.find((pane) => pane.filePath === filePath) ?? new Pane(stage, filePath, state.columns, onInteraction));
+	panes = filePaths.map((filePath) => kept.find((pane) => pane.filePath === filePath) ?? new Pane(stage, filePath, round, state.columns, onInteraction));
 	panes.forEach((pane) => stage.append(pane.element));
 	mediaPanes = media.map(createMediaPane);
 	stage.append(...mediaPanes);
@@ -474,9 +481,10 @@ const showCard = (chapter) => {
 	clearStage();
 	card = element('div', `card card-${chapter.card}`, stage);
 	if (chapter.card === 'overview') {
-		element('div', 'card-kicker', card, 'Code walkthrough');
-		element('div', 'card-title', card, review.title);
-		element('div', 'card-subtitle', card, review.subtitle);
+		const round = review.rounds[chapter.round];
+		element('div', 'card-kicker', card, chapter.round === 0 ? 'Code walkthrough' : `Update ${chapter.round} · ${round.base}..${round.head}`);
+		element('div', 'card-title', card, round.title);
+		element('div', 'card-subtitle', card, round.subtitle);
 	}
 	if (chapter.points) showPoints(chapter.points);
 	if (chapter.groups) showGroups(chapter.groups);
@@ -548,7 +556,7 @@ const showGroups = (groups) => {
 	for (const group of groups) {
 		element('div', 'group', list, group.label).dataset.target = `group:${group.label}`;
 		for (const filePath of group.files) {
-			const file = review.files[filePath];
+			const file = activeFiles()[filePath];
 			const row = element('div', 'card-file', list);
 			row.dataset.target = `file:${filePath}`;
 			row.dataset.group = `group:${group.label}`;
@@ -561,7 +569,7 @@ const showGroups = (groups) => {
 	}
 };
 const showDemo = (chapter) => {
-	if (demoVideo && card) return;
+	if (demoVideo && card && demoVideo.getAttribute('src') === chapter.demo.video) return;
 	clearStage();
 	card = element('div', 'demo', stage);
 	const screen = element('div', 'demo-screen', card);
@@ -781,9 +789,17 @@ const openDefinition = (sourceEditor, resource, selectionOrPosition) => {
 };
 registerDefinitions({ monaco, review, modelsOf, describeModel, open: openDefinition });
 
+/* With updates, each round's chapters sit under a heading naming the commits it covers. */
+const roundHeading = (roundIndex) => {
+	const { base, head } = review.rounds[roundIndex];
+	return `${roundIndex === 0 ? 'Change' : `Update ${roundIndex}`} · ${base}..${head}`;
+};
 const renderChapters = () => {
 	chapterList.replaceChildren();
 	review.chapters.forEach((chapter, chapterIndex) => {
+		if (review.rounds.length > 1 && chapter.round !== review.chapters[chapterIndex - 1]?.round) {
+			element('div', 'round-heading', chapterList, roundHeading(chapter.round));
+		}
 		const row = element('button', `chapter-row${chapterIndex === state.chapter ? ' current' : ''}`, chapterList);
 		element('span', 'chapter-number', row, String(chapterIndex + 1));
 		element('span', 'chapter-name', row, chapter.title);
@@ -801,9 +817,10 @@ const renderChapters = () => {
 const renderTree = (focusedFile) => {
 	tree.replaceChildren();
 	const visible = new Set(panes.map((pane) => pane.filePath));
-	const filePaths = Object.keys(review.files).sort();
-	renderFiles(filePaths.filter((filePath) => review.files[filePath].status !== 'unchanged'), visible, focusedFile);
-	const referenced = filePaths.filter((filePath) => review.files[filePath].status === 'unchanged');
+	const files = activeFiles();
+	const filePaths = Object.keys(files).sort();
+	renderFiles(filePaths.filter((filePath) => files[filePath].status !== 'unchanged'), visible, focusedFile);
+	const referenced = filePaths.filter((filePath) => files[filePath].status === 'unchanged');
 	if (!referenced.length) return;
 	element('div', 'section-heading tree-heading', tree, 'Referenced, unchanged');
 	renderFiles(referenced, visible, focusedFile);
@@ -811,7 +828,7 @@ const renderTree = (focusedFile) => {
 const renderFiles = (filePaths, visible, focusedFile) => {
 	let folder = null;
 	for (const filePath of filePaths) {
-		const file = review.files[filePath];
+		const file = activeFiles()[filePath];
 		const slash = filePath.lastIndexOf('/');
 		const directory = filePath.slice(0, slash + 1);
 		if (directory !== folder) {
@@ -984,7 +1001,9 @@ const fonts = ["400 14px 'JetBrains Mono'", "italic 400 14px 'JetBrains Mono'", 
 Promise.all(fonts.map((font) => document.fonts.load(font))).then(() => {
 	state.chapter = -1;
 	renderHistory();
-	goTo(0);
+	/* A page with updates opens at the latest one, which is what a returning reviewer has not seen yet. */
+	const latestRound = review.rounds.length - 1;
+	goTo(Math.max(0, review.chapters.findIndex((chapter) => chapter.round === latestRound)));
 	requestAnimationFrame(tick);
 });
 window.player = { state, goTo, navigate, play, pause, enterFree, openFile, panes: () => panes, monaco };

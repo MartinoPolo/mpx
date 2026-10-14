@@ -9,8 +9,9 @@
 	.kicker { font-size: 13px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
 	h1 { margin: 6px 0 0; font-size: 30px; font-weight: 700; }
 	.subtitle { margin-top: 6px; color: var(--muted); font-size: 16px; min-height: 22px; }
-	main { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; padding: 22px 40px; }
-	.column { background: var(--card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; transition: box-shadow 0.3s, border-color 0.3s; }
+	main { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 28px; padding: 22px 40px; }
+	main.three { gap: 18px; padding: 22px 24px; }
+	.column { position: relative; background: var(--card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; transition: box-shadow 0.3s, border-color 0.3s; }
 	.column.active { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15); }
 	.column-header { display: flex; align-items: baseline; gap: 10px; padding: 14px 20px; border-bottom: 1px solid var(--border); }
 	.column-title { font-weight: 700; font-size: 18px; }
@@ -23,6 +24,13 @@
 	#cursor svg { filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35)); }
 	.ripple { position: fixed; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; border: 3px solid var(--accent); pointer-events: none; animation: ripple 0.6s ease-out forwards; z-index: 9; }
 	@keyframes ripple { from { transform: scale(0.3); opacity: 1; } to { transform: scale(1.4); opacity: 0; } }
+	/* Keycaps sit over the bottom of the acting side's page, where they cover the least of what reacts to them. */
+	.keys { position: absolute; left: 50%; bottom: 62px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 12px; background: rgba(17, 24, 39, 0.82); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25); pointer-events: none; z-index: 8; opacity: 0; transition: opacity 0.35s; }
+	.keys.visible { opacity: 1; }
+	.keycap { min-width: 26px; padding: 6px 12px 7px; border-radius: 7px; background: linear-gradient(#ffffff, #e5e7eb); border: 1px solid #9ca3af; box-shadow: 0 3px 0 #6b7280; color: var(--text); font: 600 18px 'Segoe UI', sans-serif; text-align: center; }
+	.keys.pressed .keycap { animation: press 0.25s ease-out; }
+	@keyframes press { 40% { transform: translateY(3px); box-shadow: 0 0 0 #6b7280; } }
+	.plus, .repeat { color: #e5e7eb; font: 600 16px 'Segoe UI', sans-serif; }
 </style>
 </head>
 <body>
@@ -31,40 +39,61 @@
 		<h1 id="title"></h1>
 		<div class="subtitle" id="subtitle" data-region="subtitle"></div>
 	</header>
-	<main>
-		<section class="column" id="before" data-region="column">
-			<div class="column-header"><span class="column-title" id="before-title"></span><span class="column-revision" id="before-revision"></span></div>
-			<iframe data-side="before"></iframe>
-			<div class="verdict" id="before-verdict" data-region="verdict"></div>
-		</section>
-		<section class="column" id="after" data-region="column">
-			<div class="column-header"><span class="column-title" id="after-title"></span><span class="column-revision" id="after-revision"></span></div>
-			<iframe data-side="after"></iframe>
-			<div class="verdict" id="after-verdict" data-region="verdict"></div>
-		</section>
-	</main>
+	<main id="columns"></main>
 	<div id="cursor"><svg viewBox="0 0 24 24" width="26" height="26"><path d="M4 2 L4 20 L9 15 L12.5 22 L15.5 20.5 L12 13.5 L19 13.5 Z" fill="#111827" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/></svg></div>
 	<script>
+		const KEY_LABELS = { Shift: '⇧ Shift', Control: 'Ctrl', Meta: '⌘', Enter: '↵ Enter', Escape: 'Esc', Backspace: '⌫', ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓', ' ': 'Space' };
+		let sideIds = [];
+		let activeSide = null;
+		let lastKey = null;
+		let repeats = 0;
+		let hideTimer = 0;
+		const element = (tag, className, parent, text) => {
+			const node = document.createElement(tag);
+			node.className = className;
+			if (text !== undefined) node.textContent = text;
+			parent.append(node);
+			return node;
+		};
 		window.stage = {
 			scene(title, subtitle) {
 				document.getElementById('title').textContent = title;
 				document.getElementById('subtitle').textContent = subtitle;
-				for (const side of ['before', 'after']) {
+				for (const side of sideIds) {
 					document.getElementById(`${side}-verdict`).textContent = '';
 					document.getElementById(`${side}-verdict`).className = 'verdict';
 				}
 			},
-			/* The recipe's frame runs once per side, each loading the bundle of its own revision. */
+			/* One column per side, in order; the recipe's frame runs once per side, each loading the bundle of its own revision. */
 			setup(kicker, sides) {
 				document.getElementById('kicker').textContent = kicker;
+				const columns = document.getElementById('columns');
+				sideIds = Object.keys(sides);
+				columns.classList.toggle('three', sideIds.length > 2);
 				for (const [side, { title, revision }] of Object.entries(sides)) {
-					document.getElementById(`${side}-title`).textContent = title;
-					document.getElementById(`${side}-revision`).textContent = revision;
-					document.querySelector(`iframe[data-side="${side}"]`).src = `recipe/frame.html?side=${side}`;
+					const column = element('section', 'column', columns);
+					Object.assign(column, { id: side });
+					column.dataset.region = 'column';
+					const header = element('div', 'column-header', column);
+					element('span', 'column-title', header, title);
+					element('span', 'column-revision', header, revision);
+					const frame = element('iframe', '', column);
+					frame.dataset.side = side;
+					frame.src = `recipe/frame.html?side=${side}`;
+					const verdict = element('div', 'verdict', column);
+					Object.assign(verdict, { id: `${side}-verdict` });
+					verdict.dataset.region = 'verdict';
+					Object.assign(element('div', 'keys', column), { id: `${side}-keys` });
 				}
 			},
+			/* Other sides are inert while one acts, so a key that moves focus out of its page cannot act on theirs. */
 			focus(side) {
-				for (const name of ['before', 'after']) document.getElementById(name).classList.toggle('active', name === side);
+				activeSide = side;
+				for (const name of sideIds) {
+					const column = document.getElementById(name);
+					column.classList.toggle('active', name === side);
+					column.inert = side !== null && name !== side;
+				}
 			},
 			moveCursor(x, y) {
 				const cursor = document.getElementById('cursor');
@@ -78,6 +107,24 @@
 				ripple.style.top = `${y}px`;
 				document.body.append(ripple);
 				setTimeout(() => ripple.remove(), 700);
+			},
+			/* A key pressed again while its keycaps still show counts up instead of flashing new ones. */
+			showKey(key) {
+				const keys = document.getElementById(`${activeSide}-keys`);
+				if (!keys) return;
+				repeats = key === lastKey && keys.classList.contains('visible') ? repeats + 1 : 1;
+				lastKey = key;
+				keys.replaceChildren();
+				key.split('+').forEach((part, index) => {
+					if (index > 0) element('span', 'plus', keys, '+');
+					element('span', 'keycap', keys, KEY_LABELS[part] ?? part);
+				});
+				if (repeats > 1) element('span', 'repeat', keys, `×${repeats}`);
+				keys.classList.remove('pressed');
+				void keys.offsetWidth;
+				keys.classList.add('visible', 'pressed');
+				clearTimeout(hideTimer);
+				hideTimer = setTimeout(() => keys.classList.remove('visible'), 1600);
 			},
 			verdict(side, text, good) {
 				const verdict = document.getElementById(`${side}-verdict`);

@@ -5,17 +5,19 @@ import { fileURLToPath } from 'node:url';
 import { createHighlighter } from 'shiki';
 import { openRevision } from './definitions.mjs';
 import { clipOf } from './clips.mjs';
+import { demoDirectoryOf, roundOfScene, roundsOf } from './rounds.mjs';
 
 /*
- * Builds the page from the run folder's script.json and timeline.json: the player, review.js (files at
- * both revisions, Shiki tokens, chapters) and one audio clip per beat. The output folder is rewritten
+ * Builds the page from the run folder's script.json and timeline.json: the player, review.js (each round's files
+ * at both of its revisions, Shiki tokens, chapters) and one audio clip per beat. The output folder is rewritten
  * whole, so it holds exactly what the page loads. Usage: node <engine>/tools/build.mjs [outputDirectory]
  */
 const outputDirectory = process.argv[2] ?? 'page';
 const engineFile = (relativePath) => fileURLToPath(new URL(`../${relativePath}`, import.meta.url));
 const script = JSON.parse(readFileSync('script.json', 'utf8'));
 const timeline = JSON.parse(readFileSync('timeline.json', 'utf8'));
-const { repository, base, head } = script.review;
+const { repository } = script.review;
+const rounds = roundsOf(script);
 const vsCodeTheme = JSON.parse(readFileSync(engineFile('theme.json'), 'utf8'));
 const languageByExtension = { '.svelte': 'svelte', '.ts': 'ts', '.js': 'js', '.css': 'css', '.json': 'json' };
 const highlighter = await createHighlighter({ themes: [vsCodeTheme], langs: [...new Set(Object.values(languageByExtension))] });
@@ -56,7 +58,7 @@ const CONTEXT = 0;
 const ADDED = 1;
 const REMOVED = 2;
 /* Rows are [kind, oldNumber, newNumber] for the whole file, so the unified view can scroll from top to bottom. */
-const unifiedRows = (filePath, previous, current) => {
+const unifiedRows = ({ base, head }, filePath, previous, current) => {
 	if (previous === null) return current.split('\n').map((_, index) => [ADDED, 0, index + 1]);
 	if (current === null) return previous.split('\n').map((_, index) => [REMOVED, index + 1, 0]);
 	const rows = [];
@@ -73,80 +75,94 @@ const unifiedRows = (filePath, previous, current) => {
 	return rows;
 };
 
-const files = {};
-for (const line of git('diff', '--name-status', base, head).trim().split('\n')) {
-	const [status, ...paths] = line.split('\t');
-	const filePath = paths.at(-1);
-	const previousPath = paths[0];
-	const language = languageByExtension[path.extname(filePath)] ?? 'text';
-	const previous = status === 'A' ? null : readAt(base, previousPath);
-	const current = status === 'D' ? null : readAt(head, filePath);
-	const highlight = (code) => (code === null ? null : language === 'text' ? code.split('\n').map(() => []) : tokenize(code, language));
-	const rows = unifiedRows(filePath, previous, current);
-	files[filePath] = {
-		status: { A: 'added', D: 'deleted' }[status[0]] ?? 'modified',
-		previous,
-		current,
-		previousTokens: highlight(previous),
-		currentTokens: highlight(current),
-		rows,
-		added: rows.filter(([kind]) => kind === ADDED).length,
-		removed: rows.filter(([kind]) => kind === REMOVED).length,
-		narrated: false,
-	};
-}
-
-/* Files the narrated code imports are added unchanged, so a definition can be followed into them. */
-const narratedPaths = Object.values(script.files).map((file) => file.path);
-const revisions = { base: openRevision(repository, base), head: openRevision(repository, head) };
-const importedPaths = [...new Set([...revisions.base.importsOf(narratedPaths), ...revisions.head.importsOf(narratedPaths)])].filter((filePath) => !files[filePath]);
-for (const filePath of importedPaths) {
-	const content = readAt(head, filePath);
-	files[filePath] = {
-		status: 'unchanged',
-		previous: content,
-		current: content,
-		previousTokens: null,
-		currentTokens: tokenize(content, languageByExtension[path.extname(filePath)] ?? 'ts'),
-		rows: content.split('\n').map((_, index) => [CONTEXT, index + 1, index + 1]),
-		added: 0,
-		removed: 0,
-		narrated: false,
-	};
-}
-const isNavigable = (filePath) => Boolean(files[filePath]);
-const pathsWhere = (predicate) => Object.keys(files).filter((filePath) => predicate(files[filePath]));
-const definitions = {
-	base: revisions.base.index(pathsWhere((file) => file.status === 'modified' || file.status === 'deleted'), isNavigable),
-	head: revisions.head.index(pathsWhere((file) => file.status !== 'deleted'), isNavigable),
+/* A revision is indexed once, though it ends one round and starts the next. */
+const openedRevisions = new Map();
+const revisionOf = (revision) => {
+	if (!openedRevisions.has(revision)) openedRevisions.set(revision, openRevision(repository, revision));
+	return openedRevisions.get(revision);
 };
 
-const pathOf = (fileId) => {
+/* Each round shows its own diff: the files it changed, at its own base and head. */
+const collectRound = (round) => {
+	const { base, head } = round;
+	const files = {};
+	const diff = git('diff', '--name-status', base, head).trim();
+	if (!diff) throw new Error(`nothing changed between ${base} and ${head}`);
+	for (const line of diff.split('\n')) {
+		const [status, ...paths] = line.split('\t');
+		const filePath = paths.at(-1);
+		const previousPath = paths[0];
+		const language = languageByExtension[path.extname(filePath)] ?? 'text';
+		const previous = status === 'A' ? null : readAt(base, previousPath);
+		const current = status === 'D' ? null : readAt(head, filePath);
+		const highlight = (code) => (code === null ? null : language === 'text' ? code.split('\n').map(() => []) : tokenize(code, language));
+		const rows = unifiedRows(round, filePath, previous, current);
+		files[filePath] = {
+			status: { A: 'added', D: 'deleted' }[status[0]] ?? 'modified',
+			previous,
+			current,
+			previousTokens: highlight(previous),
+			currentTokens: highlight(current),
+			rows,
+			added: rows.filter(([kind]) => kind === ADDED).length,
+			removed: rows.filter(([kind]) => kind === REMOVED).length,
+			narrated: false,
+		};
+	}
+
+	/* Files the narrated code imports are added unchanged, so a definition can be followed into them. */
+	const narratedPaths = Object.values(script.files).map((file) => file.path).filter((filePath) => files[filePath]);
+	const revisions = { base: revisionOf(base), head: revisionOf(head) };
+	const importedPaths = [...new Set([...revisions.base.importsOf(narratedPaths), ...revisions.head.importsOf(narratedPaths)])].filter((filePath) => !files[filePath]);
+	for (const filePath of importedPaths) {
+		const content = readAt(head, filePath);
+		files[filePath] = {
+			status: 'unchanged',
+			previous: content,
+			current: content,
+			previousTokens: null,
+			currentTokens: tokenize(content, languageByExtension[path.extname(filePath)] ?? 'ts'),
+			rows: content.split('\n').map((_, index) => [CONTEXT, index + 1, index + 1]),
+			added: 0,
+			removed: 0,
+			narrated: false,
+		};
+	}
+	const isNavigable = (filePath) => Boolean(files[filePath]);
+	const pathsWhere = (predicate) => Object.keys(files).filter((filePath) => predicate(files[filePath]));
+	const definitions = {
+		base: revisions.base.index(pathsWhere((file) => file.status === 'modified' || file.status === 'deleted'), isNavigable),
+		head: revisions.head.index(pathsWhere((file) => file.status !== 'deleted'), isNavigable),
+	};
+	return { ...round, files, definitions, pathsWhere };
+};
+const collected = rounds.map(collectRound);
+
+const pathOf = (round, fileId) => {
 	const filePath = script.files[fileId]?.path;
-	if (!files[filePath]) throw new Error(`${fileId}: ${filePath} is not changed between ${base} and ${head}`);
-	files[filePath].narrated = true;
+	if (!round.files[filePath]) throw new Error(`${fileId}: ${filePath} is not changed between ${round.base} and ${round.head}`);
+	round.files[filePath].narrated = true;
 	return filePath;
 };
 const rowTextOf = (file, [kind, oldNumber, newNumber]) =>
 	kind === REMOVED ? file.previous.split('\n')[oldNumber - 1] : file.current.split('\n')[newNumber - 1];
-const rowIndexOf = (filePath, reference) => {
-	const index = files[filePath].rows.findIndex(([kind, oldNumber, newNumber]) =>
+const rowIndexOf = (file, filePath, reference) => {
+	const index = file.rows.findIndex(([kind, oldNumber, newNumber]) =>
 		reference.old ? kind !== ADDED && oldNumber === reference.old : kind !== REMOVED && newNumber === reference.line,
 	);
 	if (index < 0) throw new Error(`${filePath}: no row for ${JSON.stringify(reference)}`);
 	return index;
 };
-const parseRows = (filePath, specification) =>
+const parseRows = (file, filePath, specification) =>
 	specification.split(',').flatMap((part) => {
 		const old = part.startsWith('o');
 		const [first, last = first] = part.replaceAll('o', '').split('-').map(Number);
 		return Array.from({ length: last - first + 1 }, (_, offset) =>
-			rowIndexOf(filePath, old ? { old: first + offset } : { line: first + offset }),
+			rowIndexOf(file, filePath, old ? { old: first + offset } : { line: first + offset }),
 		);
 	});
 /* A highlighted change always brings its whole run of removed and added rows, so old and new code are read together. */
-const withChangeRuns = (filePath, indexes) => {
-	const { rows, status } = files[filePath];
+const withChangeRuns = ({ rows, status }, indexes) => {
 	const expanded = new Set(indexes);
 	const isChange = (index) => rows[index] && rows[index][0] !== CONTEXT;
 	if (status === 'modified') {
@@ -157,14 +173,15 @@ const withChangeRuns = (filePath, indexes) => {
 	}
 	return [...expanded].sort((first, second) => first - second);
 };
-const resolveStep = (step, fallback) => {
-	const filePath = step.file ? pathOf(step.file) : fallback.file;
-	const row = rowIndexOf(filePath, step.token);
-	const start = rowTextOf(files[filePath], files[filePath].rows[row]).indexOf(step.token.text);
+const resolveStep = (round, step, fallback) => {
+	const filePath = step.file ? pathOf(round, step.file) : fallback.file;
+	const file = round.files[filePath];
+	const row = rowIndexOf(file, filePath, step.token);
+	const start = rowTextOf(file, file.rows[row]).indexOf(step.token.text);
 	if (start < 0) throw new Error(`${filePath}: token "${step.token.text}" not in row ${row}`);
 	return {
 		file: filePath,
-		rows: withChangeRuns(filePath, [...parseRows(filePath, step.lines), row]),
+		rows: withChangeRuns(file, [...parseRows(file, filePath, step.lines), row]),
 		token: { row, start, length: step.token.text.length },
 		symbol: step.symbol ?? fallback.symbol,
 		link: Boolean(step.link),
@@ -186,12 +203,19 @@ const clipFor = (beatTiming) => {
 	return `audio/${name}`;
 };
 
-/* The demo is recorded by tools/demo-record.mjs; beats name the recorded clip they play. */
-const demoRecording = script.scenes.some((scene) => scene.demo) ? JSON.parse(readFileSync('cache/demo/demo.json', 'utf8')) : null;
-if (demoRecording) {
-	mkdirSync(path.join(outputDirectory, 'demo'), { recursive: true });
-	copyFileSync(path.join('cache/demo', demoRecording.video), path.join(outputDirectory, 'demo', demoRecording.video));
-}
+/* Each round's demo is recorded by tools/demo-record.mjs into its own folder; beats name the recorded clip they play. */
+const demoRecordings = new Map();
+const demoOf = (roundIndex) => {
+	if (!demoRecordings.has(roundIndex)) {
+		const directory = demoDirectoryOf(roundIndex);
+		const recording = JSON.parse(readFileSync(path.join(directory, 'demo.json'), 'utf8'));
+		const video = roundIndex === 0 ? recording.video : `${path.basename(directory)}.webm`;
+		mkdirSync(path.join(outputDirectory, 'demo'), { recursive: true });
+		copyFileSync(path.join(directory, recording.video), path.join(outputDirectory, 'demo', video));
+		demoRecordings.set(roundIndex, { ...recording, src: `demo/${video}` });
+	}
+	return demoRecordings.get(roundIndex);
+};
 /* Media panes show what tools/capture.mjs captured beside the code; script.media adds a pane title and an optional link. */
 const mediaManifest = script.scenes.some((scene) => scene.media) ? JSON.parse(readFileSync('cache/media/media.json', 'utf8')) : null;
 const copiedMedia = new Set();
@@ -207,9 +231,9 @@ const mediaOf = (scene) =>
 		const { title = id, link = null } = script.media?.[id] ?? {};
 		return { id, title, link, kind: entry.kind, src: `media/${entry.file}`, width: entry.width, height: entry.height, regions: entry.regions };
 	}) ?? [];
-const clipRange = (id) => {
-	if (!demoRecording.clips[id]) throw new Error(`demo has no clip "${id}"`);
-	return demoRecording.clips[id];
+const clipRange = (recording, id) => {
+	if (!recording.clips[id]) throw new Error(`demo has no clip "${id}"`);
+	return recording.clips[id];
 };
 /* Cues name a phrase of the narration; its time is estimated from where it sits in the sentence. */
 const phraseAt = (beat, timing, phrase) => {
@@ -230,17 +254,17 @@ const targetOf = (scene, name) => {
 	if (scene.sections?.some((section) => section.label === name)) return `section:${name}`;
 	const [mediaId, ...region] = name.split('.');
 	if (scene.media?.includes(mediaId) && (region.length === 0 || mediaManifest[mediaId].regions[region.join('.')])) return `media:${name}`;
-	if (scene.demo && demoRecording.regions[name]) return `region:${name}`;
-	if (scene.demo && script.demo.live && name === 'live') return 'live';
+	if (scene.demo && demoOf(roundOfScene(scene)).regions[name]) return `region:${name}`;
+	if (scene.demo && rounds[roundOfScene(scene)].demo?.live && name === 'live') return 'live';
 	throw new Error(`unknown highlight target "${name}" in "${scene.title}"`);
 };
 
 /* Card groups list paths; "rest" collects the changed files no other group of that card names. */
-const groupsOf = (scene) => {
-	const changed = pathsWhere((file) => file.status !== 'unchanged').sort();
+const groupsOf = (scene, round) => {
+	const changed = round.pathsWhere((file) => file.status !== 'unchanged').sort();
 	const groups = (scene.groups ?? [{ label: 'Walked through', narrated: true }, { label: 'Also changed, not narrated', rest: true }]).map((group) => ({
 		label: group.label,
-		files: group.files?.map((fileId) => script.files[fileId].path) ?? (group.narrated ? changed.filter((filePath) => files[filePath].narrated) : []),
+		files: group.files?.map((fileId) => script.files[fileId].path) ?? (group.narrated ? changed.filter((filePath) => round.files[filePath].narrated) : []),
 		rest: Boolean(group.rest),
 	}));
 	const named = new Set(groups.flatMap((group) => group.files));
@@ -265,11 +289,16 @@ const timingOf = (beat) => {
 
 let beatCount = 0;
 const chapters = script.scenes.map(({ beats, ...scene }) => {
-	const panes = (scene.panes ?? []).map(pathOf);
+	const roundIndex = roundOfScene(scene);
+	const round = collected[roundIndex];
+	if (!round) throw new Error(`"${scene.title}" names round ${roundIndex}, but review.updates has no such update`);
+	const panes = (scene.panes ?? []).map((fileId) => pathOf(round, fileId));
 	/* An overview or a demo is understood at a glance, so its beats run on; code keeps a pause to read. */
 	const visual = Boolean(scene.demo || scene.card === 'overview');
+	const recording = scene.demo ? demoOf(roundIndex) : null;
 	let heldFrame = null;
 	return {
+		round: roundIndex,
 		card: scene.card ?? null,
 		title: scene.title,
 		visual,
@@ -278,18 +307,18 @@ const chapters = script.scenes.map(({ beats, ...scene }) => {
 		options: optionsOf(scene),
 		sections: scene.sections ?? null,
 		media: mediaOf(scene),
-		demo: scene.demo ? { video: `demo/${demoRecording.video}`, regions: demoRecording.regions, live: script.demo.live } : null,
+		demo: recording ? { video: recording.src, regions: recording.regions, live: round.demo?.live } : null,
 		beats: beats.map((beat) => {
 			beatCount++;
 			const timing = timingOf(beat);
 			const steps = [];
 			if (beat.token) {
-				const main = resolveStep(beat, { file: beat.file ? pathOf(beat.file) : panes[0] });
+				const main = resolveStep(round, beat, { file: beat.file ? pathOf(round, beat.file) : panes[0] });
 				steps.push(main);
-				if (beat.then) steps.push(resolveStep(beat.then, main));
+				if (beat.then) steps.push(resolveStep(round, beat.then, main));
 			}
 			/* A demo beat without a clip of its own keeps showing where the previous clip ended. */
-			const video = beat.video ? { ...clipRange(beat.video.clip), at: phraseAt(beat, timing, beat.video.at) } : heldFrame;
+			const video = beat.video ? { ...clipRange(recording, beat.video.clip), at: phraseAt(beat, timing, beat.video.at) } : heldFrame;
 			if (video) heldFrame = { from: video.to, to: video.to, at: 0 };
 			const highlights = (beat.highlights ?? []).map((cue) => ({ at: phraseAt(beat, timing, cue.at), targets: cue.targets.map((name) => targetOf(scene, name)) }));
 			return { note: beat.note, say: beat.say, clip: clipFor(timing), duration: timing.speech, pause: beat.pause ?? (visual ? 0 : defaultBeatPause), video, highlights, steps };
@@ -298,7 +327,7 @@ const chapters = script.scenes.map(({ beats, ...scene }) => {
 });
 /* Groups are resolved last, once pathOf has marked every narrated file. */
 script.scenes.forEach((scene, index) => {
-	if (scene.card === 'changes') chapters[index].groups = groupsOf(scene);
+	if (scene.card === 'changes') chapters[index].groups = groupsOf(scene, collected[roundOfScene(scene)]);
 });
 
 /* The page chrome takes its colors from the same VS Code theme as the code, so it reads like the editor. */
@@ -321,13 +350,12 @@ const chrome = {
 	'--removed': themeColor('editorGutter.deletedBackground', '#f28772'),
 };
 const themeColors = Object.fromEntries(Object.entries(vsCodeTheme.colors).filter(([, value]) => /^#[0-9a-f]{3,8}$/i.test(value)));
+const shortRevision = (revision) => git('rev-parse', '--short=8', revision).trim();
 const review = {
 	title: script.title,
 	subtitle: script.subtitle,
-	revisions: { base, head },
 	theme: { colors: themeColors, chrome, palette },
-	files,
-	definitions,
+	rounds: collected.map(({ title, subtitle, base, head, files, definitions }) => ({ title, subtitle, base: shortRevision(base), head: shortRevision(head), files, definitions })),
 	chapters,
 };
 writeFileSync(path.join(outputDirectory, 'review.js'), `window.REVIEW = ${JSON.stringify(review)};\n`);
@@ -336,4 +364,5 @@ for (const name of readdirSync(player)) copyFileSync(path.join(player, name), pa
 const escapeHtml = (text) => text.replace(/[&<>"]/g, (character) => `&#${character.charCodeAt(0)};`);
 const page = readFileSync(path.join(player, 'index.html'), 'utf8');
 writeFileSync(path.join(outputDirectory, 'index.html'), page.replace(/<title>.*<\/title>/, `<title>${escapeHtml(script.title)}</title>`));
-console.log(`${outputDirectory}: ${Object.keys(files).length} files, ${chapters.length} chapters, ${beatCount} beats`);
+const fileCount = new Set(collected.flatMap((round) => Object.keys(round.files))).size;
+console.log(`${outputDirectory}: ${rounds.length} round(s), ${fileCount} files, ${chapters.length} chapters, ${beatCount} beats`);
