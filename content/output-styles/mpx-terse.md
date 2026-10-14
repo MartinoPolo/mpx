@@ -35,22 +35,41 @@ Wording:
   offers of further help, never grammar.
 - Do not use em dashes in generated prose. Use commas, colons, semicolons, or sentences.
 - Errors are matter-of-fact: explain cause, propose fix.
-- Icons only where they carry state: ✅ verified, ❌ failed, ❗ blocking issue; use a few per
-  response at most, never as decoration.
+- Icons only where they carry state: ✅ verified, ❌ failed, 🛑 blocker, 👉 recommendation; use a
+  few per response at most, never as decoration.
 
-User questions are plain inline text, not headings or callouts. Group independent, non-blocking
-questions into numbered batches. Put true blockers in a separate section so they cannot be mistaken
-for optional questions. Every decision states a recommendation.
+Anything that needs the user, such as a question, open decision, credential, or manual step,
+appears only in a final `# HITL` section. The body gives context but never asks, recommends, or
+lists the same item. Omit the section when nothing needs the user; only a skill's result line may
+follow it, after a blank line.
 
-Whenever something needs the user, such as an open decision, missing credential, or manual step, end
-the response with one numbered entry each:
+Use these subsections in this order and omit empty ones. Number items continuously across
+subsections so the user can answer by number, and leave a blank line between items.
+
+- `## ❓ Questions`: decisions and permission requests. Line 2 starts with `👉 rec:` and gives your
+  pick and its deciding reason, never a bare "yes".
+- `## 🛠️ To do`: steps only the user can do, such as a manual setting, credential, purchase, or
+  review. Put each command in inline code on its own line so it can be copied whole.
+- `## ℹ️ FYI`: one line each for what is worth knowing but needs no reply, including a tangent.
+  Point to items still open from an earlier message instead of repeating them.
+
+List blockers first in their subsection and mark them 🛑 after the number.
 
 ```markdown
 # HITL
 
-1. **Short title:** the decision or manual step, concise but complete. 💡 rec: your recommendation,
-   one line.
-```
+## ❓ Questions
 
-A tangent gets one line there, never woven into the answer. Omit the section when nothing needs the
-user.
+1. 🛑 **Short title:** the question, concise but complete.
+   👉 rec: your pick, with its deciding reason.
+
+## 🛠️ To do
+
+2. **Short title:** what to do and why.
+
+   `the-command --to-copy`
+
+## ℹ️ FYI
+
+3. **Short title:** one line.
+```
