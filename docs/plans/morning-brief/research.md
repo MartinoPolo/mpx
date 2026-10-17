@@ -54,18 +54,21 @@ it predates the decisions below.
 - The page saves choices as `morning-brief-choices-<date>.json` (download, or copy); the apply
   session reads that file.
 - Any click on a link or control pauses playback; I resume when I come back.
-- The deck opens with the calendar, reports section by section, and asks only at the end: each
-  action point says why and where it came from, with a link (for example, the email that warned
-  about an expiring token).
+- The deck opens with the calendar and reports section by section; each proposed action is decided
+  where it arises and confirmed in the action points, which say why and where each came from, with a
+  link (for example, the email that warned about an expiring token).
 - Overnight icons show only the outcome: ✅ worked, ❌ failed or conflict, 👀 needs my check. Short
   words name the action.
-- Work in flight: Work/Personal switch, one Kanban board whose columns show each MR, PR or branch
+- Merge requests: Work/Personal switch, one Kanban board whose columns show each MR, PR or branch
   state; quiet projects collapse into one line. Failed pipelines and Sentry errors from mail enrich these rows.
+- Issues: a separate board per tracker (KanbanFlow at work through `kf`, GitHub personally). GitHub
+  closes issues from merged PRs; KanbanFlow columns are moved by hand, so a lagging issue gets a
+  proposed move that the apply session makes.
 - Triage: the agent proposes project, heading and priority; the page shows them as prefilled
   selects; Apply accepts the rest as proposed.
 - Retro: tool errors, hook blocks, my corrections and repeated attempts at the same step, across
-  Claude and Pi on both accounts; at most five, ranked. Actions: "one session each" (default, grouped
-  when items touch the same repo) and "one session for all selected".
+  Claude and Pi on both accounts; at most five, ranked. Each fix session has its own decision; the
+  apply session starts the approved ones, grouped when they touch the same repo.
 - Each source runs as a parallel subagent with a time limit; a failed source shows "unavailable:
   reason" on its slide and the brief still publishes.
 - History: `MPX_AI_DUMP/morning-brief/<date>/` per day, plus `state.json` with the last successful
@@ -79,12 +82,13 @@ it predates the decisions below.
 | Area | Content | Source |
 | --- | --- | --- |
 | Calendar | Earlier days of the window greyed, today and tomorrow; days without events dropped; personal and work merged, coloured by calendar | personal Google Calendar (`cc`); work calendar when available |
-| Work in flight | Split work and personal, then by project with recent activity; Kanban of MRs/PRs/issues with state changes; uncommitted, unpushed and plan-only work; unaddressed failed pipelines and Sentry errors | git, `gh`, `glab`, Gerrit, KanbanFlow, Orca worktrees, sessions, mail notifications |
+| Merge requests | Split work and personal, then by project with recent activity; Kanban of MRs/PRs with state changes; uncommitted, unpushed and plan-only work; unaddressed failed pipelines and Sentry errors | git, `gh`, `glab`, Gerrit, Orca worktrees, sessions, mail notifications |
+| Issues | My open issues per tracker with linked MR state; proposed moves where a column lags its MR | `kf` (KanbanFlow), `gh` |
 | Overnight runs | Work that ran between my last evening prompt and first morning prompt (implementations, renders, AFK runs); terse results, outcome icons, links; no routines | sessions, Orca automation runs, git |
 | Slack | Short summary; everything directed at me (mentions, DMs, `#team-e`) with whether I answered; interesting threads from `#d-ai`, `#general`, `#devel*`; Slack-styled with permalinks | work Slack (`ccw`) |
 | Mail | Mail to act on; one-line summary of notifications | personal Gmail (`cc`) |
 | Obsidian triage | Recent daily-note dumps and new ideas, categorized per the task system with proposed priorities; I confirm or change them on the page | Obsidian vault |
-| Retro | Problems in recent agent sessions with proposed fixes; checkboxes and a button that spawns fix sessions | Claude and Pi transcripts |
+| Retro | Problems in recent agent sessions with proposed fixes; a fix-session decision per item | Claude and Pi transcripts |
 | Instructions | Changes to global and per-project instructions and to decisions | git |
 | AI news | At most three items with up/down votes | Claude Code and Codex changelogs, Anthropic and OpenAI news, Hacker News, web |
 | Action points | Everything that needs me, each with a link | all |

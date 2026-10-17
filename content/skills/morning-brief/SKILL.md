@@ -2,8 +2,9 @@
 name: morning-brief
 description:
   'Builds the daily morning brief: an interactive narrated page covering calendar, overnight runs,
-  work in flight, Slack, mail, Obsidian triage, session retro, instruction changes and AI news since
-  the last brief, ending with action points whose choices are saved for a separate apply session'
+  merge requests, issues, Slack, mail, Obsidian triage, session retro, instruction changes and AI
+  news since the last brief, with action points decided where they arise and saved for a separate
+  apply session'
 argument-hint: '[--no-state] [--rebuild]'
 triggers:
   morning brief; morning summary; daily brief
@@ -21,7 +22,8 @@ metadata:
 
 Build one page that tells me, in a few minutes, what happened since the last brief and what needs
 me today. Everything here is read-only: never post, reply, react, label, move tickets, merge, push or
-edit notes. My choices are collected on the page and applied later by a separate session.
+edit notes. The page proposes those actions, I decide each one, and a separate session applies the
+saved choices.
 
 `--no-state` builds without recording the brief as the last one (test runs). `--rebuild` only
 re-renders an existing `brief.json`.
@@ -64,14 +66,20 @@ wait, never by ending the turn.
 
 ## Areas
 
-- **Work in flight** (`repos.json`, `work.json` alerts). Split work and personal; every MR, PR,
+- **Merge requests** (`repos.json`, `work.json` alerts). Split work and personal; every MR, PR,
   change and local branch with activity in the window or open items becomes a Kanban card whose
   `state` places it in a column (local, draft, in review, ready, merged). Resolve providers per
   [provider routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md): open and recently changed
-  MRs/PRs/Gerrit changes with review and pipeline state, KanbanFlow tickets and whether their
-  column matches their MR state, Orca worktrees, uncommitted or unpushed work. Approved and green
-  MRs get the flag "ready to merge". Unaddressed failed pipelines and Sentry alerts from mail attach
-  to their project. Long-untouched dirty checkouts collapse into one leftovers line, not cards.
+  MRs/PRs/Gerrit changes with review and pipeline state, Orca worktrees, uncommitted or unpushed
+  work. Approved and green MRs get the flag "ready to merge". Unaddressed failed pipelines and Sentry
+  alerts from mail attach to their project. Long-untouched dirty checkouts collapse into one
+  leftovers line, not cards.
+- **Issues**: my open issues per `issues.provider` (provider routing): at work KanbanFlow, read with
+  `kf` from a work repository whose configuration names the board; personally GitHub. Each board
+  keeps its own columns (`kf board --json`; GitHub: open, in progress when a branch or PR exists,
+  closed) and each issue links its MRs with their state. GitHub usually closes issues from merged
+  PRs; KanbanFlow never moves on its own. An issue whose column lags its MR (merged but open,
+  approved but still in WIP) gets a proposed `move` and an action point.
 - **Overnight runs**: work that kept running while I was away: from my last prompt of the evening to
   my first of the morning (`sessions.json` `away`). Sessions with `activeWhileAway` (long
   implementations, renders, AFK executions) and Orca automation runs that did work in that gap; read
@@ -101,7 +109,7 @@ coloured by calendar and busy-only work blocks stay untitled. Slack leads with w
 me, then what is worth knowing, then one sentence on what I already handled; handled messages stay
 listed but are not narrated one by one. A problem someone else is handling names them
 (`handledBy`). Mail lists only what needs action; notifications collapse into one count line, and alerts
-go to work in flight.
+go to merge requests.
 
 ## brief.json
 
@@ -113,24 +121,30 @@ problem affects), `chapters`. Each chapter has `id`, `type`, `name`, `title`, `s
 chapters carry `detail` instead. Calendar days use ISO dates as `id`; give each calendar a distinct
 Google colour, list only calendars with events, and prefer a titled event over its busy-only copy.
 
-Order: calendar, overnight, work, slack, mail, triage, retro, instructions, news, actions. Chapters
-report; what needs me is asked once, at the end: each action point has a `detail` with why and where
-it came from, a link, and its own beat that says both (for example, which email warned about an
-expiring token).
+Order: calendar, overnight, work, issues, slack, mail, triage, retro, instructions, news, actions.
+
+Each action point has `id`, `text`, a `detail` with why and where it came from (for example, which
+email warned about an expiring token), `app`, a link, its `chapter`, and `handoff` (`agent` or
+`you`), the default decision. `agent: false` marks what only I can do. `source` names the target id
+of the item it came from: the page puts its Agent, Me and Skip control beside that item, and points
+without a source gather at the foot of their chapter. The actions chapter lists every point with the
+same state, groups them in beats (mine first, then the agent's), and saves the choices.
 
 ## Narration
 
 Each beat is one spoken sentence (`say`), a sidebar `note` label of at most four words, and
-`targets` naming the elements it lights. Target ids: run and action ids as written;
-`event-<id>`, `day-<day id>`, `card-<id>`, `column-<board column>`, `auto-<id>`, `message-<id>`,
-`slack-addressed`, `mail-<id>`, `task-<id>`, `retro-<id>`, `retro-sessions`, `change-<id>`,
-`news-<id>`. `select` opens a calendar event's popover and `scope` switches work and personal.
+`targets` naming the elements it lights. Target ids: run and action ids as written (an action id
+lights its control on the source slide); `event-<id>`, `day-<day id>`, `card-<id>`,
+`column-<board column>`, `issue-<id>`, `issue-column-<column name, lowercase and hyphenated>`,
+`auto-<id>`, `message-<id>`, `slack-addressed`, `mail-<id>`, `task-<id>`, `retro-<id>`,
+`change-<id>`, `news-<id>`. `select` opens a calendar event's popover and `scope` switches work and
+personal on merge requests and issues.
 Quiet chapters get one silent beat with `hold` of about two seconds.
 
 - The highlight shows what is being said: each beat targets exactly the items its sentence names,
   and a new subject starts a new beat with its own targets, never under the previous highlight.
-- Numbers and names, no filler; the asks wait for the action points. The whole brief stays under
-  five minutes.
+- Numbers and names, no filler; an ask is said where it arises and summarised once in the action
+  points. The whole brief stays under five minutes.
 - The page carries no more text than the narration covers: names, refs and short status words;
   detail sits behind links.
 - Write for the ear: no paths, symbols or URLs in `say`.

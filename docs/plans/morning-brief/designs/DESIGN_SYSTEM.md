@@ -12,7 +12,8 @@ hard shadows, stickers, tape, a spring ease. No mascots, no decorative emoji.
 
 - **Ground:** sky tint desk (`--desk`) with a 24px dot grid. Light mode is the source of truth.
 - **Ink and depth:** `--border-width` ink borders, zero-blur offset shadows (`--shadow-*`), hover
-  lift of 2px with `--ease-spring`.
+  lift of 2px with `--ease-spring`. An element seated in a hover fill (outline row icons) rings
+  instead of lifting, so it stays aligned with the fill.
 - **Type:** DynaPuff (`--font-head`) only for the date, chapter titles and big numbers; Geist for
   text; Geist Mono with `tabular-nums` for times, counts and refs. Calendar and list text at least
   14px.
@@ -30,10 +31,12 @@ hard shadows, stickers, tape, a spring ease. No mascots, no decorative emoji.
   or GitHub merge request cards, Obsidian notes, a terminal for session evidence. The brand icon sits in the chapter
   header. Native chrome is simplified and wrapped in the notebook frame (ink border, hard shadow).
 - **Reading column.** Every chapter shares one wide centred column (`--reading-width`) so sections
-  stay consistent; readability beats density. Prefer cards over full-width rows. Everything on a
-  slide is visible without scrolling at 1440×900.
+  stay consistent; readability beats density. Prefer cards over full-width rows. A typical day fits a
+  slide at 1440×900; a busy one scrolls inside the sheet and each beat scrolls its targets into view.
 - **Icon-only buttons** with `aria-label` and a tooltip for links and controls; text buttons only
   for confirming choices.
+- **Decisions are segmented controls** (Agent, Me, Skip) with a fill per value, never checkboxes;
+  skipping mutes an item rather than striking it through.
 - **Less text than speech.** A slide shows no more words than the narration can cover: titles,
   names, refs, short status words. Detail lives behind links or a disclosure.
 

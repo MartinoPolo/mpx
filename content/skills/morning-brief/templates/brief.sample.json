@@ -58,17 +58,17 @@
       ]
     },
     {
-      "id": "work", "type": "work", "name": "Work in flight", "title": "One merge ready, one review waiting", "status": "needs", "count": 2,
+      "id": "work", "type": "work", "name": "Merge requests", "title": "One merge ready, one review waiting", "status": "needs", "count": 2,
       "data": {
         "states": {
           "ready": "Approved and green", "review": "Waiting for review", "draft": "Draft", "failing": "Pipeline failing",
-          "progress": "In progress", "local": "Local only", "merged": "Merged", "stale": "Ticket column is wrong"
+          "progress": "In progress", "local": "Local only", "merged": "Merged"
         },
         "projects": [
           {
             "id": "ui-components", "scope": "work", "name": "ui-components", "app": "gitlab", "url": "https://example.com/ysc",
             "cards": [
-              { "id": "mr-318", "ref": "!318", "title": "Payment forms opt out of Enter submit", "state": "ready", "url": "https://example.com/mr/318", "pipeline": { "status": "success", "url": "https://example.com/pipelines/318" }, "ticket": { "ref": "T-102", "column": "In review", "expected": "Approved", "url": "https://kanbanflow.com/" }, "session": { "label": "Orca", "url": "orca://" } },
+              { "id": "mr-318", "ref": "!318", "title": "Payment forms opt out of Enter submit", "state": "ready", "url": "https://example.com/mr/318", "pipeline": { "status": "success", "url": "https://example.com/pipelines/318" }, "session": { "label": "Orca", "url": "orca://" } },
               { "id": "mr-321", "ref": "!321", "title": "Date picker keyboard support", "state": "review", "author": "Alex", "url": "https://example.com/mr/321", "pipeline": { "status": "success", "url": "https://example.com/pipelines/321" } },
               { "id": "mr-320", "ref": "!320", "title": "Toast stacking", "state": "failing", "url": "https://example.com/mr/320", "pipeline": { "status": "failed", "url": "https://example.com/pipelines/320", "job": "lint" } },
               { "id": "mr-316", "ref": "!316", "title": "Select clears on reset", "state": "merged", "url": "https://example.com/mr/316" },
@@ -95,10 +95,42 @@
         "quiet": ["kamosh", "orca", "flowguard-api"]
       },
       "beats": [
-        { "say": "Three eighteen is approved and green, but its ticket still sits in review.", "note": "Ready to merge", "targets": ["card-mr-318"], "scope": "work" },
+        { "say": "Three eighteen is approved and green, ready to merge.", "note": "Ready to merge", "targets": ["card-mr-318"], "scope": "work" },
         { "say": "In review: Alex's date picker, and toast stacking, which fails in lint.", "note": "In review", "targets": ["card-mr-321", "card-mr-320"], "scope": "work" },
         { "say": "Two merged yesterday.", "note": "Merged", "targets": ["column-merged"], "scope": "work" },
         { "say": "On the personal side, mpx has the brief skill uncommitted and prejemesi has a draft running checks.", "note": "Personal", "targets": ["card-mpx-brief", "card-pr-488"], "scope": "personal" }
+      ]
+    },
+    {
+      "id": "issues", "type": "issues", "name": "Issues", "title": "Two tickets behind their merges", "status": "needs", "count": 2,
+      "data": {
+        "boards": [
+          {
+            "scope": "work", "app": "kanbanflow", "name": "Team UI", "url": "https://kanbanflow.com/",
+            "columns": ["To-do", "In progress", "In review", "Approved", "Done"],
+            "issues": [
+              { "id": "T-111", "ref": "T-111", "title": "Export the audit log as CSV", "column": "To-do", "url": "https://kanbanflow.com/" },
+              { "id": "T-110", "ref": "T-110", "title": "Toast stacking", "column": "In progress", "url": "https://kanbanflow.com/", "links": [{ "ref": "!320", "state": "failing", "url": "https://example.com/mr/320" }] },
+              { "id": "T-102", "ref": "T-102", "title": "Payment forms opt out of Enter submit", "column": "In review", "url": "https://kanbanflow.com/", "links": [{ "ref": "!318", "state": "ready", "url": "https://example.com/mr/318" }], "move": { "to": "Approved", "reason": "!318 approved and green" } },
+              { "id": "T-108", "ref": "T-108", "title": "Date picker keyboard support", "column": "In review", "url": "https://kanbanflow.com/", "links": [{ "ref": "!321", "state": "review", "url": "https://example.com/mr/321" }] },
+              { "id": "T-099", "ref": "T-099", "title": "Select clears on reset", "column": "Done", "url": "https://kanbanflow.com/", "links": [{ "ref": "!316", "state": "merged", "url": "https://example.com/mr/316" }] }
+            ]
+          },
+          {
+            "scope": "personal", "app": "github", "name": "GitHub issues", "url": "https://github.com/MartinoPolo/prejemesi/issues",
+            "columns": ["Open", "In progress", "Closed"],
+            "issues": [
+              { "id": "gh-476", "ref": "#476", "title": "Agent access part 3: MCP server", "column": "Open", "url": "https://github.com/MartinoPolo/prejemesi/issues/476" },
+              { "id": "gh-475", "ref": "#475", "title": "Agent access part 2: API", "column": "In progress", "url": "https://github.com/MartinoPolo/prejemesi/issues/475", "links": [{ "ref": "#488", "state": "draft", "url": "https://github.com/MartinoPolo/prejemesi/pull/488" }] },
+              { "id": "gh-470", "ref": "#470", "title": "Permanent wishlists", "column": "In progress", "url": "https://github.com/MartinoPolo/prejemesi/issues/470", "links": [{ "ref": "#487", "state": "merged", "url": "https://github.com/MartinoPolo/prejemesi/pull/487" }], "move": { "to": "Closed", "reason": "#487 merged" } }
+            ]
+          }
+        ]
+      },
+      "beats": [
+        { "say": "On the team board, T one oh two still sits in review, although three eighteen is approved and green.", "note": "T-102 behind", "targets": ["issue-T-102"], "scope": "work" },
+        { "say": "The other tickets match their merge requests.", "note": "In sync", "targets": ["issue-T-110", "issue-T-108", "issue-T-099"], "scope": "work" },
+        { "say": "On GitHub, four seventy is still open, though its pull request merged yesterday.", "note": "#470 still open", "targets": ["issue-gh-470"], "scope": "personal" }
       ]
     },
     {
@@ -160,7 +192,8 @@
       },
       "beats": [
         { "say": "From yesterday's note: KF moves for the brief, and Sam's present, which is due tomorrow.", "note": "Daily note", "targets": ["task-t1", "task-t2"] },
-        { "say": "One idea: true crime animations, parked as low priority.", "note": "Ideas", "targets": ["task-t3"] }
+        { "say": "One idea: true crime animations, parked as low priority.", "note": "Ideas", "targets": ["task-t3"] },
+        { "say": "Once the projects look right, the agent files all three.", "note": "File them", "targets": ["action-file"] }
       ]
     },
     {
@@ -191,7 +224,7 @@
       "beats": [
         { "say": "The shell hook blocks plain arithmetic as if it were command substitution; about forty calls this week.", "note": "Arithmetic blocked", "targets": ["retro-substitution"] },
         { "say": "Commits also fail when staging shares the call; a one-line skill fix would stop it.", "note": "Split commits", "targets": ["retro-commit"] },
-        { "say": "Each fix has a session prompt ready.", "note": "Start sessions", "targets": ["retro-sessions"] }
+        { "say": "Each comes with a fix session ready to start.", "note": "Fix sessions", "targets": ["action-fix-substitution", "action-fix-commit"] }
       ]
     },
     {
@@ -224,21 +257,26 @@
       ]
     },
     {
-      "id": "actions", "type": "actions", "name": "Action points", "title": "Five action points", "status": "needs", "count": 5,
+      "id": "actions", "type": "actions", "name": "Action points", "title": "Ten action points", "status": "needs", "count": 10,
       "data": {
         "items": [
-          { "id": "action-1", "text": "Review !321", "detail": "Alex asked in #team-ui, wants it before Monday", "app": "gitlab", "url": "https://example.com/mr/321", "chapter": "slack", "handoff": "you" },
-          { "id": "action-2", "text": "Merge !318 and move T-102", "detail": "Approved and green; ticket still in review", "app": "gitlab", "url": "https://example.com/mr/318", "chapter": "work", "handoff": "agent" },
-          { "id": "action-3", "text": "Renew the GitLab token", "detail": "GitLab Workflow token expires 21 Oct · GitLab email, 15 Oct", "app": "gmail", "url": "https://mail.google.com/", "chapter": "mail", "handoff": "you" },
-          { "id": "action-4", "text": "Rerun the 4K render", "detail": "Overnight run timed out at scene 7", "app": "claude", "url": "file:///C:/AI_DUMP/afk/render.log", "chapter": "overnight", "handoff": "agent" },
-          { "id": "action-5", "text": "Start the hook fix session", "detail": "Approve it in the retro first", "app": "claude", "chapter": "retro", "handoff": "agent" }
+          { "id": "action-review", "text": "Review !321", "detail": "Alex asked in #team-ui, wants it before Monday", "app": "gitlab", "url": "https://example.com/mr/321", "chapter": "slack", "source": "message-s1", "handoff": "you" },
+          { "id": "action-token", "text": "Renew the GitLab token", "detail": "Workflow token expires 21 Oct · GitLab email, 15 Oct", "app": "gmail", "url": "https://mail.google.com/", "chapter": "mail", "source": "mail-token", "handoff": "you", "agent": false },
+          { "id": "action-merge", "text": "Merge !318", "detail": "Approved and green", "app": "gitlab", "url": "https://example.com/mr/318", "chapter": "work", "source": "card-mr-318", "handoff": "agent" },
+          { "id": "action-move-t102", "text": "Move T-102 to Approved", "detail": "Still in review; !318 is approved and green", "app": "kanbanflow", "url": "https://kanbanflow.com/", "chapter": "issues", "source": "issue-T-102", "handoff": "agent" },
+          { "id": "action-close-470", "text": "Close #470", "detail": "Its pull request #487 merged yesterday", "app": "github", "url": "https://github.com/MartinoPolo/prejemesi/issues/470", "chapter": "issues", "source": "issue-gh-470", "handoff": "agent" },
+          { "id": "action-render", "text": "Rerun the 4K render", "detail": "Overnight run timed out at scene 7", "app": "claude", "url": "file:///C:/AI_DUMP/afk/render.log", "chapter": "overnight", "source": "run-render", "handoff": "agent" },
+          { "id": "action-file", "text": "File the three captures as set", "detail": "Project, heading and priority per capture", "app": "obsidian", "chapter": "triage", "handoff": "agent" },
+          { "id": "action-fix-substitution", "text": "Fix the arithmetic hook", "detail": "Fix session: Claude Code in mpx", "app": "claude", "chapter": "retro", "source": "retro-substitution", "handoff": "agent" },
+          { "id": "action-fix-commit", "text": "Fix the commit skill", "detail": "Fix session: Claude Code in mpx", "app": "claude", "chapter": "retro", "source": "retro-commit", "handoff": "agent" },
+          { "id": "action-commit-brief", "text": "Commit the brief skill", "detail": "Uncommitted, dist a day old", "app": "github", "url": "https://github.com/MartinoPolo/mpx", "chapter": "instructions", "source": "change-c2", "handoff": "you" }
         ]
       },
       "beats": [
-        { "say": "Five things need you. Alex asked in Slack for your review of three twenty one before Monday.", "note": "Review !321", "targets": ["action-1"] },
-        { "say": "Three eighteen is approved and green; I can merge it and move its ticket.", "note": "Merge !318", "targets": ["action-2"] },
-        { "say": "GitLab emailed yesterday that your Workflow token expires on the twenty first; renew it.", "note": "Renew token", "targets": ["action-3"] },
-        { "say": "The overnight render timed out; I can rerun it, and start the hook fix once you approve it.", "note": "Render, hook fix", "targets": ["action-4", "action-5"] }
+        { "say": "Ten points, decided as you went. Two are yours: Alex's review before Monday, and the GitLab token that GitLab emailed about yesterday.", "note": "Yours", "targets": ["action-review", "action-token"] },
+        { "say": "I merge three eighteen and sync two tickets: T one oh two to Approved, and four seventy closed.", "note": "Merge and sync", "targets": ["action-merge", "action-move-t102", "action-close-470"] },
+        { "say": "I also rerun the render, file the captures, and start both fix sessions.", "note": "Agent runs", "targets": ["action-render", "action-file", "action-fix-substitution", "action-fix-commit"] },
+        { "say": "Committing the brief skill is yours. Change anything here, then save.", "note": "Commit, save", "targets": ["action-commit-brief"] }
       ]
     }
   ]

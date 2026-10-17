@@ -1,7 +1,7 @@
 # Design brief: morning brief player
 
-The page the morning-brief skill builds: a narrated walk through the day that I mostly watch, then
-act on a few points at the end. Data:
+The page the morning-brief skill builds: a narrated walk through the day that I mostly watch,
+deciding each proposed action where it comes up and confirming them at the end. Data:
 [brief.sample.json](../../../../../content/skills/morning-brief/templates/brief.sample.json)
 (fictional, covers every chapter). Template:
 [page.html](../../../../../content/skills/morning-brief/templates/page.html); polished variant C
@@ -25,8 +25,10 @@ preview: [refined.html](refined.html). Design language: [DESIGN_SYSTEM.md](../DE
   `|◀◀ chapter` `◀ beat` `▶/❚❚` `beat ▶` `chapter ▶▶|`. One tall progress bar for the brief,
   segmented by chapter, with beat ticks; the playing chapter's segment is taller and ringed. Speed (1×, 1.25×, 1.5×, 2×) and voice mute as icon buttons. All
   icon-only with labels and tooltips. Keyboard: space, arrows, shift+arrows.
-- **Choices.** Votes, approvals and handoffs are collected and saved as a file for the apply
-  session; the save control lives with the action points at the end, not in the sidebar.
+- **Choices.** Every proposed action has an Agent, Me and Skip control beside the item it came
+  from; points without one sit in a strip at the foot of their chapter. Votes and decisions are
+  saved as a file for the apply session; the save control lives with the action points, not in the
+  sidebar.
 - **Highlight.** The beat's `targets` get an outline ring and lift; the rest stays readable. The
   highlight always matches what is being said and clears when narration moves on. Narration plays
   each beat's ElevenLabs clip (`audio`), falling back to the browser voice and a timer of about
@@ -34,8 +36,8 @@ preview: [refined.html](refined.html). Design language: [DESIGN_SYSTEM.md](../DE
 
 ## Chapters
 
-Order: calendar, overnight, work, Slack, mail, triage, retro, instructions, news, action points.
-Chapters report; asks wait for the action points. Readability comes first: sections share the
+Order: calendar, overnight, merge requests, issues, Slack, mail, triage, retro, instructions, news,
+action points. Each ask is decided where it arises; the action points confirm them. Readability comes first: sections share the
 wider reading column, and lists become cards rather than full-width rows where they can.
 
 - **Calendar:** Google Calendar look: one column per day (`days`), earlier days greyed as history,
@@ -48,13 +50,15 @@ wider reading column, and lists become cards rather than full-width rows where t
 - **Overnight runs:** the away window (last prompt of the evening to first of the morning) as one
   muted line, then terse rows with outcome icon, title, result detail, start time, duration, link.
   Only work that ran while I was away (long implementations, renders); no routines.
-- **Work in flight:** Kanban board, GitLab/GitHub look. Work and personal scope. Columns local,
+- **Merge requests:** Kanban board, GitLab/GitHub look. Work and personal scope. Columns local,
   draft, in review, ready, merged; empty columns stay narrow. Each card: project, ref, short title,
   state as background fill (`data.states`), a state word only when it differs from the column,
-  icon links for MR, pipeline (coloured by status), KF ticket (warn when its column is wrong), live
-  session. A branch name moves behind a branch icon. No meta sentences. `autoHandled` is one quiet
+  icon links for MR, pipeline (coloured by status), live session. A decision sits inside its card. A branch name moves behind a branch icon. No meta sentences. `autoHandled` is one quiet
   line with a toggle, not cards. Quiet projects as one muted line. Phone: one column, empty ones
   hidden.
+- **Issues:** the same board shape with each tracker's own columns: KanbanFlow at work, GitHub
+  personally. Cards: ref, title, linked MR chips filled by MR state. An issue whose column lags its
+  MR carries a fill and a proposed move with its decision.
 - **Slack:** Slack look. Order: waiting on you, worth knowing, then a one-sentence summary of what
   I already handled; the handled messages sit in a collapsed, scrollable disclosure that is never
   narrated item by item. A problem someone else handles carries an owner chip (`handledBy`).
@@ -62,26 +66,27 @@ wider reading column, and lists become cards rather than full-width rows where t
 - **Mail:** Gmail look, Gmail icon. Rows: sender, subject, snippet, date, account chip, action
   word. Notifications as one line of counts.
 - **Obsidian triage:** Obsidian look and icon. Items grouped by source note, each group headed by
-  the note with an open link. Each item: text, proposed project, heading, priority as small
-  selects.
+  the note with an open link. Each item: a bullet (not a checkbox), text, proposed project, heading,
+  priority as small selects; one decision files them all.
 - **Retro:** each item is evidence from where it happened: a terminal view of the transcript lines
   (tool call, hook error in warning style, assistant reaction) for Claude Code or Pi, then the
-  proposed fix as a small diff with its file. At the bottom of the chapter: one confirmation area to
-  spawn fix sessions (per item: approve toggle, harness and account, prompt preview), then a single
-  confirm button.
+  proposed fix as a small diff with its file, and the fix session (harness, account, project,
+  prompt preview). The item head carries the session's decision; a skipped item mutes.
 - **Instructions:** one row per change: scope, one-line summary, my opinion, verdict (final, watch,
-  attention) as a fill, and state chips committed, pushed, built (built only for mpx). Link icon.
+  attention) as a fill, and state chips committed, pushed, built (built only for mpx). Link icon. A
+  change that needs me carries its decision in the scope line.
 - **AI news:** mixed sources, not only Claude: source icon, title, one-line summary, date, thumbs
   up/down votes.
-- **Action points:** to-do list: checkbox, text, a detail line with why and where it came from,
-  source icon link, handoff (`you` or `agent`) as a toggle; save choices button at the bottom. Each
-  point gets its own narrated beat.
+- **Action points:** two-column card grid: source icon link, text, the same decision control, a
+  detail line with why and where it came from, and a chip back to its chapter. The fill follows the
+  decision; no checkboxes or strikethrough. Save choices at the bottom. Beats group the points:
+  mine first, then the agent's.
 
 ## States
 
 Playing, paused, chapter with `status: quiet` (one short hold), source warning on a chapter,
-hover and focus on every control, selected calendar event, Slack disclosure open, retro session
-approved.
+hover and focus on every control, selected calendar event, Slack disclosure open, a decision set
+to Agent, Me or Skip.
 
 ## Review feedback (verbatim, 2026-10-16)
 

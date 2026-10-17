@@ -109,8 +109,10 @@ svg { flex: none; display: block; }
 .outline::before { content: ''; position: absolute; left: 21px; top: 20px; bottom: 20px; border-left: 2px dashed color-mix(in srgb, var(--ink) 20%, transparent); }
 .outline-chapter { position: relative; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 10px; width: 100%; height: 42px; padding: 0 8px 0 4px; text-align: left; border-radius: 12px; transition: background var(--duration-fast); }
 .outline-chapter:hover { background: color-mix(in srgb, var(--paper) 65%, transparent); }
-.outline-icon { width: 34px; height: 34px; display: grid; place-items: center; background: var(--paper); border-radius: 10px; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ink) 16%, transparent); transition: transform var(--duration-normal) var(--ease-spring); }
-.outline-chapter:hover .outline-icon { transform: translateY(-2px); }
+/* The icon stays seated in its row: a lift would detach it from the row's hover fill. */
+.outline-icon { width: 34px; height: 34px; display: grid; place-items: center; background: var(--paper); border-radius: 10px; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ink) 16%, transparent); transition: box-shadow var(--duration-fast); }
+.outline-chapter:hover .outline-icon { box-shadow: inset 0 0 0 1.5px var(--ink); }
+.outline-chapter:hover .outline-name { color: var(--ink); }
 .outline-name { font-size: 15px; font-weight: 600; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .outline-meta { display: flex; align-items: center; gap: 6px; }
 .count { min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; font: 600 12px/22px var(--font-mono); text-align: center; background: var(--fill-draft); }
@@ -179,6 +181,23 @@ a.icon-link:hover, button.icon-link:hover { background: color-mix(in srgb, var(-
 select.small-select { appearance: none; font-size: 14px; padding: 3px 26px 3px 8px; border-radius: var(--radius-button); border: 1.5px solid color-mix(in srgb, var(--ink) 30%, transparent); background: var(--paper) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316385c' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 6px center / 14px; cursor: pointer; }
 select.small-select:hover { border-color: var(--ink); }
 
+/* Decisions: every action point can be decided on its own slide and again in the action points. */
+.decision { display: inline-flex; flex: none; padding: 2px; gap: 2px; border-radius: 9px; background: var(--fill-draft); }
+.decision button { padding: 2px 10px; border-radius: 7px; font-size: 13px; font-weight: 650; line-height: 22px; color: var(--ink-soft); transition: background var(--duration-fast); }
+.decision button:hover { color: var(--ink); background: color-mix(in srgb, var(--paper) 70%, transparent); }
+.decision button[aria-pressed="true"] { color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--ink); }
+.decision button[aria-pressed="true"][data-value="agent"] { background: var(--fill-review); }
+.decision button[aria-pressed="true"][data-value="you"] { background: var(--sticky); color: var(--on-sticky); }
+.decision button[aria-pressed="true"][data-value="skip"] { background: var(--paper); color: var(--ink-soft); box-shadow: inset 0 0 0 1.5px var(--ink-soft); }
+.inline-decision { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin-top: 8px; padding: 4px 4px 4px 10px; border-radius: 10px; background: color-mix(in srgb, var(--paper) 78%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 14%, transparent); }
+.inline-decision .decision-text { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 14px; font-weight: 650; }
+.inline-decision .decision-text span { min-width: 0; }
+.inline-decision .decision-detail { font-weight: 400; color: var(--ink-soft); }
+.inline-decision .decision { margin-left: auto; }
+.inline-decision.skip .decision-text { color: var(--ink-soft); }
+.decide-strip { margin-top: var(--space-5); }
+.decide-strip .inline-decision { margin-top: 0; min-height: 44px; background: var(--fill-review); box-shadow: none; }
+
 /* Calendar: Google Calendar day columns with solid blocks in the calendar colour. */
 .calendar-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-2) var(--space-4); margin: 0 0 var(--space-4); padding: 0; list-style: none; font-size: 14px; }
 .calendar-legend li { display: flex; align-items: center; gap: 6px; }
@@ -246,6 +265,13 @@ select.small-select:hover { border-color: var(--ink); }
 .work-card .links { display: flex; align-items: center; margin-left: auto; }
 .work-card .links .icon-link { width: 30px; height: 30px; }
 .icon-link.warn { background: var(--fill-progress); box-shadow: inset 0 0 0 1.5px var(--ink); }
+.work-card .linked { display: flex; flex-wrap: wrap; gap: 4px; }
+.link-chip { text-decoration: none; color: var(--ink); font: 600 12px/20px var(--font-mono); padding: 0 7px; background: var(--state-fill); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 22%, transparent); }
+.link-chip:hover { box-shadow: inset 0 0 0 1.5px var(--ink); }
+.work-card .move { display: flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 650; }
+.work-card .move .reason { font-weight: 400; color: var(--ink-soft); }
+.work-card .inline-decision { padding: 4px; gap: 4px; }
+.work-card .inline-decision .decision-text { font-size: 13px; padding-left: 4px; }
 .quiet-toggle { display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-5); font-size: 15px; }
 
 /* Overnight runs. */
@@ -282,7 +308,7 @@ select.small-select:hover { border-color: var(--ink); }
 .handled-list li > span:nth-child(2) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Gmail rows. */
-.gmail { list-style: none; margin: 0; padding: 4px; border-radius: 14px; background: color-mix(in srgb, var(--ink) 4%, white); display: flex; flex-direction: column; gap: 10px; }
+.gmail { list-style: none; margin: 0; padding: 4px; border-radius: 14px; background: color-mix(in srgb, var(--ink) 4%, white); display: flex; flex-direction: column; gap: var(--row-gap); }
 .mail-row { display: grid; grid-template-columns: 76px minmax(0, 1fr) auto 34px; gap: var(--space-3); align-items: center; min-height: 58px; padding: 6px 6px 6px 12px; border-radius: 10px; background: var(--paper); }
 .mail-row.unread { background: color-mix(in srgb, var(--gmail) 6%, white); }
 .mail-row .from-line { display: flex; gap: 8px; align-items: baseline; }
@@ -304,11 +330,12 @@ select.small-select:hover { border-color: var(--ink); }
 .note-head { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 2px 0 12px; border-radius: 10px; background: color-mix(in srgb, var(--obsidian) 12%, white); font: 600 14px var(--font-mono); margin-bottom: var(--space-2); }
 .note-head .icon-link { margin-left: auto; width: 30px; height: 30px; }
 .capture { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: var(--space-3); align-items: center; min-height: 44px; padding: 4px 8px 4px 12px; border-radius: 10px; background: var(--paper); }
-.capture .box { width: 16px; height: 16px; border: 2px solid var(--obsidian); border-radius: 4px; }
+/* A bullet, not a checkbox: captures are filed by the decision below, never ticked here. */
+.capture .box { width: 8px; height: 8px; margin-left: 4px; border-radius: 50%; background: var(--obsidian); }
 .capture .text { font-size: 16px; }
 .capture .selects { display: flex; gap: 6px; }
 
-/* Retro: evidence as a terminal, fix as a diff, sessions confirmed at the bottom. */
+/* Retro: evidence as a terminal, fix as a diff, the fix session decided in the head. */
 .retro-item { border-radius: 12px; background: var(--fill-draft); }
 .retro-head { display: flex; align-items: center; gap: var(--space-2); padding: 6px 6px 6px 8px; }
 .retro-toggle { display: grid; grid-template-columns: 16px 18px minmax(0, 1fr); gap: var(--space-2); align-items: center; flex: 1; min-width: 0; text-align: left; padding: 2px 4px; border-radius: var(--radius-button); }
@@ -316,7 +343,7 @@ select.small-select:hover { border-color: var(--ink); }
 .retro-toggle[aria-expanded="true"] svg.chevron { transform: rotate(90deg); }
 .retro-toggle .title { font-weight: 650; display: block; }
 .retro-toggle .cost { font: 400 13px var(--font-mono); color: var(--ink-soft); display: block; }
-.retro-body { padding: 0 12px 12px; display: grid; gap: var(--space-2); }
+.retro-body { padding: 0 12px 12px; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
 .retro-body[hidden] { display: none; }
 .terminal { background: var(--terminal); color: #e8e8e8; border-radius: 10px; padding: 8px 12px; font: 400 13px/1.55 var(--font-mono); overflow-wrap: anywhere; }
 .terminal-bar { display: flex; gap: 8px; align-items: center; color: #b4bcc6; font-size: 12px; margin-bottom: 4px; }
@@ -332,24 +359,22 @@ select.small-select:hover { border-color: var(--ink); }
 .diff .line { white-space: pre-wrap; padding: 0 6px; border-radius: 4px; }
 .diff .line.plus { background: var(--fill-ready); }
 .diff .line.minus { background: var(--fill-failing); }
-.sessions { margin-top: var(--space-5); padding: 12px 14px; border-radius: 12px; background: var(--fill-review); }
-.sessions h2 { margin: 0 0 6px; font-size: 15px; }
-.session-row { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: var(--space-3); align-items: center; padding: 6px 8px; border-radius: 10px; }
-.session-row + .session-row { margin-top: 4px; }
-.session-row.approved { background: var(--fill-ready); }
-.session-row .line-one { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-weight: 600; font-size: 15px; }
-.session-row .prompt { font: 400 13px var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sessions-confirm { display: flex; justify-content: flex-end; align-items: center; gap: var(--space-3); margin-top: var(--space-3); font-size: 14px; }
+.retro-item.skip { background: color-mix(in srgb, var(--ink) 4%, white); }
+.retro-item.skip .title { color: var(--ink-soft); }
+.head-decision { display: flex; border-radius: 11px; }
+.session-line { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 10px; background: var(--paper); font-size: 14px; }
+.session-line .prompt { font: 400 13px var(--font-mono); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Instructions. */
-.change { display: grid; grid-template-columns: minmax(0, 1fr) auto 34px; gap: var(--space-3); align-items: center; padding: 10px 6px 10px 14px; border-radius: 12px; }
+.change { display: grid; grid-template-columns: minmax(0, 1fr) auto 34px; gap: var(--space-3); align-items: center; padding: 8px 6px 8px 14px; border-radius: 12px; }
 .change.final { background: var(--fill-ready); }
 .change.watch { background: var(--fill-progress); }
 .change.attention { background: var(--fill-failing); }
 .change .scope-line { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .change .scope { font: 600 14px var(--font-mono); }
-.change .summary { font-size: 15px; font-weight: 600; }
-.change .opinion { font-size: 15px; }
+.change .head-decision { margin-left: auto; }
+.change .summary { font-size: 15px; font-weight: 600; line-height: 1.35; }
+.change .opinion { font-size: 14px; line-height: 1.35; color: var(--ink-soft); }
 .state-chips { display: flex; flex-direction: column; gap: 3px; align-items: stretch; }
 .state-chips .chip { justify-content: flex-start; }
 .state-chips .chip.no { background: color-mix(in srgb, var(--paper) 55%, transparent); box-shadow: inset 0 0 0 1.5px var(--ink); }
@@ -364,14 +389,23 @@ select.small-select:hover { border-color: var(--ink); }
 .vote[aria-pressed="true"].down { background: var(--fill-failing); box-shadow: inset 0 0 0 1.5px var(--ink); }
 
 /* Action points. */
-.action { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto auto; gap: var(--space-3); align-items: center; min-height: 54px; padding: 6px 8px 6px 14px; border-radius: 12px; background: var(--fill-review); }
-.action.is-done { background: var(--fill-merged); }
-.action.is-done .text { text-decoration: line-through; text-decoration-thickness: 2px; }
-.action .text { display: block; font-size: 16px; font-weight: 600; }
-.action .detail { display: block; font-size: 14px; color: var(--ink-soft); }
-.checkbox { appearance: none; width: 22px; height: 22px; margin: 0; border: 2px solid var(--ink); border-radius: 6px; background: var(--paper); display: grid; place-items: center; cursor: pointer; }
-.checkbox:checked { background: var(--done) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / 16px no-repeat; }
-.save-area { display: flex; justify-content: flex-end; align-items: center; gap: var(--space-4); margin-top: var(--space-6); }
+/* Action points: the fill says who does it, so a skipped point reads as skipped, not as done. */
+.action-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--row-gap); }
+.action { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; column-gap: 10px; row-gap: 2px; align-items: center; padding: 7px 7px 7px 8px; border-radius: 12px; background: var(--paper); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ink) 14%, transparent); }
+.action > .source-app { grid-row: 1 / 3; align-self: start; display: flex; }
+.action .icon-link { width: 30px; height: 30px; }
+.action .text, .action .detail { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.action .meta-line { grid-column: 2 / -1; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.action .from { margin-left: auto; }
+.action.agent { background: color-mix(in srgb, var(--fill-review) 55%, white); }
+.action.you { background: color-mix(in srgb, var(--sticky) 22%, white); }
+.action.skip { background: color-mix(in srgb, var(--ink) 3%, white); }
+.action.skip .text, .action.skip .detail { color: var(--ink-soft); }
+.action .text { font-size: 16px; font-weight: 650; }
+.action .detail { flex: 1; font-size: 14px; color: var(--ink-soft); }
+.action .from { font-size: 13px; font-weight: 600; color: var(--ink-soft); background: none; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 20%, transparent); }
+.action .from:hover { color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--ink); }
+.save-area { display: flex; justify-content: flex-end; align-items: center; gap: var(--space-4); margin-top: var(--space-3); }
 .save-area .summary { font-size: 14px; color: var(--ink-soft); text-align: right; }
 
 /* Quiet and unavailable chapters. */
@@ -426,8 +460,7 @@ select.small-select:hover { border-color: var(--ink); }
 	.capture, .change, .news-item { grid-template-columns: minmax(0, 1fr) auto; }
 	.board { grid-template-columns: minmax(0, 1fr); }
 	.board-column.empty { display: none; }
-	.action { grid-template-columns: 26px minmax(0, 1fr) auto; }
-	.action .segmented { grid-column: 2 / -1; justify-self: start; }
+	.action-grid { grid-template-columns: minmax(0, 1fr); }
 	.mail-row { grid-template-columns: minmax(0, 1fr) auto auto; }
 	.mail-row .account-chip, .capture .box, .news-item > svg, .run > svg:first-child, .run .duration, .time { display: none; }
 	.capture .selects { grid-column: 1 / -1; flex-wrap: wrap; }
@@ -471,7 +504,7 @@ select.small-select:hover { border-color: var(--ink); }
 		<button class="control mute" id="mute" type="button"></button>
 	</div>
 </div>
-<script type="application/json" id="brief-data">{"date":"2026-10-16","window":{"since":"2026-10-15T06:05:00+02:00","until":"2026-10-16T06:00:00+02:00","label":"Thu 15 Oct 06:05 → Fri 16 Oct 06:00"},"now":"2026-10-16T06:00:00+02:00","sources":[{"name":"Personal Google","status":"ok","chapters":["calendar","mail"]},{"name":"Work Slack and mail","status":"ok","chapters":["slack","mail"]},{"name":"Work calendar","status":"skipped","reason":"Connector not approved yet; busy blocks only","chapters":["calendar"]},{"name":"Gerrit","status":"unavailable","reason":"SSH key not loaded","chapters":["work"]},{"name":"OpenAI news","status":"unavailable","reason":"HTTP 403","chapters":["news"]}],"chapters":[{"id":"calendar","type":"calendar","name":"Calendar","title":"Standup, then the dentist","status":"fyi","count":5,"data":{"calendars":[{"id":"personal","name":"Personal","account":"personal","color":"#039be5"},{"id":"family","name":"Family","account":"personal","color":"#33b679"},{"id":"work","name":"Work","account":"work","color":"#7986cb","busyOnly":true}],"days":[{"id":"2026-10-15","label":"Thu","date":"15"},{"id":"today","label":"Fri","date":"16","focus":true},{"id":"tomorrow","label":"Sat","date":"17"}],"events":[{"id":"retro-meeting","calendarId":"work","day":"2026-10-15","start":"14:00","end":"15:00","busyOnly":true},{"id":"swim","calendarId":"family","day":"2026-10-15","start":"17:00","end":"18:00","title":"Swimming lesson","url":"https://calendar.google.com/"},{"id":"standup","calendarId":"work","day":"today","start":"09:30","end":"09:45","busyOnly":true},{"id":"planning","calendarId":"work","day":"today","start":"13:00","end":"14:00","busyOnly":true},{"id":"dentist","calendarId":"personal","day":"today","start":"16:00","end":"17:00","title":"Dentist","place":"Downtown","notes":["Leave by 15:30"],"url":"https://calendar.google.com/"},{"id":"pickup","calendarId":"family","day":"today","start":"17:30","end":"18:00","title":"Kindergarten pickup","url":"https://calendar.google.com/"},{"id":"nameday","calendarId":"family","day":"today","allDay":true,"title":"Name day: Havel"},{"id":"run","calendarId":"personal","day":"tomorrow","start":"08:00","end":"09:00","title":"Park run","url":"https://calendar.google.com/"},{"id":"market","calendarId":"family","day":"tomorrow","start":"10:00","end":"12:00","title":"Farmers market","url":"https://calendar.google.com/"},{"id":"birthday","calendarId":"family","day":"tomorrow","start":"15:00","end":"19:00","title":"Birthday party at Sam's","place":"Oak Park","url":"https://calendar.google.com/"}]},"beats":[{"say":"Good morning. Yesterday, in grey, ended with the swimming lesson.","note":"Yesterday","targets":["event-swim"]},{"say":"Standup at half past nine, planning at one.","note":"Work blocks","targets":["event-standup","event-planning"]},{"say":"The dentist is at four; leave by half past three.","note":"Dentist","targets":["event-dentist"],"select":"dentist"},{"say":"Tomorrow is family day: park run, the market, and Sam's party in Oak Park.","note":"Tomorrow","targets":["event-run","event-market","event-birthday"]}]},{"id":"overnight","type":"overnight","name":"Overnight runs","title":"The render failed, the tests landed","status":"needs","count":1,"data":{"away":{"from":"Thu 22:40","to":"Fri 07:55"},"runs":[{"id":"run-tests","outcome":"ok","app":"claude","title":"prejemesi: wishlist tests","detail":"42 tests added, 3 commits","when":"22:35","duration":"1 h 20 min","url":"file:///C:/AI_DUMP/afk/prejemesi-tests.md"},{"id":"run-render","outcome":"fail","app":"claude","title":"videoLab: 4K render","detail":"Timed out at scene 7","when":"23:10","duration":"3 h 4 min","url":"file:///C:/AI_DUMP/afk/render.log"}]},"beats":[{"say":"After your last prompt at twenty to eleven, the prejemesi session added forty two wishlist tests.","note":"Tests landed","targets":["run-tests"]},{"say":"The 4K render ran for three hours and timed out at scene seven.","note":"Render failed","targets":["run-render"]}]},{"id":"work","type":"work","name":"Work in flight","title":"One merge ready, one review waiting","status":"needs","count":2,"data":{"states":{"ready":"Approved and green","review":"Waiting for review","draft":"Draft","failing":"Pipeline failing","progress":"In progress","local":"Local only","merged":"Merged","stale":"Ticket column is wrong"},"projects":[{"id":"ui-components","scope":"work","name":"ui-components","app":"gitlab","url":"https://example.com/ysc","cards":[{"id":"mr-318","ref":"!318","title":"Payment forms opt out of Enter submit","state":"ready","url":"https://example.com/mr/318","pipeline":{"status":"success","url":"https://example.com/pipelines/318"},"ticket":{"ref":"T-102","column":"In review","expected":"Approved","url":"https://kanbanflow.com/"},"session":{"label":"Orca","url":"orca://"}},{"id":"mr-321","ref":"!321","title":"Date picker keyboard support","state":"review","author":"Alex","url":"https://example.com/mr/321","pipeline":{"status":"success","url":"https://example.com/pipelines/321"}},{"id":"mr-320","ref":"!320","title":"Toast stacking","state":"failing","url":"https://example.com/mr/320","pipeline":{"status":"failed","url":"https://example.com/pipelines/320","job":"lint"}},{"id":"mr-316","ref":"!316","title":"Select clears on reset","state":"merged","url":"https://example.com/mr/316"},{"id":"mr-317","ref":"!317","title":"CI split into lint and test","state":"merged","url":"https://example.com/mr/317"}]},{"id":"mpx","scope":"personal","name":"mpx","app":"github","url":"https://github.com/MartinoPolo/mpx","cards":[{"id":"mpx-brief","ref":"main","title":"Morning brief skill","state":"progress","url":"https://github.com/MartinoPolo/mpx","local":{"uncommitted":9,"unpushed":1}}]},{"id":"prejemesi","scope":"personal","name":"prejemesi","app":"github","url":"https://github.com/MartinoPolo/prejemesi","cards":[{"id":"pr-488","ref":"#488","title":"Agent access part 2: API","state":"draft","url":"https://github.com/MartinoPolo/prejemesi/pull/488","pipeline":{"status":"running","url":"https://github.com/MartinoPolo/prejemesi/actions"}},{"id":"pr-487","ref":"#487","title":"Permanent wishlists","state":"merged","url":"https://github.com/MartinoPolo/prejemesi/pull/487"}]}],"autoHandled":[{"id":"tidy","text":"11 old checkouts with local changes","proposal":"Stash and list them in the weekly review"}],"quiet":["kamosh","orca","flowguard-api"]},"beats":[{"say":"Three eighteen is approved and green, but its ticket still sits in review.","note":"Ready to merge","targets":["card-mr-318"],"scope":"work"},{"say":"In review: Alex's date picker, and toast stacking, which fails in lint.","note":"In review","targets":["card-mr-321","card-mr-320"],"scope":"work"},{"say":"Two merged yesterday.","note":"Merged","targets":["column-merged"],"scope":"work"},{"say":"On the personal side, mpx has the brief skill uncommitted and prejemesi has a draft running checks.","note":"Personal","targets":["card-mpx-brief","card-pr-488"],"scope":"personal"}]},{"id":"slack","type":"slack","name":"Slack","title":"One request waits on you","status":"needs","count":1,"data":{"unaddressed":[{"id":"s1","channel":"#team-ui","author":"Alex","when":"16:40","text":"@you could you look at !321 before Monday? Keyboard nav is the part I am unsure about.","replies":0,"url":"https://example.slack.com/archives/C1/p1"}],"worthKnowing":[{"id":"s2","channel":"#admins","author":"Chris","when":"15:05","text":"Load balancer drops ACKs between the balancer and router; we are watching it.","handledBy":"Chris","replies":6,"url":"https://example.slack.com/archives/C2/p2"},{"id":"s3","channel":"#ai","author":"Kim","when":"11:20","text":"Code review working group kicks off Tuesday, sign-up in the thread.","replies":14,"url":"https://example.slack.com/archives/C3/p3"}],"addressedSummary":"Yesterday you fixed the failing feature tests, finished a review ask, and answered the forms question.","addressed":[{"id":"s4","channel":"#team-ui","author":"Robin","when":"13:16","text":"Feature tests fail on the filter Apply button","url":"https://example.slack.com/archives/C1/p4"},{"id":"s5","channel":"#team-ui","author":"Taylor","when":"14:02","text":"Review please: !317","url":"https://example.slack.com/archives/C1/p5"},{"id":"s6","channel":"DM","author":"Jordan","when":"17:45","text":"Are the payment forms still submitting on Enter?","url":"https://example.slack.com/archives/D1/p6"}],"skipped":35},"beats":[{"say":"Alex wants your review of three twenty one before Monday.","note":"Waiting on you","targets":["message-s1"]},{"say":"Worth knowing: Chris is chasing a load balancer issue, and the AI code review group starts Tuesday.","note":"Worth knowing","targets":["message-s2","message-s3"]},{"say":"Everything else you already handled: the feature tests, a review, and Jordan's forms question.","note":"Handled","targets":["slack-addressed"]}]},{"id":"mail","type":"mail","name":"Mail","title":"Two emails to act on","status":"needs","count":2,"data":{"rows":[{"id":"token","account":"work","from":"GitLab","subject":"Your personal access token expires soon","snippet":"The GitLab Workflow token expires on 21 Oct.","when":"Oct 15","action":"Renew","url":"https://mail.google.com/"},{"id":"trip","account":"personal","from":"TravelCo","subject":"Trip instructions: Lisbon, Oct 21","snippet":"Check-in opens 48 hours before departure.","when":"Oct 15","action":"Read","url":"https://mail.google.com/"},{"id":"bootcamp","account":"work","from":"HR team","subject":"Optional bootcamp in November","snippet":"Optional, sent to everyone.","when":"Oct 15","action":"Optional","url":"https://mail.google.com/"}],"notifications":[{"source":"GitLab","count":9},{"source":"Google","count":6},{"source":"KanbanFlow","count":3},{"source":"Other","count":4}]},"beats":[{"say":"GitLab warns that a token expires on Wednesday, and TravelCo sent the Lisbon check-in steps.","note":"Act on","targets":["mail-token","mail-trip"]},{"say":"The bootcamp invite is optional.","note":"Optional","targets":["mail-bootcamp"]}]},{"id":"triage","type":"triage","name":"Obsidian triage","title":"Three captures to file","status":"fyi","count":3,"data":{"vault":"ObsidianMP","projects":["mpx","orca","prejemesi","skills","videoLab"],"headings":["#AI","#todo","#quick","#tooling","#work"],"groups":[{"id":"daily","note":"Daily/2026-10-15","url":"obsidian://open?vault=ObsidianMP&file=Daily%2F2026-10-15","items":[{"id":"t1","text":"Morning brief should move KF tickets","project":"mpx","heading":"#tooling","priority":"high"},{"id":"t2","text":"Buy a birthday present for Sam","project":"","heading":"#todo","priority":"highest"}]},{"id":"ideas","note":"Ideas","url":"obsidian://open?vault=ObsidianMP&file=Ideas","items":[{"id":"t3","text":"True crime videos with realistic animations","project":"videoLab","heading":"#AI","priority":"low"}]}]},"beats":[{"say":"From yesterday's note: KF moves for the brief, and Sam's present, which is due tomorrow.","note":"Daily note","targets":["task-t1","task-t2"]},{"say":"One idea: true crime animations, parked as low priority.","note":"Ideas","targets":["task-t3"]}]},{"id":"retro","type":"retro","name":"Retro","title":"Two fixes worth a session","status":"fyi","count":2,"data":{"items":[{"id":"substitution","title":"Arithmetic blocked as command substitution","harness":"claude","account":"personal","cost":"about 40 blocked calls in 15 sessions","evidence":{"kind":"terminal","lines":[{"role":"tool","text":"Bash(end=$((SECONDS+2700)); until [ -f done ]; do sleep 5; done)"},{"role":"error","text":"PreToolUse:Bash hook error: Blocked dangerous command: opaque command or process substitution cannot be inspected."},{"role":"assistant","text":"I'll write a scratchpad script instead."}],"session":{"label":"3589dbf6","url":"file:///C:/Users/me/session.jsonl"}},"fix":{"file":"mpx · src/safeguard/shell.ts","diff":"- if (/\\$\\(/.test(command)) return true;\n+ if (/\\$\\((?!\\()/.test(command)) return true;"},"session":{"harness":"claude","account":"personal","project":"mpx","prompt":"Treat $(( )) as arithmetic in hasOpaqueCommandExpansion and add regression tests."}},{"id":"commit","title":"git add and commit chained in one call","harness":"pi","account":"work","cost":"9 blocked commits","evidence":{"kind":"terminal","lines":[{"role":"tool","text":"bash: git add -A && git commit -m \"fix: toast stacking\""},{"role":"error","text":"Finish staging/index mutations in a separate completed tool call before git commit"}],"session":{"label":"8c38ddae","url":"file:///C:/Users/me/session2.jsonl"}},"fix":{"file":"mpx · content/skills/commit/SKILL.md","diff":"+ Stage in one tool call, inspect git diff --cached, then commit in a separate call."},"session":{"harness":"claude","account":"personal","project":"mpx","prompt":"Tell the commit skill to stage and commit in separate calls."}}]},"beats":[{"say":"The shell hook blocks plain arithmetic as if it were command substitution; about forty calls this week.","note":"Arithmetic blocked","targets":["retro-substitution"]},{"say":"Commits also fail when staging shares the call; a one-line skill fix would stop it.","note":"Split commits","targets":["retro-commit"]},{"say":"Each fix has a session prompt ready.","note":"Start sessions","targets":["retro-sessions"]}]},{"id":"instructions","type":"instructions","name":"Instructions","title":"Three changes, one unbuilt","status":"fyi","count":3,"data":{"changes":[{"id":"c1","scope":"mpx output style","summary":"Everything that needs you moves to one final HITL section.","opinion":"Looks final. Answers are easier to scan; nothing to do.","verdict":"final","state":{"committed":true,"pushed":true,"built":true},"url":"https://github.com/MartinoPolo/mpx/commit/d7584c2"},{"id":"c2","scope":"mpx morning-brief","summary":"New skill, plus launcher fixes for slash prompts.","opinion":"Still moving. Not committed, and dist is a day old.","verdict":"attention","state":{"committed":false,"pushed":false,"built":false},"url":"https://github.com/MartinoPolo/mpx"},{"id":"c3","scope":"videoLab AGENTS.md","summary":"Reality first: build scenes only from trusted sources.","opinion":"Good rule; watch that it does not block quick drafts.","verdict":"watch","state":{"committed":true,"pushed":false},"url":"https://github.com/MartinoPolo/videoLab"}]},"beats":[{"say":"The HITL output style looks final; nothing to do.","note":"Output style","targets":["change-c1"]},{"say":"The morning brief work is not committed and the build is stale.","note":"Not committed","targets":["change-c2"]},{"say":"videoLab now insists on trusted sources; fine, but it may slow drafts.","note":"videoLab","targets":["change-c3"]}]},{"id":"news","type":"news","name":"AI news","title":"Three picks","status":"fyi","count":3,"data":{"items":[{"id":"n1","app":"googlegemini","source":"Google","title":"Gemini 3 Flash gets native audio output","summary":"Cheaper speech for apps like this brief.","date":"Oct 15","url":"https://blog.google/"},{"id":"n2","app":"ycombinator","source":"Hacker News","title":"Show HN: local-first agent sandboxes","summary":"412 points; containers per task, no daemon.","date":"Oct 15","url":"https://news.ycombinator.com/"},{"id":"n3","app":"claude","source":"Claude Code","title":"Claude Code 2.1.301","summary":"Idle compaction now configurable per project.","date":"Oct 15","url":"https://github.com/anthropics/claude-code/releases"}]},"beats":[{"say":"Gemini Flash now speaks natively, which could voice this brief cheaply.","note":"Gemini audio","targets":["news-n1"]},{"say":"On Hacker News, local-first agent sandboxes; and a small Claude Code release.","note":"HN, Claude Code","targets":["news-n2","news-n3"]}]},{"id":"actions","type":"actions","name":"Action points","title":"Five action points","status":"needs","count":5,"data":{"items":[{"id":"action-1","text":"Review !321","detail":"Alex asked in #team-ui, wants it before Monday","app":"gitlab","url":"https://example.com/mr/321","chapter":"slack","handoff":"you"},{"id":"action-2","text":"Merge !318 and move T-102","detail":"Approved and green; ticket still in review","app":"gitlab","url":"https://example.com/mr/318","chapter":"work","handoff":"agent"},{"id":"action-3","text":"Renew the GitLab token","detail":"GitLab Workflow token expires 21 Oct · GitLab email, 15 Oct","app":"gmail","url":"https://mail.google.com/","chapter":"mail","handoff":"you"},{"id":"action-4","text":"Rerun the 4K render","detail":"Overnight run timed out at scene 7","app":"claude","url":"file:///C:/AI_DUMP/afk/render.log","chapter":"overnight","handoff":"agent"},{"id":"action-5","text":"Start the hook fix session","detail":"Approve it in the retro first","app":"claude","chapter":"retro","handoff":"agent"}]},"beats":[{"say":"Five things need you. Alex asked in Slack for your review of three twenty one before Monday.","note":"Review !321","targets":["action-1"]},{"say":"Three eighteen is approved and green; I can merge it and move its ticket.","note":"Merge !318","targets":["action-2"]},{"say":"GitLab emailed yesterday that your Workflow token expires on the twenty first; renew it.","note":"Renew token","targets":["action-3"]},{"say":"The overnight render timed out; I can rerun it, and start the hook fix once you approve it.","note":"Render, hook fix","targets":["action-4","action-5"]}]}]}</script>
+<script type="application/json" id="brief-data">{"date":"2026-10-16","window":{"since":"2026-10-15T06:05:00+02:00","until":"2026-10-16T06:00:00+02:00","label":"Thu 15 Oct 06:05 → Fri 16 Oct 06:00"},"now":"2026-10-16T06:00:00+02:00","sources":[{"name":"Personal Google","status":"ok","chapters":["calendar","mail"]},{"name":"Work Slack and mail","status":"ok","chapters":["slack","mail"]},{"name":"Work calendar","status":"skipped","reason":"Connector not approved yet; busy blocks only","chapters":["calendar"]},{"name":"Gerrit","status":"unavailable","reason":"SSH key not loaded","chapters":["work"]},{"name":"OpenAI news","status":"unavailable","reason":"HTTP 403","chapters":["news"]}],"chapters":[{"id":"calendar","type":"calendar","name":"Calendar","title":"Standup, then the dentist","status":"fyi","count":5,"data":{"calendars":[{"id":"personal","name":"Personal","account":"personal","color":"#039be5"},{"id":"family","name":"Family","account":"personal","color":"#33b679"},{"id":"work","name":"Work","account":"work","color":"#7986cb","busyOnly":true}],"days":[{"id":"2026-10-15","label":"Thu","date":"15"},{"id":"today","label":"Fri","date":"16","focus":true},{"id":"tomorrow","label":"Sat","date":"17"}],"events":[{"id":"retro-meeting","calendarId":"work","day":"2026-10-15","start":"14:00","end":"15:00","busyOnly":true},{"id":"swim","calendarId":"family","day":"2026-10-15","start":"17:00","end":"18:00","title":"Swimming lesson","url":"https://calendar.google.com/"},{"id":"standup","calendarId":"work","day":"today","start":"09:30","end":"09:45","busyOnly":true},{"id":"planning","calendarId":"work","day":"today","start":"13:00","end":"14:00","busyOnly":true},{"id":"dentist","calendarId":"personal","day":"today","start":"16:00","end":"17:00","title":"Dentist","place":"Downtown","notes":["Leave by 15:30"],"url":"https://calendar.google.com/"},{"id":"pickup","calendarId":"family","day":"today","start":"17:30","end":"18:00","title":"Kindergarten pickup","url":"https://calendar.google.com/"},{"id":"nameday","calendarId":"family","day":"today","allDay":true,"title":"Name day: Havel"},{"id":"run","calendarId":"personal","day":"tomorrow","start":"08:00","end":"09:00","title":"Park run","url":"https://calendar.google.com/"},{"id":"market","calendarId":"family","day":"tomorrow","start":"10:00","end":"12:00","title":"Farmers market","url":"https://calendar.google.com/"},{"id":"birthday","calendarId":"family","day":"tomorrow","start":"15:00","end":"19:00","title":"Birthday party at Sam's","place":"Oak Park","url":"https://calendar.google.com/"}]},"beats":[{"say":"Good morning. Yesterday, in grey, ended with the swimming lesson.","note":"Yesterday","targets":["event-swim"]},{"say":"Standup at half past nine, planning at one.","note":"Work blocks","targets":["event-standup","event-planning"]},{"say":"The dentist is at four; leave by half past three.","note":"Dentist","targets":["event-dentist"],"select":"dentist"},{"say":"Tomorrow is family day: park run, the market, and Sam's party in Oak Park.","note":"Tomorrow","targets":["event-run","event-market","event-birthday"]}]},{"id":"overnight","type":"overnight","name":"Overnight runs","title":"The render failed, the tests landed","status":"needs","count":1,"data":{"away":{"from":"Thu 22:40","to":"Fri 07:55"},"runs":[{"id":"run-tests","outcome":"ok","app":"claude","title":"prejemesi: wishlist tests","detail":"42 tests added, 3 commits","when":"22:35","duration":"1 h 20 min","url":"file:///C:/AI_DUMP/afk/prejemesi-tests.md"},{"id":"run-render","outcome":"fail","app":"claude","title":"videoLab: 4K render","detail":"Timed out at scene 7","when":"23:10","duration":"3 h 4 min","url":"file:///C:/AI_DUMP/afk/render.log"}]},"beats":[{"say":"After your last prompt at twenty to eleven, the prejemesi session added forty two wishlist tests.","note":"Tests landed","targets":["run-tests"]},{"say":"The 4K render ran for three hours and timed out at scene seven.","note":"Render failed","targets":["run-render"]}]},{"id":"work","type":"work","name":"Merge requests","title":"One merge ready, one review waiting","status":"needs","count":2,"data":{"states":{"ready":"Approved and green","review":"Waiting for review","draft":"Draft","failing":"Pipeline failing","progress":"In progress","local":"Local only","merged":"Merged"},"projects":[{"id":"ui-components","scope":"work","name":"ui-components","app":"gitlab","url":"https://example.com/ysc","cards":[{"id":"mr-318","ref":"!318","title":"Payment forms opt out of Enter submit","state":"ready","url":"https://example.com/mr/318","pipeline":{"status":"success","url":"https://example.com/pipelines/318"},"session":{"label":"Orca","url":"orca://"}},{"id":"mr-321","ref":"!321","title":"Date picker keyboard support","state":"review","author":"Alex","url":"https://example.com/mr/321","pipeline":{"status":"success","url":"https://example.com/pipelines/321"}},{"id":"mr-320","ref":"!320","title":"Toast stacking","state":"failing","url":"https://example.com/mr/320","pipeline":{"status":"failed","url":"https://example.com/pipelines/320","job":"lint"}},{"id":"mr-316","ref":"!316","title":"Select clears on reset","state":"merged","url":"https://example.com/mr/316"},{"id":"mr-317","ref":"!317","title":"CI split into lint and test","state":"merged","url":"https://example.com/mr/317"}]},{"id":"mpx","scope":"personal","name":"mpx","app":"github","url":"https://github.com/MartinoPolo/mpx","cards":[{"id":"mpx-brief","ref":"main","title":"Morning brief skill","state":"progress","url":"https://github.com/MartinoPolo/mpx","local":{"uncommitted":9,"unpushed":1}}]},{"id":"prejemesi","scope":"personal","name":"prejemesi","app":"github","url":"https://github.com/MartinoPolo/prejemesi","cards":[{"id":"pr-488","ref":"#488","title":"Agent access part 2: API","state":"draft","url":"https://github.com/MartinoPolo/prejemesi/pull/488","pipeline":{"status":"running","url":"https://github.com/MartinoPolo/prejemesi/actions"}},{"id":"pr-487","ref":"#487","title":"Permanent wishlists","state":"merged","url":"https://github.com/MartinoPolo/prejemesi/pull/487"}]}],"autoHandled":[{"id":"tidy","text":"11 old checkouts with local changes","proposal":"Stash and list them in the weekly review"}],"quiet":["kamosh","orca","flowguard-api"]},"beats":[{"say":"Three eighteen is approved and green, ready to merge.","note":"Ready to merge","targets":["card-mr-318"],"scope":"work"},{"say":"In review: Alex's date picker, and toast stacking, which fails in lint.","note":"In review","targets":["card-mr-321","card-mr-320"],"scope":"work"},{"say":"Two merged yesterday.","note":"Merged","targets":["column-merged"],"scope":"work"},{"say":"On the personal side, mpx has the brief skill uncommitted and prejemesi has a draft running checks.","note":"Personal","targets":["card-mpx-brief","card-pr-488"],"scope":"personal"}]},{"id":"issues","type":"issues","name":"Issues","title":"Two tickets behind their merges","status":"needs","count":2,"data":{"boards":[{"scope":"work","app":"kanbanflow","name":"Team UI","url":"https://kanbanflow.com/","columns":["To-do","In progress","In review","Approved","Done"],"issues":[{"id":"T-111","ref":"T-111","title":"Export the audit log as CSV","column":"To-do","url":"https://kanbanflow.com/"},{"id":"T-110","ref":"T-110","title":"Toast stacking","column":"In progress","url":"https://kanbanflow.com/","links":[{"ref":"!320","state":"failing","url":"https://example.com/mr/320"}]},{"id":"T-102","ref":"T-102","title":"Payment forms opt out of Enter submit","column":"In review","url":"https://kanbanflow.com/","links":[{"ref":"!318","state":"ready","url":"https://example.com/mr/318"}],"move":{"to":"Approved","reason":"!318 approved and green"}},{"id":"T-108","ref":"T-108","title":"Date picker keyboard support","column":"In review","url":"https://kanbanflow.com/","links":[{"ref":"!321","state":"review","url":"https://example.com/mr/321"}]},{"id":"T-099","ref":"T-099","title":"Select clears on reset","column":"Done","url":"https://kanbanflow.com/","links":[{"ref":"!316","state":"merged","url":"https://example.com/mr/316"}]}]},{"scope":"personal","app":"github","name":"GitHub issues","url":"https://github.com/MartinoPolo/prejemesi/issues","columns":["Open","In progress","Closed"],"issues":[{"id":"gh-476","ref":"#476","title":"Agent access part 3: MCP server","column":"Open","url":"https://github.com/MartinoPolo/prejemesi/issues/476"},{"id":"gh-475","ref":"#475","title":"Agent access part 2: API","column":"In progress","url":"https://github.com/MartinoPolo/prejemesi/issues/475","links":[{"ref":"#488","state":"draft","url":"https://github.com/MartinoPolo/prejemesi/pull/488"}]},{"id":"gh-470","ref":"#470","title":"Permanent wishlists","column":"In progress","url":"https://github.com/MartinoPolo/prejemesi/issues/470","links":[{"ref":"#487","state":"merged","url":"https://github.com/MartinoPolo/prejemesi/pull/487"}],"move":{"to":"Closed","reason":"#487 merged"}}]}]},"beats":[{"say":"On the team board, T one oh two still sits in review, although three eighteen is approved and green.","note":"T-102 behind","targets":["issue-T-102"],"scope":"work"},{"say":"The other tickets match their merge requests.","note":"In sync","targets":["issue-T-110","issue-T-108","issue-T-099"],"scope":"work"},{"say":"On GitHub, four seventy is still open, though its pull request merged yesterday.","note":"#470 still open","targets":["issue-gh-470"],"scope":"personal"}]},{"id":"slack","type":"slack","name":"Slack","title":"One request waits on you","status":"needs","count":1,"data":{"unaddressed":[{"id":"s1","channel":"#team-ui","author":"Alex","when":"16:40","text":"@you could you look at !321 before Monday? Keyboard nav is the part I am unsure about.","replies":0,"url":"https://example.slack.com/archives/C1/p1"}],"worthKnowing":[{"id":"s2","channel":"#admins","author":"Chris","when":"15:05","text":"Load balancer drops ACKs between the balancer and router; we are watching it.","handledBy":"Chris","replies":6,"url":"https://example.slack.com/archives/C2/p2"},{"id":"s3","channel":"#ai","author":"Kim","when":"11:20","text":"Code review working group kicks off Tuesday, sign-up in the thread.","replies":14,"url":"https://example.slack.com/archives/C3/p3"}],"addressedSummary":"Yesterday you fixed the failing feature tests, finished a review ask, and answered the forms question.","addressed":[{"id":"s4","channel":"#team-ui","author":"Robin","when":"13:16","text":"Feature tests fail on the filter Apply button","url":"https://example.slack.com/archives/C1/p4"},{"id":"s5","channel":"#team-ui","author":"Taylor","when":"14:02","text":"Review please: !317","url":"https://example.slack.com/archives/C1/p5"},{"id":"s6","channel":"DM","author":"Jordan","when":"17:45","text":"Are the payment forms still submitting on Enter?","url":"https://example.slack.com/archives/D1/p6"}],"skipped":35},"beats":[{"say":"Alex wants your review of three twenty one before Monday.","note":"Waiting on you","targets":["message-s1"]},{"say":"Worth knowing: Chris is chasing a load balancer issue, and the AI code review group starts Tuesday.","note":"Worth knowing","targets":["message-s2","message-s3"]},{"say":"Everything else you already handled: the feature tests, a review, and Jordan's forms question.","note":"Handled","targets":["slack-addressed"]}]},{"id":"mail","type":"mail","name":"Mail","title":"Two emails to act on","status":"needs","count":2,"data":{"rows":[{"id":"token","account":"work","from":"GitLab","subject":"Your personal access token expires soon","snippet":"The GitLab Workflow token expires on 21 Oct.","when":"Oct 15","action":"Renew","url":"https://mail.google.com/"},{"id":"trip","account":"personal","from":"TravelCo","subject":"Trip instructions: Lisbon, Oct 21","snippet":"Check-in opens 48 hours before departure.","when":"Oct 15","action":"Read","url":"https://mail.google.com/"},{"id":"bootcamp","account":"work","from":"HR team","subject":"Optional bootcamp in November","snippet":"Optional, sent to everyone.","when":"Oct 15","action":"Optional","url":"https://mail.google.com/"}],"notifications":[{"source":"GitLab","count":9},{"source":"Google","count":6},{"source":"KanbanFlow","count":3},{"source":"Other","count":4}]},"beats":[{"say":"GitLab warns that a token expires on Wednesday, and TravelCo sent the Lisbon check-in steps.","note":"Act on","targets":["mail-token","mail-trip"]},{"say":"The bootcamp invite is optional.","note":"Optional","targets":["mail-bootcamp"]}]},{"id":"triage","type":"triage","name":"Obsidian triage","title":"Three captures to file","status":"fyi","count":3,"data":{"vault":"ObsidianMP","projects":["mpx","orca","prejemesi","skills","videoLab"],"headings":["#AI","#todo","#quick","#tooling","#work"],"groups":[{"id":"daily","note":"Daily/2026-10-15","url":"obsidian://open?vault=ObsidianMP&file=Daily%2F2026-10-15","items":[{"id":"t1","text":"Morning brief should move KF tickets","project":"mpx","heading":"#tooling","priority":"high"},{"id":"t2","text":"Buy a birthday present for Sam","project":"","heading":"#todo","priority":"highest"}]},{"id":"ideas","note":"Ideas","url":"obsidian://open?vault=ObsidianMP&file=Ideas","items":[{"id":"t3","text":"True crime videos with realistic animations","project":"videoLab","heading":"#AI","priority":"low"}]}]},"beats":[{"say":"From yesterday's note: KF moves for the brief, and Sam's present, which is due tomorrow.","note":"Daily note","targets":["task-t1","task-t2"]},{"say":"One idea: true crime animations, parked as low priority.","note":"Ideas","targets":["task-t3"]},{"say":"Once the projects look right, the agent files all three.","note":"File them","targets":["action-file"]}]},{"id":"retro","type":"retro","name":"Retro","title":"Two fixes worth a session","status":"fyi","count":2,"data":{"items":[{"id":"substitution","title":"Arithmetic blocked as command substitution","harness":"claude","account":"personal","cost":"about 40 blocked calls in 15 sessions","evidence":{"kind":"terminal","lines":[{"role":"tool","text":"Bash(end=$((SECONDS+2700)); until [ -f done ]; do sleep 5; done)"},{"role":"error","text":"PreToolUse:Bash hook error: Blocked dangerous command: opaque command or process substitution cannot be inspected."},{"role":"assistant","text":"I'll write a scratchpad script instead."}],"session":{"label":"3589dbf6","url":"file:///C:/Users/me/session.jsonl"}},"fix":{"file":"mpx · src/safeguard/shell.ts","diff":"- if (/\\$\\(/.test(command)) return true;\n+ if (/\\$\\((?!\\()/.test(command)) return true;"},"session":{"harness":"claude","account":"personal","project":"mpx","prompt":"Treat $(( )) as arithmetic in hasOpaqueCommandExpansion and add regression tests."}},{"id":"commit","title":"git add and commit chained in one call","harness":"pi","account":"work","cost":"9 blocked commits","evidence":{"kind":"terminal","lines":[{"role":"tool","text":"bash: git add -A && git commit -m \"fix: toast stacking\""},{"role":"error","text":"Finish staging/index mutations in a separate completed tool call before git commit"}],"session":{"label":"8c38ddae","url":"file:///C:/Users/me/session2.jsonl"}},"fix":{"file":"mpx · content/skills/commit/SKILL.md","diff":"+ Stage in one tool call, inspect git diff --cached, then commit in a separate call."},"session":{"harness":"claude","account":"personal","project":"mpx","prompt":"Tell the commit skill to stage and commit in separate calls."}}]},"beats":[{"say":"The shell hook blocks plain arithmetic as if it were command substitution; about forty calls this week.","note":"Arithmetic blocked","targets":["retro-substitution"]},{"say":"Commits also fail when staging shares the call; a one-line skill fix would stop it.","note":"Split commits","targets":["retro-commit"]},{"say":"Each comes with a fix session ready to start.","note":"Fix sessions","targets":["action-fix-substitution","action-fix-commit"]}]},{"id":"instructions","type":"instructions","name":"Instructions","title":"Three changes, one unbuilt","status":"fyi","count":3,"data":{"changes":[{"id":"c1","scope":"mpx output style","summary":"Everything that needs you moves to one final HITL section.","opinion":"Looks final. Answers are easier to scan; nothing to do.","verdict":"final","state":{"committed":true,"pushed":true,"built":true},"url":"https://github.com/MartinoPolo/mpx/commit/d7584c2"},{"id":"c2","scope":"mpx morning-brief","summary":"New skill, plus launcher fixes for slash prompts.","opinion":"Still moving. Not committed, and dist is a day old.","verdict":"attention","state":{"committed":false,"pushed":false,"built":false},"url":"https://github.com/MartinoPolo/mpx"},{"id":"c3","scope":"videoLab AGENTS.md","summary":"Reality first: build scenes only from trusted sources.","opinion":"Good rule; watch that it does not block quick drafts.","verdict":"watch","state":{"committed":true,"pushed":false},"url":"https://github.com/MartinoPolo/videoLab"}]},"beats":[{"say":"The HITL output style looks final; nothing to do.","note":"Output style","targets":["change-c1"]},{"say":"The morning brief work is not committed and the build is stale.","note":"Not committed","targets":["change-c2"]},{"say":"videoLab now insists on trusted sources; fine, but it may slow drafts.","note":"videoLab","targets":["change-c3"]}]},{"id":"news","type":"news","name":"AI news","title":"Three picks","status":"fyi","count":3,"data":{"items":[{"id":"n1","app":"googlegemini","source":"Google","title":"Gemini 3 Flash gets native audio output","summary":"Cheaper speech for apps like this brief.","date":"Oct 15","url":"https://blog.google/"},{"id":"n2","app":"ycombinator","source":"Hacker News","title":"Show HN: local-first agent sandboxes","summary":"412 points; containers per task, no daemon.","date":"Oct 15","url":"https://news.ycombinator.com/"},{"id":"n3","app":"claude","source":"Claude Code","title":"Claude Code 2.1.301","summary":"Idle compaction now configurable per project.","date":"Oct 15","url":"https://github.com/anthropics/claude-code/releases"}]},"beats":[{"say":"Gemini Flash now speaks natively, which could voice this brief cheaply.","note":"Gemini audio","targets":["news-n1"]},{"say":"On Hacker News, local-first agent sandboxes; and a small Claude Code release.","note":"HN, Claude Code","targets":["news-n2","news-n3"]}]},{"id":"actions","type":"actions","name":"Action points","title":"Ten action points","status":"needs","count":10,"data":{"items":[{"id":"action-review","text":"Review !321","detail":"Alex asked in #team-ui, wants it before Monday","app":"gitlab","url":"https://example.com/mr/321","chapter":"slack","source":"message-s1","handoff":"you"},{"id":"action-token","text":"Renew the GitLab token","detail":"Workflow token expires 21 Oct · GitLab email, 15 Oct","app":"gmail","url":"https://mail.google.com/","chapter":"mail","source":"mail-token","handoff":"you","agent":false},{"id":"action-merge","text":"Merge !318","detail":"Approved and green","app":"gitlab","url":"https://example.com/mr/318","chapter":"work","source":"card-mr-318","handoff":"agent"},{"id":"action-move-t102","text":"Move T-102 to Approved","detail":"Still in review; !318 is approved and green","app":"kanbanflow","url":"https://kanbanflow.com/","chapter":"issues","source":"issue-T-102","handoff":"agent"},{"id":"action-close-470","text":"Close #470","detail":"Its pull request #487 merged yesterday","app":"github","url":"https://github.com/MartinoPolo/prejemesi/issues/470","chapter":"issues","source":"issue-gh-470","handoff":"agent"},{"id":"action-render","text":"Rerun the 4K render","detail":"Overnight run timed out at scene 7","app":"claude","url":"file:///C:/AI_DUMP/afk/render.log","chapter":"overnight","source":"run-render","handoff":"agent"},{"id":"action-file","text":"File the three captures as set","detail":"Project, heading and priority per capture","app":"obsidian","chapter":"triage","handoff":"agent"},{"id":"action-fix-substitution","text":"Fix the arithmetic hook","detail":"Fix session: Claude Code in mpx","app":"claude","chapter":"retro","source":"retro-substitution","handoff":"agent"},{"id":"action-fix-commit","text":"Fix the commit skill","detail":"Fix session: Claude Code in mpx","app":"claude","chapter":"retro","source":"retro-commit","handoff":"agent"},{"id":"action-commit-brief","text":"Commit the brief skill","detail":"Uncommitted, dist a day old","app":"github","url":"https://github.com/MartinoPolo/mpx","chapter":"instructions","source":"change-c2","handoff":"you"}]},"beats":[{"say":"Ten points, decided as you went. Two are yours: Alex's review before Monday, and the GitLab token that GitLab emailed about yesterday.","note":"Yours","targets":["action-review","action-token"]},{"say":"I merge three eighteen and sync two tickets: T one oh two to Approved, and four seventy closed.","note":"Merge and sync","targets":["action-merge","action-move-t102","action-close-470"]},{"say":"I also rerun the render, file the captures, and start both fix sessions.","note":"Agent runs","targets":["action-render","action-file","action-fix-substitution","action-fix-commit"]},{"say":"Committing the brief skill is yours. Change anything here, then save.","note":"Commit, save","targets":["action-commit-brief"]}]}]}</script>
 <script>
 const brief = JSON.parse(document.getElementById('brief-data').textContent);
 const byId = (id) => document.getElementById(id);
@@ -531,8 +564,9 @@ function icon(name, size = 20, label = '') {
 	if (brand) return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="${brand.color}" ${labelled}><path d="${brand.path}"/></svg>`;
 	return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${labelled}>${UI_ICONS[name] ?? UI_ICONS.terminal}</svg>`;
 }
-const APP_NAMES = { gitlab: 'GitLab', github: 'GitHub', gerrit: 'Gerrit', gmail: 'Gmail', googlecalendar: 'Google Calendar', claude: 'Claude', anthropic: 'Anthropic', openai: 'OpenAI', obsidian: 'Obsidian', slack: 'Slack', googlegemini: 'Google Gemini', ycombinator: 'Hacker News', huggingface: 'Hugging Face', jenkins: 'Jenkins', sentry: 'Sentry', orca: 'Orca', pi: 'Pi' };
-const appIcon = (app, size = 20) => icon(BRAND_ICONS[app] ? app : app === 'orca' || app === 'pi' ? 'terminal' : 'news', size);
+const APP_NAMES = { gitlab: 'GitLab', github: 'GitHub', gerrit: 'Gerrit', gmail: 'Gmail', googlecalendar: 'Google Calendar', claude: 'Claude', anthropic: 'Anthropic', openai: 'OpenAI', obsidian: 'Obsidian', slack: 'Slack', googlegemini: 'Google Gemini', ycombinator: 'Hacker News', huggingface: 'Hugging Face', jenkins: 'Jenkins', sentry: 'Sentry', orca: 'Orca', pi: 'Pi', kanbanflow: 'KanbanFlow' };
+const FALLBACK_APP_ICONS = { orca: 'terminal', pi: 'terminal', kanbanflow: 'ticket' };
+const appIcon = (app, size = 20) => icon(BRAND_ICONS[app] ? app : FALLBACK_APP_ICONS[app] ?? 'news', size);
 function iconLink(url, label, iconName = 'external', className = '') {
 	const href = safeUrl(url);
 	if (!href) return '';
@@ -540,7 +574,7 @@ function iconLink(url, label, iconName = 'external', className = '') {
 	return `<a class="icon-link ${className}" href="${escapeHtml(href)}" target="_blank" rel="noopener" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">${graphic}</a>`;
 }
 
-const CHAPTER_ICONS = { calendar: 'googlecalendar', work: 'gitlab', overnight: 'moon', slack: 'slack', mail: 'gmail', triage: 'obsidian', retro: 'claude', instructions: 'github', news: 'news', actions: 'checklist' };
+const CHAPTER_ICONS = { calendar: 'googlecalendar', work: 'gitlab', issues: 'ticket', overnight: 'moon', slack: 'slack', mail: 'gmail', triage: 'obsidian', retro: 'claude', instructions: 'github', news: 'news', actions: 'checklist' };
 const QUIET_HOLD_SECONDS = 2;
 const chapters = brief.chapters.map((chapter) => chapter.status === 'quiet' || chapter.status === 'unavailable' || !chapter.beats?.length
 	? { ...chapter, beats: chapter.beats?.length ? chapter.beats : [{ say: chapter.title, note: chapter.status === 'unavailable' ? 'Unavailable' : 'Quiet', targets: [], hold: QUIET_HOLD_SECONDS }] }
@@ -549,31 +583,60 @@ const chapterOfType = (type) => chapters.find((chapter) => chapter.type === type
 const sourceProblems = (chapter) => (brief.sources ?? []).filter((source) => source.status !== 'ok' && source.chapters?.includes(chapter.id));
 const problemText = (problems) => problems.map((source) => `${source.name}: ${source.reason ?? source.status}`).join('; ');
 
-/* Choices live in memory and download as choices.json from the action points. */
-const choices = { news: {}, triage: {}, retro: { approved: {}, confirmed: false }, actions: {}, autoHandled: {} };
+/* Choices live in memory and download as choices.json from the action points. Each action point
+   holds one decision (agent, you, skip), shared by its control on the source slide and at the end. */
+const actionItems = chapterOfType('actions')?.data?.items ?? [];
+const choices = { news: {}, triage: {}, decisions: {}, autoHandled: {} };
 for (const group of chapterOfType('triage')?.data?.groups ?? []) for (const item of group.items) choices.triage[item.id] = { project: item.project ?? '', heading: item.heading ?? '', priority: item.priority ?? '' };
-for (const item of chapterOfType('actions')?.data?.items ?? []) choices.actions[item.id] = { done: false, handoff: item.handoff ?? 'you' };
+for (const item of actionItems) choices.decisions[item.id] = item.handoff === 'agent' && item.agent !== false ? 'agent' : 'you';
 for (const item of chapterOfType('work')?.data?.autoHandled ?? []) choices.autoHandled[item.id] = true;
 function exportedChoices() {
 	const retroItems = chapterOfType('retro')?.data?.items ?? [];
 	return {
 		date: brief.date,
 		exported: new Date().toISOString(),
+		actions: actionItems.map((item) => ({
+			id: item.id, text: item.text, chapter: item.chapter, source: item.source, url: item.url, decision: choices.decisions[item.id],
+			session: retroItems.find((retroItem) => `retro-${retroItem.id}` === item.source)?.session,
+		})),
 		triage: (chapterOfType('triage')?.data?.groups ?? []).flatMap((group) => group.items.map((item) => ({ id: item.id, note: group.note, text: item.text, ...choices.triage[item.id] }))),
-		retroSessions: {
-			confirmed: choices.retro.confirmed,
-			sessions: retroItems.filter((item) => choices.retro.approved[item.id]).map((item) => ({ id: item.id, title: item.title, ...item.session })),
-		},
 		news: (chapterOfType('news')?.data?.items ?? []).filter((item) => choices.news[item.id]).map((item) => ({ id: item.id, title: item.title, url: item.url, vote: choices.news[item.id] })),
-		actions: (chapterOfType('actions')?.data?.items ?? []).map((item) => ({ id: item.id, text: item.text, ...choices.actions[item.id] })),
 		autoHandled: (chapterOfType('work')?.data?.autoHandled ?? []).map((item) => ({ id: item.id, text: item.text, proposal: item.proposal, enabled: choices.autoHandled[item.id] })),
 	};
 }
 function choiceSummary() {
-	const exported = exportedChoices();
-	const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
-	const agentCount = exported.actions.filter((item) => item.handoff === 'agent').length;
-	return `${plural(exported.news.length, 'news vote')} · ${plural(exported.retroSessions.sessions.length, 'fix session')}${exported.retroSessions.confirmed ? ' confirmed' : ''} · ${plural(agentCount, 'agent handoff')} · ${plural(exported.triage.length, 'capture')} filed`;
+	const decided = Object.values(choices.decisions);
+	const count = (value) => decided.filter((decision) => decision === value).length;
+	const votes = Object.values(choices.news).filter(Boolean).length;
+	return [`${count('agent')} for the agent`, `${count('you')} for you`, `${count('skip')} skipped`, votes && `${votes} news vote${votes === 1 ? '' : 's'}`].filter(Boolean).join(' · ');
+}
+
+const DECISION_LABELS = { agent: 'Agent', you: 'Me', skip: 'Skip' };
+function decisionControl(item) {
+	const values = item.agent === false ? ['you', 'skip'] : ['agent', 'you', 'skip'];
+	return `<span class="decision" role="group" aria-label="${escapeHtml(`Who does it: ${item.text}`)}">${values.map((value) => `<button type="button" data-decide="${escapeHtml(item.id)}" data-value="${value}" aria-pressed="${choices.decisions[item.id] === value}">${DECISION_LABELS[value]}</button>`).join('')}</span>`;
+}
+// Renderers place a point's control beside its source; points without a source gather at the chapter's
+// foot. A source hidden by the scope switch keeps its control hidden too.
+const placedDecisions = new Set();
+function decisionRow(item, withDetail = false) {
+	placedDecisions.add(item.id);
+	return `<div class="inline-decision ${choices.decisions[item.id]}" ${target(item.id)}>
+		<span class="decision-text">${icon('checklist', 16)}<span>${escapeHtml(item.text)}${withDetail && item.detail ? ` <span class="decision-detail">· ${escapeHtml(item.detail)}</span>` : ''}</span></span>
+		${decisionControl(item)}
+	</div>`;
+}
+const inlineDecision = (source) => actionItems.filter((item) => item.source === source).map((item) => decisionRow(item)).join('');
+// A head whose title already names the point carries only the control.
+function headDecision(source) {
+	const item = actionItems.find((entry) => entry.source === source);
+	if (!item) return '';
+	placedDecisions.add(item.id);
+	return `<span class="head-decision" ${target(item.id)} title="${escapeHtml(item.text)}">${decisionControl(item)}</span>`;
+}
+function remainingDecisions(chapter) {
+	const remaining = actionItems.filter((item) => item.chapter === chapter.id && !item.source && !placedDecisions.has(item.id));
+	return remaining.length ? `<section class="decide-strip" aria-label="Decisions"><div class="row-list">${remaining.map((item) => decisionRow(item, true)).join('')}</div></section>` : '';
 }
 function downloadChoices() {
 	const blob = new Blob([JSON.stringify(exportedChoices(), null, 2)], { type: 'application/json' });
@@ -591,11 +654,11 @@ function downloadChoices() {
 const AVATAR_FILLS = ['var(--brand-deep)', 'var(--slack)', 'var(--ink)', 'var(--github)'];
 const avatarFill = (name) => AVATAR_FILLS[[...String(name)].reduce((sum, character) => sum + character.charCodeAt(0), 0) % AVATAR_FILLS.length];
 const minutesOf = (time) => { const [hours, minutes] = String(time ?? '0:0').split(':').map(Number); return hours * 60 + (minutes || 0); };
-const STATE_FILLS = { ready: 'var(--fill-ready)', review: 'var(--fill-review)', draft: 'var(--fill-draft)', failing: 'var(--fill-failing)', progress: 'var(--fill-progress)', local: 'var(--fill-draft)', merged: 'var(--fill-merged)', stale: 'var(--fill-progress)' };
+const STATE_FILLS = { ready: 'var(--fill-ready)', review: 'var(--fill-review)', draft: 'var(--fill-draft)', failing: 'var(--fill-failing)', progress: 'var(--fill-progress)', local: 'var(--fill-draft)', merged: 'var(--fill-merged)' };
 const BOARD_COLUMNS = [
 	{ id: 'local', name: 'Local', states: ['local', 'progress'] },
 	{ id: 'draft', name: 'Draft', states: ['draft'] },
-	{ id: 'review', name: 'In review', states: ['review', 'failing', 'stale'] },
+	{ id: 'review', name: 'In review', states: ['review', 'failing'] },
 	{ id: 'ready', name: 'Ready', states: ['ready'] },
 	{ id: 'merged', name: 'Merged', states: ['merged'] },
 ];
@@ -620,6 +683,28 @@ function textOn(hex) {
 	return contrast(1) >= contrast(relativeLuminance(INK)) ? '#ffffff' : INK;
 }
 
+/* Boards shared by merge requests and issues: a scope switch and Kanban columns of cards. */
+const SCOPE_ICONS = { work: 'gitlab', personal: 'github' };
+// A chapter split by scope opens on work and keeps the scope a beat or a click chose.
+function settleScope(chapter, scopes) {
+	if (!scopes.includes(chapter.scope)) chapter.scope = scopes.includes('work') ? 'work' : scopes[0];
+}
+function scopeSwitch(chapter, scopes, countOf, iconOf = (scope) => SCOPE_ICONS[scope]) {
+	if (scopes.length < 2) return '';
+	return `<div class="work-top"><div class="segmented" role="group" aria-label="Scope">${scopes.map((scope) => `<button type="button" data-scope="${escapeHtml(scope)}" aria-pressed="${scope === chapter.scope}">${icon(iconOf(scope) ?? 'terminal', 16)}${escapeHtml(scope[0].toUpperCase() + scope.slice(1))} <span class="mono">${countOf(scope)}</span></button>`).join('')}</div></div>`;
+}
+function board(columns, targetPrefix) {
+	// Busy columns widen and wrap their cards in pairs; empty ones stay narrow but keep their place.
+	const tracks = columns.map(({ cards }) => cards.length ? `minmax(0, ${Math.min(3, Math.ceil(cards.length / 2))}fr)` : 'minmax(84px, 0.5fr)').join(' ');
+	return `<div class="board" style="--board-columns:${tracks}">${columns.map(({ id, name, cards }) => `
+		<section class="board-column ${cards.length ? '' : 'empty'}" ${target(`${targetPrefix}-${id}`)} aria-label="${escapeHtml(name)}">
+			<div class="board-head"><span>${escapeHtml(name)}</span>${cards.length ? `<span class="count">${cards.length}</span>` : ''}</div>
+			<ul class="board-cards">${cards.join('')}</ul>
+		</section>`).join('')}
+	</div>`;
+}
+const slug = (text) => String(text).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
 /* Chapter renderers, keyed by chapter type. Each returns markup for the sheet body. */
 const RENDERERS = {
 	calendar(data, chapter) {
@@ -636,7 +721,8 @@ const RENDERERS = {
 		const lastHour = Math.max(18, ...timed.map((event) => Math.ceil(minutesOf(event.end) / 60)));
 		const allDayEvents = events.filter((event) => event.allDay);
 		// The week view fits the sheet so the stage never scrolls; legend, day heads and padding take the rest.
-		const chromeHeight = 150 + (allDayEvents.length ? 40 : 0);
+		const decisionStripHeight = actionItems.filter((item) => item.chapter === chapter.id && !item.source).length * 64;
+		const chromeHeight = 150 + (allDayEvents.length ? 40 : 0) + decisionStripHeight;
 		const hourHeight = Math.max(26, Math.min(48, Math.floor((stage.clientHeight - chromeHeight) / (lastHour - firstHour))));
 		const minimumBlockHeight = 16;
 		const trackHeight = (lastHour - firstHour) * hourHeight;
@@ -711,13 +797,10 @@ const RENDERERS = {
 
 	work(data, chapter) {
 		const scopes = [...new Set((data.projects ?? []).map((project) => project.scope))];
-		if (!scopes.includes(chapter.scope)) chapter.scope = scopes.includes('work') ? 'work' : scopes[0];
-		const scopeIcon = { work: 'gitlab', personal: 'github' };
+		settleScope(chapter, scopes);
 		const openCount = (scope) => (data.projects ?? []).filter((project) => project.scope === scope).flatMap((project) => project.cards).filter((card) => card.state !== 'merged').length;
 		const card = (item, project, column) => {
 			const pipeline = item.pipeline ? PIPELINE_ICONS[item.pipeline.status] : undefined;
-			const ticketWrong = item.ticket?.expected && item.ticket.column !== item.ticket.expected;
-			const ticketLabel = item.ticket ? `KanbanFlow ${item.ticket.ref}: ${item.ticket.column}${ticketWrong ? `, should be ${item.ticket.expected}` : ''}` : '';
 			// Merge request, pull request and commit refs read as refs; a long one is a branch name.
 			const isBranch = String(item.ref).length > 8;
 			// The column already names the usual state; only a different one is written out.
@@ -729,35 +812,62 @@ const RENDERERS = {
 					<div class="ref" title="${escapeHtml(isBranch ? `Branch ${item.ref}` : item.ref)}">${isBranch ? icon('branch', 15) : ''}<span>${escapeHtml(item.ref)}</span></div>
 					<div class="title" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</div>
 					${detail ? `<div class="state">${escapeHtml(detail)}</div>` : ''}
+					${inlineDecision(`card-${item.id}`)}
 					<div class="card-foot">
 						${item.local ? `<span class="local" aria-label="${escapeHtml(`${item.local.uncommitted ?? 0} uncommitted files, ${item.local.unpushed ?? 0} unpushed commits`)}">${item.local.uncommitted ? `<span title="Uncommitted files">${icon('pencil', 14)}${escapeHtml(item.local.uncommitted)}</span>` : ''}${item.local.unpushed ? `<span title="Unpushed commits">${icon('arrowUp', 14)}${escapeHtml(item.local.unpushed)}</span>` : ''}</span>` : ''}
 						<span class="links">
 							${iconLink(item.url, `Open ${item.ref} in ${APP_NAMES[project.app] ?? project.app}`, BRAND_ICONS[project.app] ? project.app : 'external')}
 							${pipeline ? iconLink(item.pipeline.url, `Pipeline ${pipeline[2]}`, `<span style="color:${pipeline[1]}">${icon(pipeline[0], 20)}</span>`) : ''}
-							${item.ticket ? iconLink(item.ticket.url, ticketLabel, 'ticket', ticketWrong ? 'warn' : '') : ''}
 							${item.session ? iconLink(item.session.url, `Open live session in ${item.session.label}`, 'terminal') : ''}
 						</span>
 					</div>
 				</li>`;
 		};
 		const items = (data.projects ?? []).filter((project) => project.scope === chapter.scope).flatMap((project) => project.cards.map((item) => ({ item, project })));
-		const columns = BOARD_COLUMNS.map((column) => ({ column, cards: items.filter(({ item }) => boardColumnOf(item.state) === column) }));
-		// Busy columns widen and wrap their cards in pairs; empty ones stay narrow but keep their place.
-		const boardTracks = columns.map(({ cards }) => cards.length ? `minmax(0, ${Math.min(3, Math.ceil(cards.length / 2))}fr)` : 'minmax(96px, 0.6fr)').join(' ');
+		const columns = BOARD_COLUMNS.map((column) => ({
+			id: column.id, name: column.name,
+			cards: items.filter(({ item }) => boardColumnOf(item.state) === column).map(({ item, project }) => card(item, project, column)),
+		}));
 		return `
-			${scopes.length > 1 ? `<div class="work-top"><div class="segmented" role="group" aria-label="Scope">${scopes.map((scope) => `<button type="button" data-scope="${escapeHtml(scope)}" aria-pressed="${scope === chapter.scope}">${icon(scopeIcon[scope] ?? 'terminal', 16)}${escapeHtml(scope[0].toUpperCase() + scope.slice(1))} <span class="mono">${openCount(scope)}</span></button>`).join('')}</div></div>` : ''}
-			<div class="board" style="--board-columns:${boardTracks}">${columns.map(({ column, cards }) => `
-				<section class="board-column ${cards.length ? '' : 'empty'}" ${target(`column-${column.id}`)} aria-label="${escapeHtml(column.name)}">
-					<div class="board-head"><span>${escapeHtml(column.name)}</span>${cards.length ? `<span class="count">${cards.length}</span>` : ''}</div>
-					<ul class="board-cards">${cards.map(({ item, project }) => card(item, project, column)).join('')}</ul>
-				</section>`).join('')}
-			</div>
+			${scopeSwitch(chapter, scopes, openCount)}
+			${board(columns, 'column')}
 			${(data.autoHandled ?? []).map((item) => `
 				<label class="quiet-toggle" title="${escapeHtml(item.proposal)}" ${target(`auto-${item.id}`)}>
 					<span class="switch"><input type="checkbox" data-auto="${escapeHtml(item.id)}" ${choices.autoHandled[item.id] ? 'checked' : ''} aria-label="${escapeHtml(`Handle automatically: ${item.text}. ${item.proposal}`)}"><span></span></span>
 					<span>${escapeHtml(item.proposal)}: ${escapeHtml(item.text)}</span>
 				</label>`).join('')}
 			${data.quiet?.length ? `<p class="muted-line">Quiet: ${data.quiet.map(escapeHtml).join(', ')}</p>` : ''}`;
+	},
+
+	issues(data, chapter) {
+		const boards = data.boards ?? [];
+		settleScope(chapter, boards.map((item) => item.scope));
+		const current = boards.find((item) => item.scope === chapter.scope);
+		if (!current) return '';
+		const stateNames = chapterOfType('work')?.data?.states ?? {};
+		// A board's last column holds finished issues, so the scope count leaves them out.
+		const openCount = (scope) => { const item = boards.find((entry) => entry.scope === scope); return item.issues.filter((issue) => issue.column !== item.columns.at(-1)).length; };
+		const linkChip = (link) => {
+			const href = safeUrl(link.url);
+			const attributes = `class="chip link-chip" style="--state-fill:${STATE_FILLS[link.state] ?? 'var(--paper)'}" title="${escapeHtml(`${link.ref}: ${stateNames[link.state] ?? link.state ?? ''}`)}"`;
+			return href ? `<a ${attributes} href="${escapeHtml(href)}" target="_blank" rel="noopener">${escapeHtml(link.ref)}</a>` : `<span ${attributes}>${escapeHtml(link.ref)}</span>`;
+		};
+		const issueCard = (issue) => {
+			const decision = inlineDecision(`issue-${issue.id}`);
+			return `
+			<li class="work-card" ${target(`issue-${issue.id}`)} style="--state-fill:${issue.move ? 'var(--fill-progress)' : 'var(--paper)'}">
+				<div class="ref">${appIcon(current.app, 15)}<span>${escapeHtml(issue.ref)}</span></div>
+				<div class="title" title="${escapeHtml(issue.title)}">${escapeHtml(issue.title)}</div>
+				${issue.links?.length ? `<div class="linked">${issue.links.map(linkChip).join('')}</div>` : ''}
+				${issue.move && !decision ? `<div class="move">${icon('goto', 14)}<span>${escapeHtml(issue.move.to)}</span>${issue.move.reason ? `<span class="reason">${escapeHtml(issue.move.reason)}</span>` : ''}</div>` : ''}
+				${decision}
+				<div class="card-foot"><span class="links">${iconLink(issue.url, `Open ${issue.ref} in ${APP_NAMES[current.app] ?? current.app}`, BRAND_ICONS[current.app] ? current.app : 'external')}</span></div>
+			</li>`;
+		};
+		const columns = (current.columns ?? []).map((name) => ({ id: slug(name), name, cards: current.issues.filter((issue) => issue.column === name).map(issueCard) }));
+		return `
+			${scopeSwitch(chapter, boards.map((item) => item.scope), openCount, (scope) => { const app = boards.find((item) => item.scope === scope)?.app; return BRAND_ICONS[app] ? app : 'ticket'; })}
+			${board(columns, 'issue-column')}`;
 	},
 
 	overnight(data) {
@@ -767,7 +877,7 @@ const RENDERERS = {
 			return `
 			<li class="run ${escapeHtml(run.outcome)}" ${target(run.id)}>
 				<span style="color:${color}">${icon(iconName, 22, label)}</span>
-				<div><div class="title">${escapeHtml(run.title)}</div>${run.detail ? `<div class="detail">${escapeHtml(run.detail)}</div>` : ''}</div>
+				<div><div class="title">${escapeHtml(run.title)}</div>${run.detail ? `<div class="detail">${escapeHtml(run.detail)}</div>` : ''}${inlineDecision(run.id)}</div>
 				<span class="mono">${escapeHtml(run.when)}</span>
 				<span class="mono duration">${escapeHtml(run.duration ?? '')}</span>
 				${iconLink(run.url, `Open ${run.title} output`) || '<span></span>'}
@@ -779,7 +889,7 @@ const RENDERERS = {
 		const message = (item, waiting) => `
 			<li class="slack-message ${waiting ? 'waiting' : ''}" ${target(`message-${item.id}`)}>
 				<span class="avatar" style="background:${avatarFill(item.author)}" aria-hidden="true">${escapeHtml([...String(item.author)][0] ?? '?')}</span>
-				<div style="min-width:0"><div class="who"><span class="name">${escapeHtml(item.author)}</span><span class="meta">${escapeHtml(item.channel)} · ${escapeHtml(item.when)}</span></div><div class="text">${mentionize(item.text)}</div>${item.handledBy ? `<span class="chip owner-chip">${icon('check', 14)}${escapeHtml(item.handledBy)} is on it</span>` : ''}</div>
+				<div style="min-width:0"><div class="who"><span class="name">${escapeHtml(item.author)}</span><span class="meta">${escapeHtml(item.channel)} · ${escapeHtml(item.when)}</span></div><div class="text">${mentionize(item.text)}</div>${item.handledBy ? `<span class="chip owner-chip">${icon('check', 14)}${escapeHtml(item.handledBy)} is on it</span>` : ''}${inlineDecision(`message-${item.id}`)}</div>
 				<div class="side">${item.replies ? `<span title="${escapeHtml(item.replies)} replies">${icon('thread', 16)}</span>${escapeHtml(item.replies)}` : ''}${iconLink(item.url, 'Open in Slack')}</div>
 			</li>`;
 		const section = (title, items, waiting) => items?.length ? `<section class="slack-section"><h2 class="group-title">${title}</h2><ul class="row-list">${items.map((item) => message(item, waiting)).join('')}</ul></section>` : '';
@@ -805,6 +915,7 @@ const RENDERERS = {
 					<div style="min-width:0">
 						<div class="from-line"><span class="from">${escapeHtml(row.from)}</span>${row.action ? `<span class="chip action-chip ${acts ? 'act' : ''}">${escapeHtml(row.action)}</span>` : ''}</div>
 						<div class="subject-line" title="${escapeHtml(`${row.subject}: ${row.snippet ?? ''}`)}"><span class="subject">${escapeHtml(row.subject)}</span>${row.snippet ? ` <span class="snippet">– ${escapeHtml(row.snippet)}</span>` : ''}</div>
+						${inlineDecision(`mail-${row.id}`)}
 					</div>
 					<span class="date">${escapeHtml(row.when)}</span>
 					${iconLink(row.url, 'Open in Gmail') || '<span></span>'}
@@ -837,16 +948,17 @@ const RENDERERS = {
 		const harnessIcon = (harness, size = 18) => harness === 'claude' ? icon('claude', size) : icon('terminal', size);
 		const harnessName = (harness) => harness === 'claude' ? 'Claude Code' : harness === 'pi' ? 'Pi' : harness;
 		const MARKS = { tool: '●', error: icon('warning', 14), assistant: '›', user: '»' };
-		const approvedCount = (data.items ?? []).filter((item) => choices.retro.approved[item.id]).length;
 		return `
 			<div class="row-list">${(data.items ?? []).map((item) => {
 				const open = item.id === chapter.openItem;
+				const decision = actionItems.find((entry) => entry.source === `retro-${item.id}`);
 				return `
-				<section class="retro-item" ${target(`retro-${item.id}`)}>
+				<section class="retro-item ${decision ? choices.decisions[decision.id] : ''}" ${target(`retro-${item.id}`)}>
 					<div class="retro-head">
 						<button class="retro-toggle" type="button" data-retro-open="${escapeHtml(item.id)}" aria-expanded="${open}" aria-controls="retro-body-${escapeHtml(item.id)}">
 							${icon('chevron', 16).replace('<svg', '<svg class="chevron"')}${harnessIcon(item.harness)}<span><span class="title">${escapeHtml(item.title)}</span><span class="cost">${escapeHtml(item.cost)}</span></span>
 						</button>
+						${headDecision(`retro-${item.id}`)}
 						${iconLink(item.evidence?.session?.url, `Open session ${item.evidence?.session?.label ?? ''} transcript`)}
 					</div>
 					<div class="retro-body" id="retro-body-${escapeHtml(item.id)}" ${open ? '' : 'hidden'}>
@@ -855,27 +967,9 @@ const RENDERERS = {
 							${(item.evidence?.lines ?? []).map((line) => `<div class="terminal-line ${escapeHtml(line.role)}"><span class="mark" aria-hidden="true">${MARKS[line.role] ?? '·'}</span><span>${line.role === 'error' ? '<span class="visually-hidden">Warning: </span>' : ''}${escapeHtml(line.text)}</span></div>`).join('')}
 						</div>
 						${item.fix ? `<div class="diff" aria-label="Proposed fix"><div class="file">${escapeHtml(item.fix.file)}</div>${String(item.fix.diff).split('\n').map((line) => `<div class="line ${line.startsWith('+') ? 'plus' : line.startsWith('-') ? 'minus' : ''}">${escapeHtml(line)}</div>`).join('')}</div>` : ''}
+						${item.session ? `<div class="session-line" aria-label="Fix session">${harnessIcon(item.session.harness, 16)}<span class="chip">${escapeHtml(`${harnessName(item.session.harness)} · ${item.session.account} · ${item.session.project}`)}</span><span class="prompt" title="${escapeHtml(item.session.prompt)}">${escapeHtml(item.session.prompt)}</span></div>` : ''}
 					</div>
-				</section>`; }).join('')}</div>
-			<section class="sessions" ${target('retro-sessions')} aria-labelledby="sessions-title">
-				<h2 id="sessions-title">Start fix sessions</h2>
-				${(data.items ?? []).filter((item) => item.session).map((item) => {
-					const approved = Boolean(choices.retro.approved[item.id]);
-					return `
-					<div class="session-row ${approved ? 'approved' : ''}">
-						<span class="switch"><input type="checkbox" data-retro-approve="${escapeHtml(item.id)}" ${approved ? 'checked' : ''} aria-label="Approve a fix session for ${escapeHtml(item.title)}"><span></span></span>
-						<div style="min-width:0">
-							<div class="line-one">${escapeHtml(item.title)} <span class="chip">${harnessIcon(item.session.harness, 14)}${escapeHtml(item.session.harness)} · ${escapeHtml(item.session.account)} · ${escapeHtml(item.session.project)}</span></div>
-							<div class="prompt" title="${escapeHtml(item.session.prompt)}">${escapeHtml(item.session.prompt)}</div>
-						</div>
-					</div>`; }).join('')}
-				<div class="sessions-confirm">
-					${choices.retro.confirmed ? '<span>Saved with your choices at the end</span>' : ''}
-					<button class="text-button ${choices.retro.confirmed ? 'done' : ''}" type="button" data-action="confirm-sessions" ${approvedCount ? '' : 'disabled'}>
-						${choices.retro.confirmed ? `${icon('check', 18)} ${approvedCount} confirmed` : approvedCount ? `Confirm ${approvedCount} session${approvedCount === 1 ? '' : 's'}` : 'Approve a fix first'}
-					</button>
-				</div>
-			</section>`;
+				</section>`; }).join('')}</div>`;
 	},
 
 	instructions(data) {
@@ -885,7 +979,7 @@ const RENDERERS = {
 			return `
 			<li class="change ${escapeHtml(change.verdict)}" ${target(`change-${change.id}`)}>
 				<div>
-					<div class="scope-line"><span class="scope">${escapeHtml(change.scope)}</span><span class="chip">${escapeHtml(VERDICTS[change.verdict] ?? change.verdict)}</span></div>
+					<div class="scope-line"><span class="scope">${escapeHtml(change.scope)}</span><span class="chip">${escapeHtml(VERDICTS[change.verdict] ?? change.verdict)}</span>${headDecision(`change-${change.id}`)}</div>
 					<div class="summary">${escapeHtml(change.summary)}</div>
 					<div class="opinion">${escapeHtml(change.opinion)}</div>
 				</div>
@@ -912,15 +1006,17 @@ const RENDERERS = {
 
 	actions(data) {
 		return `
-			<ul class="row-list">${(data.items ?? []).map((item) => {
-				const choice = choices.actions[item.id];
+			<ul class="action-grid">${(data.items ?? []).map((item) => {
 				const destination = chapters.find((chapter) => chapter.id === item.chapter);
 				return `
-				<li class="action ${choice.done ? 'is-done' : ''}" ${target(item.id)}>
-					<input class="checkbox" type="checkbox" data-action-done="${escapeHtml(item.id)}" ${choice.done ? 'checked' : ''} aria-label="Done: ${escapeHtml(item.text)}">
-					<span><span class="text">${escapeHtml(item.text)}</span>${item.detail ? `<span class="detail">${escapeHtml(item.detail)}</span>` : ''}</span>
-					<span style="display:flex">${iconLink(item.url, `Open in ${APP_NAMES[item.app] ?? 'app'}`, appIcon(item.app)) || (destination ? `<button class="icon-link" type="button" data-goto="${escapeHtml(destination.id)}" aria-label="Go to ${escapeHtml(destination.name)}" title="Go to ${escapeHtml(destination.name)}">${appIcon(item.app)}</button>` : '')}</span>
-					<span class="segmented" role="group" aria-label="Who does it">${['you', 'agent'].map((handoff) => `<button type="button" data-handoff="${escapeHtml(item.id)}" data-value="${handoff}" aria-pressed="${choice.handoff === handoff}">${handoff === 'you' ? 'You' : 'Agent'}</button>`).join('')}</span>
+				<li class="action ${choices.decisions[item.id]}" ${target(item.id)}>
+					<span class="source-app">${iconLink(item.url, `Open in ${APP_NAMES[item.app] ?? 'app'}`, appIcon(item.app)) || `<span class="icon-link">${appIcon(item.app)}</span>`}</span>
+					<span class="text" title="${escapeHtml(item.text)}">${escapeHtml(item.text)}</span>
+					${decisionControl(item)}
+					<span class="meta-line">
+						<span class="detail" title="${escapeHtml(item.detail ?? '')}">${escapeHtml(item.detail ?? '')}</span>
+						${destination ? `<button class="chip from" type="button" data-goto="${escapeHtml(destination.id)}" title="${escapeHtml(`Back to ${destination.name}`)}">${escapeHtml(destination.name)}</button>` : ''}
+					</span>
 				</li>`; }).join('')}</ul>
 			<div class="save-area">
 				<span class="summary" id="choice-summary">${escapeHtml(choiceSummary())}</span>
@@ -933,7 +1029,9 @@ function renderBody(chapter) {
 	if (chapter.status === 'quiet' || chapter.status === 'unavailable') {
 		return `<div class="quiet-slide">${icon(chapter.status === 'quiet' ? 'check' : 'warning', 40)}<p>${escapeHtml(chapter.title)}</p>${chapter.detail ? `<span class="detail">${escapeHtml(chapter.detail)}</span>` : ''}</div>`;
 	}
-	return RENDERERS[chapter.type]?.(chapter.data ?? {}, chapter) ?? '';
+	placedDecisions.clear();
+	const body = RENDERERS[chapter.type]?.(chapter.data ?? {}, chapter) ?? '';
+	return chapter.type === 'actions' ? body : body + remainingDecisions(chapter);
 }
 
 /* Player: one play/pause for the brief. A beat lasts its narration clip, or an estimate at 2.6 words
@@ -953,11 +1051,13 @@ const currentBeat = () => currentChapter().beats[state.beat];
 const formatTime = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 const maximumBeats = Math.max(...chapters.map((chapter) => chapter.beats.length));
 
-function renderStage() {
-	const scrollTop = stage.scrollTop;
+// Highlight classes go on before anything reads layout: new elements then start in their final state
+// instead of animating into it, which flashed every day column on each click.
+function renderStage(scrollTop = stage.scrollTop) {
 	stage.innerHTML = renderBody(currentChapter());
+	const lit = markTargets();
 	stage.scrollTop = scrollTop;
-	highlight();
+	scrollTargetsIntoView(lit);
 	showScrollHint();
 }
 // Fades the sheet's lower edge while more of a long chapter waits below.
@@ -996,6 +1096,9 @@ function renderOutline() {
 		${sourceProblems(chapter).map((source) => `<div class="panel-warning" title="${escapeHtml(source.reason ?? source.status)}">${icon('warning', 14)}<span>${escapeHtml(source.name)}: ${escapeHtml(source.reason ?? source.status)}</span></div>`).join('')}`;
 }
 function highlight() {
+	scrollTargetsIntoView(markTargets());
+}
+function markTargets() {
 	const beat = currentBeat();
 	const targets = [...(beat.targets ?? []), ...(beat.select ? ['event-detail'] : [])];
 	stage.querySelectorAll('.is-target, .on-path').forEach((element) => element.classList.remove('is-target', 'on-path'));
@@ -1007,7 +1110,7 @@ function highlight() {
 		for (let ancestor = element.parentElement; ancestor && ancestor !== stage; ancestor = ancestor.parentElement) ancestor.classList.add('on-path');
 	});
 	stage.classList.toggle('highlighting', lit.length > 0);
-	scrollTargetsIntoView(lit);
+	return lit;
 }
 // Brings every lit item into view when they fit together, otherwise the first one.
 function scrollTargetsIntoView(elements) {
@@ -1026,11 +1129,9 @@ function setChapter(index, beatIndex = 0) {
 	state.chapter = index;
 	state.finished = false;
 	renderHeader();
-	stage.innerHTML = renderBody(currentChapter());
-	stage.scrollTop = 0;
-	setBeat(beatIndex);
+	setBeat(beatIndex, true);
 }
-function setBeat(index) {
+function setBeat(index, newChapter = false) {
 	state.beat = index;
 	state.elapsed = 0;
 	const chapter = currentChapter();
@@ -1041,7 +1142,7 @@ function setBeat(index) {
 	if (beat.scope && beat.scope !== chapter.scope) { chapter.scope = beat.scope; changed = true; }
 	const retroTarget = chapter.type === 'retro' && (beat.targets ?? []).map((name) => name.replace(/^retro-/, '')).find((id) => chapter.data.items.some((item) => item.id === id));
 	if (retroTarget && retroTarget !== chapter.openItem) { chapter.openItem = retroTarget; changed = true; }
-	if (changed) renderStage(); else highlight();
+	if (newChapter) renderStage(0); else if (changed) renderStage(); else highlight();
 	byId('caption').textContent = beat.say;
 	renderOutline();
 	renderTransport();
@@ -1188,24 +1289,21 @@ byId('beat-panel').addEventListener('click', (event) => {
 });
 stage.addEventListener('click', (event) => {
 	const chapter = currentChapter();
-	const element = event.target.closest('[data-goto], [data-event], [data-scope], [data-retro-open], [data-news], [data-handoff], [data-action]');
+	const element = event.target.closest('[data-goto], [data-event], [data-scope], [data-retro-open], [data-news], [data-decide], [data-action]');
 	if (!element) return;
 	if (element.dataset.goto) return setChapter(chapters.findIndex((item) => item.id === element.dataset.goto));
 	if (element.dataset.event) { chapter.selected = element.dataset.event; return renderStage(); }
 	if (element.dataset.scope) { chapter.scope = element.dataset.scope; return renderStage(); }
 	if (element.dataset.retroOpen) { chapter.openItem = chapter.openItem === element.dataset.retroOpen ? undefined : element.dataset.retroOpen; return renderStage(); }
 	if (element.dataset.news) { choices.news[element.dataset.news] = choices.news[element.dataset.news] === element.dataset.vote ? undefined : element.dataset.vote; return renderStage(); }
-	if (element.dataset.handoff) { choices.actions[element.dataset.handoff].handoff = element.dataset.value; return renderStage(); }
+	if (element.dataset.decide) { choices.decisions[element.dataset.decide] = element.dataset.value; return renderStage(); }
 	if (element.dataset.action === 'close-event') { chapter.selected = undefined; return renderStage(); }
-	if (element.dataset.action === 'confirm-sessions') { choices.retro.confirmed = true; return renderStage(); }
 	if (element.dataset.action === 'save') downloadChoices();
 });
 stage.addEventListener('change', (event) => {
 	const element = event.target;
 	if (element.dataset.triage) choices.triage[element.dataset.triage][element.dataset.field] = element.value;
 	if (element.dataset.auto) choices.autoHandled[element.dataset.auto] = element.checked;
-	if (element.dataset.retroApprove) { choices.retro.approved[element.dataset.retroApprove] = element.checked; choices.retro.confirmed = false; renderStage(); }
-	if (element.dataset.actionDone) { choices.actions[element.dataset.actionDone].done = element.checked; renderStage(); }
 });
 stage.addEventListener('toggle', (event) => { if (event.target.dataset?.disclosure) currentChapter().disclosureOpen = event.target.open; }, true);
 document.addEventListener('keydown', (event) => {
