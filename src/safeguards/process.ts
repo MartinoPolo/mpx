@@ -38,7 +38,9 @@ export async function runBounded(executable: string, args: string[], cwd: string
       stopping ??= (async () => {
         if (!child.pid) return;
         if (windows) {
-          const killed = await terminate(taskkill, ['/PID', String(child.pid), '/T', '/F'], Math.max(1, reserve / 3)) || await windowsTreeFallback(child.pid, powershell, Math.max(1, reserve * 2 / 3));
+          // taskkill alone can need most of the reserve on a loaded machine; the fallback gets what remains.
+          const reserveEnd = Date.now() + reserve;
+          const killed = await terminate(taskkill, ['/PID', String(child.pid), '/T', '/F'], reserve) || await windowsTreeFallback(child.pid, powershell, Math.max(1, reserveEnd - Date.now()));
           if (!killed) incomplete = `${reason}; process-tree termination FAILED; stop the project tool manually before further edits`;
           child.kill('SIGKILL');
           if (!killed) {
