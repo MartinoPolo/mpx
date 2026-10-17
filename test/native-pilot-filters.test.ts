@@ -16,7 +16,8 @@ test('native filters isolate automatic MPX resources while explicit legacy loadi
     const account = path.join(home, '.pi/agent');
     await mkdir(account, { recursive: true });
     const { stdout } = await execute(process.execPath, ['--import', import.meta.resolve('tsx'), fileURLToPath(new URL('./fixtures/native-pilot-filters.ts', import.meta.url)), root], {
-      cwd: root, timeout: 20_000,
+      // Loading Pi through tsx is slow on its own and slower while other test files run in parallel.
+      cwd: root, timeout: 60_000,
       env: { ...process.env, HOME: home, USERPROFILE: home, APPDATA: path.join(home, 'appdata'), PI_CODING_AGENT_DIR: account, PI_OFFLINE: '1', PI_TELEMETRY: '0', MPX_ACCOUNT: '', MPX_ACTIVE_CONTENT_ROOT: '' },
     });
     assert.deepEqual(JSON.parse(stdout.trim()), { autoDisplayDisabled: true, independentExtensionsRetained: true, sharedProjectSkillsRetained: true, explicitLegacyDisplayAndSkillsRestored: true, installedRuntimeRegistrationLoads: true });
