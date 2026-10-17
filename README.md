@@ -104,9 +104,9 @@ mpx sync --orca-hooks-only --harness pi --preview
 
 Launch warnings require Enter to continue; Ctrl+C or Escape cancels. A work account in a
 personal-owned location only displays its warning and launches. Warnings never switch accounts.
-Personal Claude launches set `ENABLE_CLAUDEAI_MCP_SERVERS=false` unless it is already set. Work
-launches load claude.ai connectors; the work account's `deniedMcpServers`
-(e.g. `{ "serverName": "claude.ai Gmail" }`) keeps unwanted ones off. A `disableClaudeAiConnectors: true` in any settings file blocks them all.
+Claude launches keep claude.ai connectors off (`ENABLE_CLAUDEAI_MCP_SERVERS=false` unless already
+set). A leading `--connectors` loads them for that session, e.g. `ccw --connectors -p "..."`.
+`deniedMcpServers` or `disableClaudeAiConnectors: true` in any settings file still blocks them.
 Launch arguments skip MSYS path conversion, so `ccw "/mpx-skill"` keeps its slash; pass paths as
 `C:/...`, not `/c/...`. Pi's shell shim still converts them; use `//skill:name` there.
 Use `mpx launch-preview pi personal` to inspect without launching, or `pi --verbose` for expanded

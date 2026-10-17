@@ -253,15 +253,18 @@ test('Claude launches root their scratchpad at MPX_TEMP unless CLAUDE_CODE_TMPDI
   } finally { await f.cleanup(); }
 });
 
-test('personal Claude launches disable claude.ai connectors unless the caller sets ENABLE_CLAUDEAI_MCP_SERVERS', async () => {
+test('Claude launches load claude.ai connectors only with --connectors or an explicit caller setting', async () => {
   const f = await fixture();
   try {
-    const launch = (harness: 'pi' | 'claude', account: 'personal' | 'work', env: NodeJS.ProcessEnv) => createLaunchSpec({ root: f.root, cwd: f.root, harness, account, config: f.config, project: registered, selection: { packs: [], paths: [], warnings: [] }, args: [], env });
-    assert.equal((await launch('claude', 'personal', {})).env.ENABLE_CLAUDEAI_MCP_SERVERS, 'false');
-    assert.equal((await launch('claude', 'personal', { ENABLE_CLAUDEAI_MCP_SERVERS: 'true' })).env.ENABLE_CLAUDEAI_MCP_SERVERS, 'true');
-    assert.equal((await launch('claude', 'work', {})).env.ENABLE_CLAUDEAI_MCP_SERVERS, undefined);
-    assert.equal((await launch('claude', 'work', { ENABLE_CLAUDEAI_MCP_SERVERS: 'false' })).env.ENABLE_CLAUDEAI_MCP_SERVERS, 'false');
+    const launch = (harness: 'pi' | 'claude', account: 'personal' | 'work', env: NodeJS.ProcessEnv, connectors?: boolean) => createLaunchSpec({ root: f.root, cwd: f.root, harness, account, config: f.config, project: registered, selection: { packs: [], paths: [], warnings: [] }, args: [], env, connectors });
+    for (const account of ['personal', 'work'] as const) {
+      assert.equal((await launch('claude', account, {})).env.ENABLE_CLAUDEAI_MCP_SERVERS, 'false');
+      assert.equal((await launch('claude', account, {}, true)).env.ENABLE_CLAUDEAI_MCP_SERVERS, 'true');
+      assert.equal((await launch('claude', account, { ENABLE_CLAUDEAI_MCP_SERVERS: 'false' }, true)).env.ENABLE_CLAUDEAI_MCP_SERVERS, 'true');
+      assert.equal((await launch('claude', account, { ENABLE_CLAUDEAI_MCP_SERVERS: 'true' })).env.ENABLE_CLAUDEAI_MCP_SERVERS, 'true');
+    }
     assert.equal((await launch('pi', 'personal', {})).env.ENABLE_CLAUDEAI_MCP_SERVERS, undefined);
+    await assert.rejects(launch('pi', 'personal', {}, true), /--connectors supports Claude only/);
   } finally { await f.cleanup(); }
 });
 

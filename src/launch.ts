@@ -58,10 +58,11 @@ export function formatLaunchWarning(warning: LaunchWarning): string {
 export async function createLaunchSpec(options: {
   root: string; cwd: string; harness: Harness; account: Account; config: UserConfig;
   project: ProjectSelection; selection: PackSelection; args: string[];
-  env?: NodeJS.ProcessEnv; native?: boolean;
+  env?: NodeJS.ProcessEnv; native?: boolean; connectors?: boolean;
 }): Promise<LaunchSpec> {
-  const { root, cwd, harness, account, config, project, selection, args, native } = options;
+  const { root, cwd, harness, account, config, project, selection, args, native, connectors } = options;
   if (native && harness !== 'pi') throw new Error('The discovery-disabled escape hatch supports Pi only.');
+  if (connectors && harness !== 'claude') throw new Error('--connectors supports Claude only.');
   const sourceEnv = options.env ?? process.env;
   const executable = config.executables?.[harness] ?? sourceEnv[harness === 'pi' ? 'MPX_PI_EXECUTABLE' : 'MPX_CLAUDE_EXECUTABLE'];
   if (!executable || !isAbsolute(executable) || !(await stat(executable).catch(() => undefined))?.isFile()) {
@@ -91,9 +92,9 @@ export async function createLaunchSpec(options: {
   env[harness === 'pi' ? 'PI_CODING_AGENT_DIR' : 'CLAUDE_CONFIG_DIR'] = accountRoot;
   // Claude Code roots its session scratchpad and task output at CLAUDE_CODE_TMPDIR.
   if (harness === 'claude' && env.MPX_TEMP && !env.CLAUDE_CODE_TMPDIR) env.CLAUDE_CODE_TMPDIR = env.MPX_TEMP;
-  // Personal sessions keep claude.ai connectors off; the work account curates its connectors with
-  // `deniedMcpServers` in its settings instead.
-  if (harness === 'claude' && account === 'personal' && env.ENABLE_CLAUDEAI_MCP_SERVERS === undefined) env.ENABLE_CLAUDEAI_MCP_SERVERS = 'false';
+  // claude.ai connectors cost context in every session, so only explicit `--connectors` launches load them.
+  if (connectors) env.ENABLE_CLAUDEAI_MCP_SERVERS = 'true';
+  else if (harness === 'claude' && env.ENABLE_CLAUDEAI_MCP_SERVERS === undefined) env.ENABLE_CLAUDEAI_MCP_SERVERS = 'false';
   if (!native) {
     env.MPX_ACCOUNT = account;
     env.MPX_ACTIVE_CONTENT_ROOT = resolve(root);

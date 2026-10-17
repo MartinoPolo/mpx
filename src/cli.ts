@@ -90,16 +90,19 @@ async function main(): Promise<number> {
     }
     case 'launch':
     case 'launch-preview': {
-      const [harnessName, accountName, ...callerArgs] = args;
+      const [harnessName, accountName, ...launchArgs] = args;
       if (!['pi', 'claude', 'xpi'].includes(harnessName ?? '') || !['personal', 'work'].includes(accountName ?? '')) {
-        throw new Error('Usage: mpx launch[-preview] <pi|claude|xpi> <personal|work> [native arguments...]');
+        throw new Error('Usage: mpx launch[-preview] <pi|claude|xpi> <personal|work> [--connectors] [native arguments...]');
       }
+      // Only the leading position is MPX-owned, so a prompt containing the word is never rewritten.
+      const connectors = launchArgs[0] === '--connectors';
+      const callerArgs = connectors ? launchArgs.slice(1) : launchArgs;
       const harness: Harness = harnessName === 'claude' ? 'claude' : 'pi';
       const account = accountName as Account;
       const config = await readUserConfig(userConfigPath());
       const project = await resolveProject(process.cwd(), config);
       const selection = await selectPacks(root, harness, account, project, config);
-      const spec = await createLaunchSpec({ root, cwd: process.cwd(), harness, account, config, project, selection, args: callerArgs, native: harnessName === 'xpi' });
+      const spec = await createLaunchSpec({ root, cwd: process.cwd(), harness, account, config, project, selection, args: callerArgs, native: harnessName === 'xpi', connectors });
       console.error(spec.label);
       for (const warning of spec.warnings) console.error(formatLaunchWarning(warning));
       if (command === 'launch-preview') {
