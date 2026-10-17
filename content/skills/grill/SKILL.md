@@ -5,7 +5,7 @@ description:
   records...'
 metadata:
   author: MartinoPolo
-  version: '2.6'
+  version: '2.7'
   category: planning
   mpx:
     schemaVersion: 1
@@ -34,6 +34,8 @@ grill.
 
 - If `the invocation input` is inline text, use as the grilling subject.
 - If `the invocation input` is a topic or plan description, use directly.
+- If `the invocation input` names an Issue, read it, its comments and attachments through
+  [Provider Routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md).
 - If no arguments, ask the user what to grill.
 
 ## Step 3: Grill
@@ -85,7 +87,12 @@ Settled constraints are decisions: record them in DECISIONS.md, not CONTEXT.md.
   rationale; mention rejected alternatives only when explicitly rejected.
 - Replace superseded entries and keep unresolved questions in the conversation.
 
+**The grilled Issue** — Write the settled decisions into the Issue so implementation can start from
+it alone, for example after compaction: replace its HITL section with the decisions, drop the HITL
+label when nothing remains open, and update requirements and acceptance criteria they changed.
+
 ## Report
 
-Summarize the grilling session: key decisions made, requirements clarified, docs updated (if any),
-and open items remaining.
+Summarize the grilling session: key decisions made, requirements clarified, docs and Issue updated
+(if any), and open items remaining. End with the
+[result line]({{MPX_SHARED_INSTRUCTIONS}}/RESULT_LINE.md): ✅ when nothing blocks implementation.
