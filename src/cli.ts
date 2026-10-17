@@ -18,6 +18,12 @@ import { updatePiExtensions } from './pi-extension-update.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const [command, ...args] = process.argv.slice(2);
+const callerArgumentConversionExclusion = process.env.MPX_CALLER_MSYS2_ARG_CONV_EXCL;
+if (callerArgumentConversionExclusion !== undefined) {
+  delete process.env.MPX_CALLER_MSYS2_ARG_CONV_EXCL;
+  if (callerArgumentConversionExclusion) process.env.MSYS2_ARG_CONV_EXCL = callerArgumentConversionExclusion;
+  else delete process.env.MSYS2_ARG_CONV_EXCL;
+}
 const syncSyntax = 'sync [--agents-only|--orca-hooks-only [--harness pi|claude]|--runtime-only [--account personal|work --harness pi|claude]] [--preview]';
 function userConfigPath(): string {
   if (!process.env.APPDATA) throw new Error('APPDATA is unset; cannot resolve mpx/config.json.');

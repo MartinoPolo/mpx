@@ -107,6 +107,8 @@ personal-owned location only displays its warning and launches. Warnings never s
 Personal Claude launches set `ENABLE_CLAUDEAI_MCP_SERVERS=false` unless it is already set. Work
 launches load claude.ai connectors; the work account's `deniedMcpServers`
 (e.g. `{ "serverName": "claude.ai Gmail" }`) keeps unwanted ones off. A `disableClaudeAiConnectors: true` in any settings file blocks them all.
+Launch arguments skip MSYS path conversion, so `ccw "/mpx-skill"` keeps its slash; pass paths as
+`C:/...`, not `/c/...`. Pi's shell shim still converts them; use `//skill:name` there.
 Use `mpx launch-preview pi personal` to inspect without launching, or `pi --verbose` for expanded
 startup details.
 

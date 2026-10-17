@@ -213,7 +213,7 @@ test('all Git Bash wrapper entrypoints forward account and hostile-looking argum
       await writeFile(join(directory, 'mpxconfig.json'), JSON.stringify({ ...registered.config, packs: [] }));
     }
     const capture = join(f.root, 'capture.mjs');
-    await writeFile(capture, 'console.log(JSON.stringify({args:process.argv.slice(2),pi:process.env.PI_CODING_AGENT_DIR,cc:process.env.CLAUDE_CONFIG_DIR,account:process.env.MPX_ACCOUNT,cwd:process.cwd()}));');
+    await writeFile(capture, 'console.log(JSON.stringify({args:process.argv.slice(2),pi:process.env.PI_CODING_AGENT_DIR,cc:process.env.CLAUDE_CONFIG_DIR,account:process.env.MPX_ACCOUNT,cwd:process.cwd(),exclusion:process.env.MSYS2_ARG_CONV_EXCL??null,caller:process.env.MPX_CALLER_MSYS2_ARG_CONV_EXCL??null}));');
     const shim = join(f.root, 'native shim');
     await writeFile(shim, '#!/usr/bin/env bash\nexec node "$FIXTURE_CAPTURE" "$@"\n');
     f.config.executables = { pi: shim, claude: shim };
@@ -232,7 +232,13 @@ test('all Git Bash wrapper entrypoints forward account and hostile-looking argum
       assert.equal(actual[harness === 'pi' ? 'pi' : 'cc'], f.config.accounts[account][harness]);
       assert.equal(actual.account, wrapper === 'xpi' ? undefined : account);
       assert.equal(actual.cwd, launchDirectories[account]);
+      assert.equal(actual.exclusion, null, 'harness shells keep MSYS path conversion');
+      assert.equal(actual.caller, null);
     }
+    const { stdout } = await exec('bash', ['--noprofile', '--norc', '-c', 'bash "$1" launch-preview claude work /mpx-skill', 'test', fileURLToPath(new URL('../bin/mpx', import.meta.url))], {
+      cwd: launchDirectories.work, env: { ...process.env, APPDATA: appdata, MSYS2_ARG_CONV_EXCL: '' }, timeout: 20_000,
+    });
+    assert.ok(JSON.parse(stdout).args.includes('/mpx-skill'), 'slash prompts reach the harness unconverted');
   } finally { await f.cleanup(); }
 });
 

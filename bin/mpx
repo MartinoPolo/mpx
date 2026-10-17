@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
-root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && { pwd -W 2>/dev/null || pwd; })"
+# MSYS would rewrite launch arguments such as `/skill` prompts as paths on the way into Node; the CLI
+# restores the caller's setting so harness shells keep normal path conversion.
+if [[ -n ${MSYSTEM-} && ${1-} == launch* ]]; then
+  export MPX_CALLER_MSYS2_ARG_CONV_EXCL="${MSYS2_ARG_CONV_EXCL-}" MSYS2_ARG_CONV_EXCL='*'
+fi
 exec node "$root/node_modules/tsx/dist/cli.mjs" "$root/src/cli.ts" "$@"
