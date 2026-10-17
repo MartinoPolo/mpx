@@ -219,7 +219,7 @@ test('all Git Bash wrapper entrypoints forward account and hostile-looking argum
     f.config.executables = { pi: shim, claude: shim };
     await writeFile(join(appdata, 'mpx', 'config.json'), JSON.stringify(f.config));
     const nativeArgs = ['--', 'a b', '', 'first\nsecond', '$(touch NEVER)', 'a"b', 'C:\\path\\'];
-    for (const [wrapper, account, harness] of [['pi', 'personal', 'pi'], ['piw', 'work', 'pi'], ['cc', 'personal', 'claude'], ['ccw', 'work', 'claude'], ['xpi', 'personal', 'pi']] as const) {
+    for (const [wrapper, account, harness] of [['pi', 'personal', 'pi'], ['piw', 'work', 'pi'], ['cc', 'personal', 'claude'], ['ccw', 'work', 'claude'], ['ccd', 'personal', 'claude'], ['ccwd', 'work', 'claude'], ['xpi', 'personal', 'pi']] as const) {
       // Enter through a real shell command, not Node's unquoted LF -> MSYS boundary.
       const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
       const command = ['bash', fileURLToPath(new URL(`../bin/${wrapper}`, import.meta.url)), ...nativeArgs].map(quote).join(' ');
@@ -227,7 +227,8 @@ test('all Git Bash wrapper entrypoints forward account and hostile-looking argum
         cwd: launchDirectories[account], env: { ...process.env, APPDATA: appdata, FIXTURE_CAPTURE: capture }, timeout: 20_000,
       });
       const actual = JSON.parse(stdout.trim());
-      const prefix = wrapper === 'xpi' ? ['--no-extensions'] : [];
+      const prefixes: Partial<Record<string, string[]>> = { xpi: ['--no-extensions'], ccd: ['--dangerously-skip-permissions'], ccwd: ['--dangerously-skip-permissions'] };
+      const prefix = prefixes[wrapper] ?? [];
       assert.deepEqual(actual.args, [...prefix, ...nativeArgs]);
       assert.equal(actual[harness === 'pi' ? 'pi' : 'cc'], f.config.accounts[account][harness]);
       assert.equal(actual.account, wrapper === 'xpi' ? undefined : account);
@@ -235,6 +236,10 @@ test('all Git Bash wrapper entrypoints forward account and hostile-looking argum
       assert.equal(actual.exclusion, null, 'harness shells keep MSYS path conversion');
       assert.equal(actual.caller, null);
     }
+    const bypassWithConnectors = await exec('bash', ['--noprofile', '--norc', '-c', 'bash "$1" --connectors -p hi', 'test', fileURLToPath(new URL('../bin/ccwd', import.meta.url))], {
+      cwd: launchDirectories.work, env: { ...process.env, APPDATA: appdata, FIXTURE_CAPTURE: capture }, timeout: 20_000,
+    });
+    assert.deepEqual(JSON.parse(bypassWithConnectors.stdout.trim()).args, ['--dangerously-skip-permissions', '-p', 'hi'], 'bypass launchers keep --connectors MPX-owned');
     const { stdout } = await exec('bash', ['--noprofile', '--norc', '-c', 'bash "$1" launch-preview claude work /mpx-skill', 'test', fileURLToPath(new URL('../bin/mpx', import.meta.url))], {
       cwd: launchDirectories.work, env: { ...process.env, APPDATA: appdata, MSYS2_ARG_CONV_EXCL: '' }, timeout: 20_000,
     });

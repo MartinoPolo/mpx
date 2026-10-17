@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# MPX reads --connectors only as the first launch argument, so keep it ahead of the bypass flag.
+if [[ ${1-} == --connectors ]]; then shift; set -- --connectors --dangerously-skip-permissions "$@"; else set -- --dangerously-skip-permissions "$@"; fi
+exec bash "$(dirname -- "${BASH_SOURCE[0]}")/mpx" launch claude personal "$@"

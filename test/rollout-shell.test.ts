@@ -28,7 +28,7 @@ const legacySource = [
 
 test('final shell cutover removes legacy routes and preserves unrelated content and newline style', () => {
   const result = renderFinalCutoverShell(legacySource.replaceAll('\n', '\r\n'));
-  for (const command of ['mpx', 'pi', 'piw', 'cc', 'ccw']) {
+  for (const command of ['mpx', 'pi', 'piw', 'cc', 'ccw', 'ccd', 'ccwd']) {
     assert.ok(result.includes(`${command}() { bash "\${MPX_PROJECTS:?${command} requires MPX_PROJECTS}/mpx/bin/${command}" "$@"; }`));
   }
   assert.doesNotMatch(result, /MANAGED LAUNCHERS|setup-worktree|remove-worktree|cc-mpx|pi-mpx|mpx-claude-code/);

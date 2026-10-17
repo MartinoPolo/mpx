@@ -2,7 +2,7 @@ const MANAGED_START = '# >>> MPX MANAGED LAUNCHERS >>>';
 const MANAGED_END = '# <<< MPX MANAGED LAUNCHERS <<<';
 const LEGACY_START = '# allow cd after creating a worktree';
 const LEGACY_END = 'alias y="yarn"';
-const COMMANDS = ['mpx', 'pi', 'piw', 'cc', 'ccw'] as const;
+const COMMANDS = ['mpx', 'pi', 'piw', 'cc', 'ccw', 'ccd', 'ccwd'] as const;
 
 function markerIndex(lines: readonly string[], marker: string): number {
   const matches = lines.flatMap((line, index) => line === marker ? [index] : []);

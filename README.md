@@ -84,6 +84,7 @@ Run from Git Bash in your project:
 | --- | --- |
 | `pi` / `piw` | Start Pi with the personal / work account |
 | `cc` / `ccw` | Start Claude Code with the personal / work account |
+| `ccd` / `ccwd` | Same, in bypass-permissions mode (`--dangerously-skip-permissions`) |
 | `mpx resume --list` | List resumable native sessions |
 | `mpx status` | Inspect MPX resources and conflicts |
 | `mpx sync --preview` | Preview account-resource synchronization |
