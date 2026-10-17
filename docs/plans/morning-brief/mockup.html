@@ -1,0 +1,952 @@
+<title>Morning Brief Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;700&display=swap">
+<style>
+/* Layout: the narrated-walkthrough shell. Chapter sidebar left, one slide per area on the stage, caption and two-row play controls at the bottom. */
+:root {
+	color-scheme: dark;
+	--stage: #121314;
+	--surface: #191a1b;
+	--raised: #202122;
+	--border: #2a2b2c;
+	--text-primary: #ededed;
+	--text-secondary: #bfbfbf;
+	--text-muted: #8c8c8c;
+	--accent: #48a0c7;
+	--accent-strong: #297aa0;
+	--on-accent: #ffffff;
+	--added: #73c991;
+	--modified: #e5ba7d;
+	--removed: #f48771;
+	--selection: rgba(255, 255, 255, 0.13);
+	--selection-inactive: #2c2d2e;
+	--hover: rgba(255, 255, 255, 0.04);
+	--avatar-1: #3b6e8f;
+	--avatar-2: #4f7a54;
+	--avatar-3: #6b5b8a;
+	--font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+	--font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', Consolas, monospace;
+}
+@media (prefers-color-scheme: light) {
+	:root:not([data-theme="dark"]) {
+		color-scheme: light;
+		--stage: #f6f8fa; --surface: #ffffff; --raised: #f3f4f6; --border: #dfe3e8;
+		--text-primary: #111827; --text-secondary: #374151; --text-muted: #5b6472;
+		--accent: #1f6f99; --accent-strong: #1f6f99; --on-accent: #ffffff;
+		--added: #1a7f37; --modified: #8a5a00; --removed: #c4262e;
+		--selection: rgba(31, 111, 153, 0.12); --selection-inactive: #e8edf2; --hover: rgba(17, 24, 39, 0.04);
+		--avatar-1: #3b6e8f; --avatar-2: #3f6b45; --avatar-3: #5d4f7a;
+	}
+}
+:root[data-theme="light"] {
+	color-scheme: light;
+	--stage: #f6f8fa; --surface: #ffffff; --raised: #f3f4f6; --border: #dfe3e8;
+	--text-primary: #111827; --text-secondary: #374151; --text-muted: #5b6472;
+	--accent: #1f6f99; --accent-strong: #1f6f99; --on-accent: #ffffff;
+	--added: #1a7f37; --modified: #8a5a00; --removed: #c4262e;
+	--selection: rgba(31, 111, 153, 0.12); --selection-inactive: #e8edf2; --hover: rgba(17, 24, 39, 0.04);
+	--avatar-1: #3b6e8f; --avatar-2: #3f6b45; --avatar-3: #5d4f7a;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; overflow: hidden; background: var(--stage); color: var(--text-secondary); font: 400 14px/1.45 var(--font-body); }
+button { font: inherit; color: inherit; cursor: pointer; }
+a { color: var(--accent); text-decoration: none; font-weight: 600; }
+a:hover { text-decoration: underline; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mono { font-family: var(--font-mono); }
+
+#app { display: grid; grid-template-columns: 280px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; height: 100%; }
+
+/* Sidebar */
+.sidebar { grid-row: 1 / 3; border-right: 1px solid var(--border); background: var(--surface); overflow-y: auto; padding: 18px 10px; display: flex; flex-direction: column; gap: 18px; }
+.brief-title { padding: 0 10px; }
+.brief-title h1 { margin: 0; font-size: 17px; font-weight: 700; color: var(--text-primary); }
+.brief-title p { margin: 4px 0 0; font: 400 12px var(--font-mono); color: var(--text-muted); }
+.section-heading { font-weight: 600; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); margin: 0 0 6px 10px; }
+.chapter-list { display: flex; flex-direction: column; gap: 2px; }
+.chapter-row { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: none; text-align: left; border-radius: 6px; padding: 6px 10px; font-weight: 600; color: var(--text-secondary); }
+.chapter-row:hover { background: var(--hover); }
+.chapter-row.current { background: var(--selection-inactive); color: var(--text-primary); }
+.chapter-row .number { width: 18px; color: var(--text-muted); font: 400 12px var(--font-mono); flex: none; }
+.chapter-row .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chapter-row.quiet { color: var(--text-muted); font-weight: 400; }
+.status { flex: none; font: 600 11px var(--font-body); letter-spacing: 0.04em; padding: 1px 7px; border-radius: 999px; }
+.status.needs { background: var(--accent-strong); color: var(--on-accent); }
+.status.fyi { background: var(--selection); color: var(--text-secondary); }
+.status.quiet { color: var(--text-muted); padding: 1px 0; }
+.note-row { display: block; width: 100%; border: 0; background: none; text-align: left; padding: 4px 10px 4px 36px; border-radius: 6px; font-size: 13px; color: var(--text-muted); line-height: 1.35; }
+.note-row:hover { background: var(--hover); }
+.note-row.done { color: var(--text-secondary); }
+.note-row.current { color: var(--text-primary); background: var(--selection); }
+.legend { margin-top: auto; padding: 10px; font-size: 12px; color: var(--text-muted); display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--border); }
+.legend span { display: flex; gap: 8px; align-items: center; }
+
+/* Main */
+.main { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-width: 0; min-height: 0; }
+.header { display: flex; align-items: flex-end; gap: 16px; padding: 18px 24px 12px; flex-wrap: wrap; }
+.header .kicker { font-weight: 600; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); }
+.header h2 { margin: 4px 0 0; font-size: 24px; font-weight: 700; color: var(--text-primary); text-wrap: balance; }
+.header .spacer { flex: 1; }
+.sample-chip { font: 600 11px var(--font-body); letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); border: 1px dashed var(--border); border-radius: 999px; padding: 3px 10px; }
+.stage { position: relative; overflow-y: auto; padding: 4px 24px 18px; min-height: 0; }
+.caption { margin: 0 24px 10px; padding: 10px 14px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); color: var(--text-primary); font-size: 15px; min-height: 44px; display: flex; gap: 10px; align-items: baseline; }
+.caption .speaker { font: 600 11px var(--font-body); letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); flex: none; }
+
+/* Highlighting: narration lights its targets and dims their siblings. */
+[data-target] { transition: opacity 0.3s, box-shadow 0.3s, border-color 0.3s, background 0.3s; }
+.highlighting [data-target]:not(.highlighted) { opacity: 0.45; }
+.highlighted { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent); border-color: var(--accent) !important; }
+
+/* Shared slide parts */
+.panel { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.group-label { font: 600 12px var(--font-body); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin: 0 0 8px; }
+.badge { display: inline-block; font: 600 11px var(--font-body); letter-spacing: 0.05em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; background: var(--selection); color: var(--text-secondary); white-space: nowrap; }
+.badge.added { background: color-mix(in srgb, var(--added) 16%, transparent); color: var(--added); }
+.badge.modified { background: color-mix(in srgb, var(--modified) 16%, transparent); color: var(--modified); }
+.badge.removed { background: color-mix(in srgb, var(--removed) 16%, transparent); color: var(--removed); }
+.badge.accent { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+
+/* Overview */
+.overview { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.window-line { font: 400 13px var(--font-mono); color: var(--text-muted); margin: 0 0 16px; }
+.need-list { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.need { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 14px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.need .index { font: 700 15px var(--font-mono); color: var(--accent); }
+.need .what { font-size: 16px; color: var(--text-primary); font-weight: 600; }
+.need .where { font-size: 13px; color: var(--text-muted); }
+.jump { border: 1px solid var(--border); background: none; border-radius: 8px; padding: 5px 11px; font-size: 12px; color: var(--text-secondary); }
+.jump:hover { border-color: var(--accent); color: var(--text-primary); }
+.area-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.area { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; text-align: left; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.area:hover { border-color: var(--accent); }
+.area .area-name { font-weight: 600; color: var(--text-primary); }
+.area .area-fact { font-size: 13px; color: var(--text-muted); }
+.area.quiet { background: transparent; border-style: dashed; }
+.area.quiet .area-name { color: var(--text-muted); font-weight: 400; }
+
+/* Calendar */
+.calendar { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.day { position: relative; display: grid; grid-template-columns: 54px minmax(0, 1fr); }
+.hours { position: relative; }
+.hour { height: 52px; font: 400 12px var(--font-mono); color: var(--text-muted); transform: translateY(-7px); }
+.track { position: relative; border-left: 1px solid var(--border); }
+.track .line { position: absolute; left: 0; right: 0; border-top: 1px solid var(--border); opacity: 0.6; }
+.event { position: absolute; border: 1px solid var(--border); border-left: 3px solid var(--accent); background: var(--surface); border-radius: 6px; padding: 4px 8px; overflow: hidden; text-align: left; font-size: 13px; color: var(--text-primary); }
+.event:hover { background: var(--raised); }
+.event.selected { background: var(--raised); border-color: var(--accent); }
+.event .event-time { font: 400 11px var(--font-mono); color: var(--text-muted); }
+.event .event-title { font-weight: 600; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.event.personal { border-left-color: var(--text-muted); }
+.event.conflict { border-left-color: var(--modified); }
+.now { position: absolute; left: -6px; right: 0; border-top: 2px solid var(--accent); }
+.now::before { content: ''; position: absolute; left: 0; top: -6px; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+.now span { position: absolute; right: 0; top: -20px; font: 600 11px var(--font-mono); color: var(--accent); }
+.prep { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+.prep h3 { margin: 0; font-size: 18px; color: var(--text-primary); }
+.prep .meta { font: 400 13px var(--font-mono); color: var(--text-muted); }
+.prep ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+.warning-line { color: var(--modified); font-weight: 600; font-size: 13px; }
+
+/* Kanban */
+.board-wrap { overflow-x: auto; padding-bottom: 6px; }
+.board { display: grid; grid-template-columns: repeat(5, minmax(180px, 1fr)); gap: 12px; min-width: 940px; }
+.column { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 10px; background: var(--surface); border: 1px solid var(--border); }
+.column-head { display: flex; justify-content: space-between; align-items: center; font: 600 12px var(--font-body); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); padding: 2px 4px 4px; }
+.work-card { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--stage); }
+.work-card .top { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.repo { font: 400 11px var(--font-mono); color: var(--text-muted); }
+.work-card .work-title { color: var(--text-primary); font-weight: 600; line-height: 1.35; }
+.work-card .work-meta { font-size: 12px; color: var(--text-muted); }
+.trail { font: 400 11px var(--font-mono); color: var(--accent); }
+.flag { font-size: 12px; font-weight: 600; color: var(--accent); }
+.leftovers { margin-top: 18px; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.leftover { padding: 10px 12px; border: 1px dashed var(--border); border-radius: 8px; font-size: 13px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 4px; }
+.leftover .command { font: 400 12px var(--font-mono); color: var(--text-muted); overflow-wrap: anywhere; }
+
+/* Quiet slide */
+.quiet-slide { min-height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 10px; padding: 0 6%; }
+.quiet-mark { width: 44px; height: 44px; border-radius: 50%; border: 2px solid var(--added); display: grid; place-items: center; color: var(--added); font-weight: 700; font-size: 20px; }
+.quiet-slide h3 { margin: 0; font-size: 30px; color: var(--text-primary); }
+.quiet-slide p { margin: 0; color: var(--text-muted); max-width: 60ch; }
+.skip-meter { width: 220px; height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; }
+.skip-meter div { height: 100%; background: var(--added); transform-origin: 0 0; transform: scaleX(0); }
+
+/* Slack-style messages */
+.chat { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; align-items: start; }
+.chat-group { display: flex; flex-direction: column; gap: 8px; }
+.message { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.avatar { width: 36px; height: 36px; border-radius: 6px; display: grid; place-items: center; font-weight: 700; color: #ffffff; font-size: 14px; }
+.message .who { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.message .name { font-weight: 700; color: var(--text-primary); font-size: 15px; }
+.message .when { font-size: 12px; color: var(--text-muted); }
+.message .channel { font: 400 12px var(--font-mono); color: var(--text-muted); }
+.message .body { color: var(--text-primary); font-size: 15px; margin-top: 2px; overflow-wrap: anywhere; }
+.mention { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent); border-radius: 4px; padding: 0 3px; font-weight: 600; }
+.message .footer { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 6px; font-size: 13px; }
+.reaction { border: 1px solid var(--border); border-radius: 999px; padding: 0 8px; font-size: 12px; color: var(--text-secondary); }
+.thread { color: var(--accent); font-weight: 600; }
+.skipped { font-size: 13px; color: var(--text-muted); }
+
+/* Mail */
+.mail { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface); max-width: 980px; }
+.mail-row { display: grid; grid-template-columns: 170px minmax(0, 1fr) auto; gap: 14px; align-items: baseline; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.mail-row:last-child { border-bottom: 0; }
+.mail-row .from { font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mail-row .subject { color: var(--text-primary); }
+.mail-row .snippet { color: var(--text-muted); }
+.mail-row.dim .from, .mail-row.dim .subject { color: var(--text-muted); font-weight: 400; }
+
+/* Notes and accordions */
+.columns-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; align-items: start; }
+.task-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.task { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text-primary); }
+.box { width: 14px; height: 14px; border: 1.5px solid var(--text-muted); border-radius: 3px; margin-top: 3px; }
+.box.partial { background: linear-gradient(135deg, transparent 45%, var(--text-muted) 45%, var(--text-muted) 55%, transparent 55%); }
+.task small { display: block; color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+details.fold { border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+details.fold + details.fold { margin-top: 8px; }
+details.fold summary { cursor: pointer; padding: 10px 12px; color: var(--text-primary); font-weight: 600; list-style-position: inside; }
+details.fold .fold-body { padding: 0 14px 12px; color: var(--text-secondary); }
+.diff { font: 400 12px/1.6 var(--font-mono); background: var(--stage); border-radius: 6px; padding: 8px 10px; overflow-x: auto; white-space: pre; margin-top: 8px; }
+.diff .plus { color: var(--added); }
+.diff .minus { color: var(--removed); }
+
+/* Retro */
+.retro { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; align-items: start; }
+.suggestion { display: flex; flex-direction: column; gap: 10px; padding: 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.suggestion h3 { margin: 0; font-size: 16px; color: var(--text-primary); }
+.suggestion .observed { padding-left: 12px; border-left: 3px solid var(--border); color: var(--text-secondary); }
+.suggestion .target { font: 400 12px var(--font-mono); color: var(--text-muted); }
+.choice-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.choice { border: 1px solid var(--border); background: none; border-radius: 8px; padding: 5px 12px; font-size: 13px; color: var(--text-secondary); }
+.choice:hover { border-color: var(--accent); }
+.choice.selected { background: var(--accent-strong); border-color: var(--accent-strong); color: var(--on-accent); }
+
+/* Warm-up */
+.puzzles { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.puzzle { display: flex; flex-direction: column; gap: 10px; padding: 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.puzzle .question { color: var(--text-primary); font-size: 17px; }
+.puzzle form { display: flex; gap: 8px; }
+.puzzle input { flex: 1; min-width: 0; background: var(--stage); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; color: var(--text-primary); font: 400 14px var(--font-mono); }
+.puzzle .result { font-size: 13px; min-height: 18px; color: var(--text-muted); }
+.puzzle .result.right { color: var(--added); }
+
+/* Controls: the chapter row plays one area and stops; the overall row plays through and skims quiet areas. */
+.controls { grid-column: 2; border-top: 1px solid var(--border); background: var(--stage); padding: 10px 24px calc(14px + env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px 14px; align-items: center; }
+.play-button { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 6px 14px 6px 10px; font-weight: 600; font-size: 13px; color: var(--text-primary); min-width: 132px; }
+.play-button .icon { width: 18px; text-align: center; }
+.play-button.active { background: var(--accent-strong); border-color: var(--accent-strong); color: var(--on-accent); }
+.bar { display: flex; gap: 4px; height: 14px; align-items: center; cursor: pointer; min-width: 0; }
+.segment { position: relative; height: 5px; border-radius: 3px; background: var(--border); overflow: hidden; min-width: 6px; }
+.segment.current { height: 7px; }
+.segment.quiet { background: color-mix(in srgb, var(--added) 30%, var(--border)); }
+.segment-fill { position: absolute; inset: 0; background: var(--accent); transform-origin: 0 0; transform: scaleX(0); }
+.bar:hover .segment { height: 8px; }
+.time { font: 400 12px var(--font-mono); color: var(--text-muted); min-width: 92px; text-align: right; font-variant-numeric: tabular-nums; }
+.options { grid-column: 1 / -1; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.options .spacer { flex: 1; }
+.segmented { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.segmented button { border: 0; background: none; padding: 5px 11px; font-size: 12px; color: var(--text-muted); }
+.segmented button.selected { background: var(--selection); color: var(--text-primary); }
+.option-label { font-size: 12px; color: var(--text-muted); }
+.step-button { border: 1px solid var(--border); background: none; border-radius: 8px; padding: 5px 11px; font-size: 12px; color: var(--text-secondary); }
+.step-button:disabled { opacity: 0.4; cursor: default; }
+
+@media (max-width: 860px) {
+	body { overflow: auto; }
+	#app { display: flex; flex-direction: column; height: auto; min-height: 100%; }
+	.sidebar { border-right: 0; border-bottom: 1px solid var(--border); padding: 12px 16px; gap: 10px; }
+	.chapter-list { flex-direction: row; overflow-x: auto; gap: 6px; }
+	.chapter-row { width: auto; flex: none; border: 1px solid var(--border); }
+	.note-row, .legend, .sidebar .section-heading { display: none; }
+	.header, .stage { padding-left: 16px; padding-right: 16px; }
+	.caption { margin: 0 16px 10px; }
+	.controls { position: sticky; bottom: 0; padding-left: 16px; padding-right: 16px; grid-template-columns: auto minmax(0, 1fr); }
+	.controls .time { grid-column: 1 / -1; text-align: left; }
+	.overview, .calendar { grid-template-columns: minmax(0, 1fr); }
+	.mail-row { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+	.play-button { min-width: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+	* { transition: none !important; }
+}
+</style>
+
+<div id="app">
+	<aside class="sidebar">
+		<div class="brief-title">
+			<h1>Morning brief</h1>
+			<p>Mon 12 Oct · since Fri 17:40</p>
+		</div>
+		<div>
+			<div class="section-heading">Areas</div>
+			<nav class="chapter-list" id="chapter-list"></nav>
+		</div>
+		<div class="legend">
+			<span><span class="status needs">2</span> items need you</span>
+			<span><span class="status fyi">4</span> worth knowing</span>
+			<span><span class="status quiet">quiet</span> skimmed in a few seconds</span>
+		</div>
+	</aside>
+	<section class="main">
+		<header class="header">
+			<div>
+				<div class="kicker" id="kicker"></div>
+				<h2 id="title"></h2>
+			</div>
+			<div class="spacer"></div>
+			<span class="sample-chip">Mockup · sample data</span>
+		</header>
+		<div class="stage" id="stage"></div>
+		<div class="caption" aria-live="polite"><span class="speaker">Narration</span><span id="caption-text"></span></div>
+	</section>
+	<footer class="controls">
+		<button class="play-button" id="chapter-play" type="button"></button>
+		<div class="bar" id="chapter-bar" aria-label="Beats in this area"></div>
+		<span class="time" id="chapter-time"></span>
+		<button class="play-button" id="all-play" type="button"></button>
+		<div class="bar" id="overall-bar" aria-label="All areas"></div>
+		<span class="time" id="overall-time"></span>
+		<div class="options">
+			<span class="option-label">Speed</span>
+			<div class="segmented" id="speed"></div>
+			<span class="option-label">Voice</span>
+			<div class="segmented" id="voice"></div>
+			<div class="spacer"></div>
+			<button class="step-button" id="previous" type="button">Previous</button>
+			<button class="step-button" id="next" type="button">Next</button>
+		</div>
+	</footer>
+</div>
+
+<script>
+const calendarEvents = [
+	{ id: 'standup', start: 9.5, end: 9.75, title: 'Team stand-up', place: 'Video call', lane: 0, lanes: 1, kind: 'work', people: 7, links: [['Join call', '#']], related: [], prep: [] },
+	{ id: 'review', start: 11, end: 12, title: 'Design review: Dropdown visibility', place: 'Room 2 · video call', lane: 0, lanes: 1, kind: 'work', people: 5,
+		links: [['Join call', '#'], ['Figma frame: Dropdown / states', '#']],
+		related: [['MR !215 Dropdown visibility, in review for 2 days', 'work'], ['Slack thread: ship with Thursday release?', 'slack']],
+		prep: ['No agenda in the invite yet', 'MR !215 still has one open discussion'] },
+	{ id: 'lunch', start: 12, end: 12.75, title: 'Lunch', place: 'Personal block', lane: 0, lanes: 1, kind: 'personal', people: 1, links: [], related: [], prep: [] },
+	{ id: 'one-on-one', start: 14, end: 14.5, title: '1:1 with team lead', place: 'Video call', lane: 0, lanes: 2, kind: 'conflict', people: 2, links: [['Join call', '#']], related: [], prep: ['Overlaps the vendor demo by 15 minutes'] },
+	{ id: 'vendor', start: 14.25, end: 15, title: 'Vendor demo: test reporting', place: 'Video call', lane: 1, lanes: 2, kind: 'conflict', people: 9, links: [['Join call', '#']], related: [], prep: ['Optional for you; overlaps the 1:1'] },
+	{ id: 'release', start: 16.5, end: 17, title: 'Release sync', place: 'Video call', lane: 0, lanes: 1, kind: 'work', people: 6, links: [['Join call', '#']], related: [['Thursday release scope', 'slack']], prep: [] },
+];
+const firstHour = 7, lastHour = 18, hourHeight = 52, nowHour = 7.6;
+
+const workColumns = [
+	{ name: 'Planned', cards: [
+		{ id: 'iban', repo: 'web-app', ref: 'T-101', title: 'Fire IBAN search on Enter', meta: 'Discussed and planned, no code yet', badge: ['plan only', ''], link: 'KanbanFlow' },
+	] },
+	{ id: 'progress', name: 'In progress', cards: [
+		{ id: 'orca-patch', repo: 'orca', ref: 'fork patch', title: 'Account, model and effort in automations', meta: '4 files changed, not committed', badge: ['uncommitted', 'modified'], link: 'Worktree' },
+		{ id: 'mpx-fix', repo: 'mpx', ref: 'cd31df4', title: 'Keep Claude prompts out of --add-dir', meta: 'Committed on main, not pushed', badge: ['unpushed', 'modified'], link: 'Commit' },
+	] },
+	{ name: 'In review', cards: [
+		{ id: 'mr-215', repo: 'ui-components', ref: '!215', title: 'Dropdown visibility', meta: 'Waiting 2 days · 1 open discussion', trail: 'In progress → In review', link: 'Merge request' },
+	] },
+	{ name: 'Approved', cards: [
+		{ id: 'mr-212', repo: 'ui-components', ref: '!212', title: 'Button implicit submit', meta: 'Approved Fri 16:10 · pipeline green', trail: 'In review → Approved', flag: 'Needs you: merge', link: 'Merge request' },
+	] },
+	{ name: 'Merged', cards: [
+		{ id: 'pr-231', repo: 'prejemesi', ref: '#231', title: 'Manual gift ordering', meta: 'Merged Sat 10:42', trail: 'Approved → Merged', link: 'Pull request' },
+		{ id: 'mr-209', repo: 'ui-components', ref: '!209', title: 'Sentry host error filter', meta: 'Merged Fri 18:05', trail: 'Approved → Merged', link: 'Merge request' },
+	] },
+];
+
+const retroSuggestions = [
+	{ id: 'inline-scripts', title: 'Stop retrying inline interpreters', observed: 'The Bash safety hook blocked an inline node script and a process substitution in the same session; each retry cost a turn.', proposal: 'Add one line to the global agent instructions: write a named script in the scratchpad instead of node -e or <(…).', target: 'mpx · content shared instructions', evidence: 'Session 3589dbf6' },
+	{ id: 'commit-order', title: 'Commit as you verify', observed: 'A commit session had to rebuild the order of changes from two days of transcripts before it could split commits.', proposal: 'Have /mpx-execute commit after each verified step when committing is authorised.', target: 'mpx · skills/execute', evidence: 'Session 8344155b' },
+	{ id: 'desktop-task', title: 'Retire the Desktop morning task', observed: 'The Desktop scheduled task "morning" still fires at 05:00 with a placeholder prompt and will catch up when Desktop opens.', proposal: 'Disable it; the Orca automation owns the trigger.', target: 'Local setup · no repository', evidence: 'Session 0b8660a4' },
+];
+
+const chapters = [
+	{
+		id: 'overview', name: 'Good morning', kicker: 'Monday 12 October', title: 'Three things need you today', status: 'needs', count: 3,
+		render: renderOverview,
+		beats: [
+			{ say: 'Good morning. This brief covers Friday evening until now, across personal and work projects.', note: 'Time window', targets: ['window'] },
+			{ say: 'Three things need you today: merge the approved button fix, answer Sam about the dropdown release, and prepare for the eleven o\'clock design review.', note: 'Needs you', targets: ['need-1', 'need-2', 'need-3'] },
+			{ say: 'Overnight runs and Figma were quiet, so I will pass them in a few seconds.', note: 'Quiet areas', targets: ['area-overnight', 'area-figma'] },
+		],
+	},
+	{
+		id: 'calendar', name: 'Calendar', kicker: 'Today', title: 'Six events, one to prepare for', status: 'needs', count: 1,
+		render: renderCalendar,
+		beats: [
+			{ say: 'Your first meeting is the stand-up at half past nine.', note: 'First meeting', targets: ['event-standup'] },
+			{ say: 'The design review at eleven is the one to prepare for. It covers the dropdown change that is still in review, and I linked the Figma frame.', note: 'Prepare: design review', targets: ['event-review', 'prep'], select: 'review' },
+			{ say: 'Watch out at two: the vendor demo overlaps your one-on-one.', note: 'Overlap at 14:00', targets: ['event-one-on-one', 'event-vendor'], select: 'one-on-one' },
+		],
+	},
+	{
+		id: 'work', name: 'Work in flight', kicker: 'Repositories and tickets', title: 'Six items moved since Friday', status: 'needs', count: 1,
+		render: renderWork,
+		beats: [
+			{ say: 'Six pieces of work moved since Friday, across four repositories.', note: 'Board', targets: ['board'] },
+			{ say: 'The button implicit submit merge request was approved on Friday. It only needs your merge.', note: 'Merge !212', targets: ['card-mr-212'] },
+			{ say: 'The dropdown fix has waited two days in review, which matters for today\'s design review.', note: '!215 waiting', targets: ['card-mr-215'] },
+			{ say: 'Two leftovers: the mpx fix is committed but not pushed, and the Orca automation patch is not committed yet.', note: 'Leftovers', targets: ['card-mpx-fix', 'card-orca-patch', 'leftovers'] },
+		],
+	},
+	{
+		id: 'overnight', name: 'Overnight runs', kicker: 'Automations', title: 'Nothing ran overnight', status: 'quiet',
+		render: () => renderQuiet('Nothing ran overnight', 'No AFK issues were executed and the component-of-the-day loop has no result.'),
+		beats: [{ say: 'Nothing ran overnight.', note: 'Quiet', hold: 2.2, targets: [] }],
+	},
+	{
+		id: 'slack', name: 'Slack', kicker: 'Since Friday 17:40', title: 'One thread needs your answer', status: 'needs', count: 1,
+		render: renderSlack,
+		beats: [
+			{ say: 'One Slack thread needs you: Sam asks whether the dropdown fix ships with Thursday\'s release.', note: 'Needs your answer', targets: ['message-sam'] },
+			{ say: 'For information: the office is closed on the twenty-eighth, and the AI tools channel shared a GitLab connector setup. Fourteen other messages were routine.', note: 'Worth knowing', targets: ['message-office', 'message-ai'] },
+		],
+	},
+	{
+		id: 'mail', name: 'Mail', kicker: 'Inbox', title: 'One email with a deadline', status: 'fyi', count: 2,
+		render: renderMail,
+		beats: [
+			{ say: 'Benefits enrolment closes on Friday. The rest of the mail is receipts and notifications already covered on the board.', note: 'Deadline Friday', targets: ['mail-benefits'] },
+		],
+	},
+	{
+		id: 'figma', name: 'Figma', kicker: 'Design files', title: 'No new comments or changes', status: 'quiet',
+		render: () => renderQuiet('No new Figma comments or changes', 'Watched files: YS components library, Backoffice redesign.'),
+		beats: [{ say: 'No Figma activity.', note: 'Quiet', hold: 2.2, targets: [] }],
+	},
+	{
+		id: 'notes', name: 'Notes', kicker: 'Obsidian', title: 'Three tasks left open on Friday', status: 'fyi', count: 3,
+		render: renderNotes,
+		beats: [
+			{ say: 'Three tasks from Friday\'s daily note are still open, and one new idea landed in your ideas note.', note: 'Open tasks', targets: ['open-tasks', 'ideas'] },
+			{ say: 'I answered your two quick questions. Expand them to read the answers.', note: 'Quick questions', targets: ['questions'] },
+		],
+	},
+	{
+		id: 'retro', name: 'Retro', kicker: 'Yesterday\'s sessions', title: 'Three improvements to decide', status: 'needs', count: 3,
+		render: renderRetro,
+		beats: [
+			{ say: 'From yesterday\'s sessions, three improvements. First, the safety hook blocked inline scripts twice; one line in the global instructions would prevent that.', note: 'Inline scripts', targets: ['retro-inline-scripts'] },
+			{ say: 'Second, committing went slowly because the change order had to be rebuilt from transcripts.', note: 'Commit as you verify', targets: ['retro-commit-order'] },
+			{ say: 'Third, the old Desktop morning task should be disabled. Accept, defer or dismiss each one; the next session applies what you accept.', note: 'Desktop task', targets: ['retro-desktop-task'] },
+		],
+	},
+	{
+		id: 'instructions', name: 'Instructions', kicker: 'Agent instructions and decisions', title: 'Three instruction changes', status: 'fyi', count: 3,
+		render: renderInstructions,
+		beats: [
+			{ say: 'Three instruction changes landed. The new rule that plans live in their owning repository is the one that changes how agents behave.', note: 'Changes', targets: ['instruction-plans'] },
+		],
+	},
+	{
+		id: 'warm-up', name: 'Warm-up', kicker: 'Before you start', title: 'Three quick puzzles', status: 'fyi', count: 3,
+		render: renderWarmUp,
+		beats: [
+			{ say: 'Finally, three warm-up puzzles. Pause me and try them before you start.', note: 'Puzzles', targets: [] },
+		],
+	},
+];
+
+function renderOverview() {
+	const needs = [
+		['Merge !212 Button implicit submit', 'Approved Friday · Work in flight', 'work'],
+		['Answer Sam about the dropdown release', '#team-ui thread · Slack', 'slack'],
+		['Prepare the 11:00 design review', 'No agenda yet · Calendar', 'calendar'],
+	];
+	const areas = chapters.slice(1).map((chapter) => `
+		<button class="area ${chapter.status === 'quiet' ? 'quiet' : ''}" type="button" data-goto="${chapter.id}" data-target="area-${chapter.id}">
+			<span class="area-name">${chapter.name}</span>
+			<span class="area-fact">${chapter.status === 'quiet' ? 'Quiet' : chapter.title}</span>
+		</button>`).join('');
+	return `
+		<div class="overview">
+			<div>
+				<p class="window-line" data-target="window">Fri 9 Oct 17:40 → Mon 12 Oct 07:35 · 5 repositories · 3 connectors</p>
+				<div class="group-label">Needs you</div>
+				<ol class="need-list">
+					${needs.map(([what, where, chapter], index) => `
+						<li class="need" data-target="need-${index + 1}">
+							<span class="index">${index + 1}</span>
+							<span><span class="what">${what}</span><br><span class="where">${where}</span></span>
+							<button class="jump" type="button" data-goto="${chapter}">Open</button>
+						</li>`).join('')}
+				</ol>
+			</div>
+			<div>
+				<div class="group-label">All areas</div>
+				<div class="area-grid">${areas}</div>
+			</div>
+		</div>`;
+}
+
+let selectedEvent = 'review';
+function renderCalendar() {
+	const hours = [];
+	for (let hour = firstHour; hour <= lastHour; hour++) hours.push(`<div class="hour">${String(hour).padStart(2, '0')}:00</div>`);
+	const lines = hours.map((_, index) => `<div class="line" style="top:${index * hourHeight}px"></div>`).join('');
+	const events = calendarEvents.map((event) => {
+		const top = (event.start - firstHour) * hourHeight;
+		const height = Math.max((event.end - event.start) * hourHeight - 3, 22);
+		const width = 100 / event.lanes;
+		const time = `${formatHour(event.start)}–${formatHour(event.end)}`;
+		const kindClass = event.kind === 'work' ? '' : event.kind;
+		return `<button class="event ${kindClass} ${event.id === selectedEvent ? 'selected' : ''}" type="button" data-event="${event.id}" data-target="event-${event.id}"
+			style="top:${top}px;height:${height}px;left:calc(${event.lane * width}% + 6px);width:calc(${width}% - 12px)">
+			<span class="event-title">${event.title}</span><span class="event-time">${time}</span></button>`;
+	}).join('');
+	return `
+		<div class="calendar">
+			<div class="day">
+				<div class="hours">${hours.join('')}</div>
+				<div class="track" style="height:${(lastHour - firstHour) * hourHeight}px">
+					${lines}${events}
+					<div class="now" style="top:${(nowHour - firstHour) * hourHeight}px"><span>now 07:35</span></div>
+				</div>
+			</div>
+			<div class="panel prep" data-target="prep" id="prep">${renderPrep()}</div>
+		</div>`;
+}
+function renderPrep() {
+	const event = calendarEvents.find((candidate) => candidate.id === selectedEvent);
+	return `
+		<div class="group-label">Selected event</div>
+		<h3>${event.title}</h3>
+		<div class="meta">${formatHour(event.start)}–${formatHour(event.end)} · ${event.place} · ${event.people} people</div>
+		${event.prep.map((line) => `<div class="warning-line">${line}</div>`).join('')}
+		${event.links.length ? `<div><div class="group-label">Links</div><ul>${event.links.map(([label, url]) => `<li><a href="${url}">${label} ↗</a></li>`).join('')}</ul></div>` : ''}
+		${event.related.length ? `<div><div class="group-label">Related in this brief</div><ul>${event.related.map(([label, chapter]) => `<li><a href="#" data-goto="${chapter}">${label}</a></li>`).join('')}</ul></div>` : ''}
+		<div class="meta">Click any event to see its details.</div>`;
+}
+function formatHour(value) {
+	const hours = Math.floor(value);
+	const minutes = Math.round((value - hours) * 60);
+	return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+function renderWork() {
+	const columns = workColumns.map((column) => `
+		<div class="column">
+			<div class="column-head"><span>${column.name}</span><span class="mono">${column.cards.length}</span></div>
+			${column.cards.map((card) => `
+				<a class="work-card" href="#" data-target="card-${card.id}" style="font-weight:400;text-decoration:none">
+					<span class="top"><span class="repo">${card.repo}</span><span class="badge accent mono">${card.ref}</span>${card.badge ? `<span class="badge ${card.badge[1]}">${card.badge[0]}</span>` : ''}</span>
+					<span class="work-title">${card.title}</span>
+					<span class="work-meta">${card.meta}</span>
+					${card.trail ? `<span class="trail">${card.trail}</span>` : ''}
+					${card.flag ? `<span class="flag">${card.flag}</span>` : ''}
+				</a>`).join('')}
+		</div>`).join('');
+	return `
+		<div class="board-wrap"><div class="board" data-target="board">${columns}</div></div>
+		<div class="group-label" style="margin-top:18px">Leftovers to clean</div>
+		<div class="leftovers" data-target="leftovers">
+			<div class="leftover"><strong>mpx main is 1 commit ahead of origin</strong><span class="command">git -C C:/_MP_projects/mpx push</span></div>
+			<div class="leftover"><strong>orca worktree has uncommitted changes</strong><span class="command">automation-profiles · 4 files</span></div>
+			<div class="leftover"><strong>Storybook still listening on port 6006</strong><span class="command">started Fri 15:12 by a worktree session</span></div>
+		</div>`;
+}
+
+function renderQuiet(heading, detail) {
+	return `
+		<div class="quiet-slide">
+			<div class="quiet-mark" aria-hidden="true">✓</div>
+			<h3>${heading}</h3>
+			<p>${detail}</p>
+			<div class="skip-meter" aria-hidden="true"><div id="skip-fill"></div></div>
+			<p class="mono" style="font-size:12px">Quiet areas get one sentence and move on.</p>
+		</div>`;
+}
+
+function renderSlack() {
+	const message = (target, initials, color, name, when, channel, body, footer) => `
+		<div class="message" data-target="${target}">
+			<div class="avatar" style="background:var(${color})">${initials}</div>
+			<div style="min-width:0">
+				<div class="who"><span class="name">${name}</span><span class="when">${when}</span><span class="channel">${channel}</span></div>
+				<div class="body">${body}</div>
+				<div class="footer">${footer}<a href="#">Open in Slack ↗</a></div>
+			</div>
+		</div>`;
+	return `
+		<div class="chat">
+			<div class="chat-group">
+				<div class="group-label">Needs your answer</div>
+				${message('message-sam', 'SK', '--avatar-1', 'Sam K.', 'Fri 16:52', '#team-ui',
+					'<span class="mention">@you</span> can we ship the dropdown fix with Thursday\'s release, or should it wait for the design review?',
+					'<span class="thread">2 replies</span><span class="reaction">👀 1</span>')}
+			</div>
+			<div class="chat-group">
+				<div class="group-label">Worth knowing</div>
+				${message('message-office', 'OF', '--avatar-2', 'Office team', 'Fri 18:20', '#announcements',
+					'The office is closed on Wednesday 28 October. Please plan releases around it.', '<span class="reaction">👍 23</span>')}
+				${message('message-ai', 'CV', '--avatar-3', 'Casey V.', 'Sun 20:05', '#ai-tools',
+					'Shared our GitLab connector setup for Claude, including the read-only token scopes. Feedback welcome.', '<span class="thread">5 replies</span>')}
+				<div class="skipped">14 routine messages skipped: bots, emoji reactions, resolved threads.</div>
+			</div>
+		</div>`;
+}
+
+function renderMail() {
+	return `
+		<div class="mail">
+			<div class="mail-row" data-target="mail-benefits">
+				<span class="from">People team</span>
+				<span><span class="subject">Benefits enrolment closes Friday</span> <span class="snippet">· Choose your 2027 options in the HR portal before 16 October.</span></span>
+				<span class="badge modified">Due Fri</span>
+			</div>
+			<div class="mail-row dim">
+				<span class="from">JetBrains</span>
+				<span><span class="subject">Your invoice</span> <span class="snippet">· Receipt, no action.</span></span>
+				<span class="badge">Receipt</span>
+			</div>
+			<div class="mail-row dim">
+				<span class="from">GitLab</span>
+				<span><span class="subject">!212 was approved</span> <span class="snippet">· Already on the board.</span></span>
+				<a href="#" data-goto="work">See board</a>
+			</div>
+		</div>`;
+}
+
+function renderNotes() {
+	return `
+		<div class="columns-3">
+			<div data-target="open-tasks">
+				<div class="group-label">Left open on Fri 9 Oct</div>
+				<ul class="task-list">
+					<li class="task"><span class="box"></span><span>Orca: a switch to stop prioritising personal sessions at work<small>Daily/2026-10-09 · #orca</small></span></li>
+					<li class="task"><span class="box"></span><span>New AI dump project in Orca for short questions<small>Daily/2026-10-09 · #AI</small></span></li>
+					<li class="task"><span class="box partial"></span><span>Improve the issue-create skill<small>In progress · personal and ui-components</small></span></li>
+				</ul>
+			</div>
+			<div data-target="ideas">
+				<div class="group-label">New in Ideas</div>
+				<ul class="task-list">
+					<li class="task"><span class="box"></span><span>Morning brief as a narrated slideshow, one slide per area<small>Ideas.md · added Fri</small></span></li>
+				</ul>
+			</div>
+			<div data-target="questions">
+				<div class="group-label">Quick questions answered</div>
+				<details class="fold"><summary>Does ENABLE_TOOL_SEARCH=auto:1 defer connector tools?</summary>
+					<div class="fold-body">Only once all deferred tool definitions together pass 1% of the context window. Below that they load up front. <a href="#">MCP docs ↗</a></div></details>
+				<details class="fold"><summary>Can a Desktop scheduled task use the mpx skills?</summary>
+					<div class="fold-body">No. Desktop sessions start without the mpx skill packs, so the brief runs through the CLI launcher instead. <a href="#">Scheduled tasks docs ↗</a></div></details>
+			</div>
+		</div>`;
+}
+
+let retroChoices = {};
+try { retroChoices = JSON.parse(localStorage.getItem('morning-brief-retro') || '{}'); } catch { retroChoices = {}; }
+function renderRetro() {
+	return `<div class="retro">${retroSuggestions.map((suggestion) => `
+		<article class="suggestion" data-target="retro-${suggestion.id}">
+			<h3>${suggestion.title}</h3>
+			<div class="observed">${suggestion.observed}</div>
+			<div><strong style="color:var(--text-primary)">Proposal:</strong> ${suggestion.proposal}</div>
+			<div class="target">${suggestion.target} · <a href="#">${suggestion.evidence} ↗</a></div>
+			<div class="choice-row">
+				${['Accept', 'Later', 'Dismiss'].map((choice) => `<button class="choice ${retroChoices[suggestion.id] === choice ? 'selected' : ''}" type="button" data-retro="${suggestion.id}" data-choice="${choice}">${choice}</button>`).join('')}
+			</div>
+		</article>`).join('')}</div>
+		<p class="skipped" style="margin-top:14px">In the real brief these choices are saved with the page, and the next session applies what you accepted.</p>`;
+}
+
+function renderInstructions() {
+	return `
+		<div style="max-width:980px">
+			<details class="fold" data-target="instruction-plans" open><summary>Global AGENTS.md · plans live in the owning repository</summary>
+				<div class="fold-body">mpx <span class="mono">5d00ab0</span> · changes where agents write plans and reports.
+					<div class="diff"><span class="minus">- Plans and reports go to MPX_AI_DUMP.</span>
+<span class="plus">+ Project-specific plans, research, reports and demo specs belong in the owning</span>
+<span class="plus">+ repository (docs/plans when no layout exists).</span></div></div></details>
+			<details class="fold"><summary>Skill narrated-walkthrough 0.3 · media captures, rejected options, reproduce card</summary>
+				<div class="fold-body">mpx <span class="mono">22d85fb</span> · new card types the brief can reuse.</div></details>
+			<details class="fold"><summary>Orca AGENTS.md · Fork Patches entry for profile-aware automations</summary>
+				<div class="fold-body">Not committed yet · lands with the automation patch.</div></details>
+		</div>`;
+}
+
+function renderWarmUp() {
+	const puzzles = [
+		['17 × 24 = ?', '408'],
+		['2, 6, 12, 20, 30, … what comes next?', '42'],
+		['A bat and a ball cost 1.10 together. The bat costs 1.00 more than the ball. What does the ball cost?', '0.05'],
+	];
+	return `<div class="puzzles">${puzzles.map(([question, answer], index) => `
+		<form class="puzzle" data-answer="${answer}">
+			<div class="group-label">Puzzle ${index + 1}</div>
+			<div class="question">${question}</div>
+			<div style="display:flex;gap:8px">
+				<label class="option-label" for="puzzle-${index}" hidden>Answer</label>
+				<input id="puzzle-${index}" autocomplete="off" placeholder="Your answer">
+				<button class="choice" type="submit">Check</button>
+				<button class="choice" type="button" data-reveal>Reveal</button>
+			</div>
+			<div class="result"></div>
+		</form>`).join('')}</div>`;
+}
+
+/* Player: chapters hold beats; a beat lasts its estimated speech time, or its hold for quiet areas. */
+const SPEEDS = { slow: { label: 'Slow', rate: 0.85 }, normal: { label: 'Normal', rate: 1 }, fast: { label: 'Fast', rate: 1.3 } };
+const state = { chapter: 0, beat: 0, elapsed: 0, playing: false, mode: 'all', speed: 'normal', voice: false, finished: false, speaking: false };
+const voiceAvailable = 'speechSynthesis' in window;
+const byId = (id) => document.getElementById(id);
+const stage = byId('stage');
+
+const beatSeconds = (beat) => (beat.hold ?? beat.say.split(/\s+/).length / 2.6 + 0.9) / SPEEDS[state.speed].rate;
+const chapterSeconds = (chapter) => chapter.beats.reduce((total, beat) => total + beatSeconds(beat), 0);
+const currentChapter = () => chapters[state.chapter];
+const currentBeat = () => currentChapter().beats[state.beat];
+const formatTime = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
+
+function setChapter(index, beatIndex = 0) {
+	state.chapter = index;
+	state.finished = false;
+	const chapter = currentChapter();
+	byId('kicker').textContent = chapter.kicker;
+	byId('title').textContent = chapter.title;
+	stage.innerHTML = chapter.render();
+	stage.scrollTop = 0;
+	buildBars();
+	setBeat(beatIndex);
+}
+
+function setBeat(index) {
+	state.beat = index;
+	state.elapsed = 0;
+	const beat = currentBeat();
+	if (beat.select && beat.select !== selectedEvent) {
+		selectedEvent = beat.select;
+		stage.innerHTML = currentChapter().render();
+	}
+	stage.querySelectorAll('.highlighted').forEach((element) => element.classList.remove('highlighted'));
+	for (const target of beat.targets) stage.querySelectorAll(`[data-target="${target}"]`).forEach((element) => element.classList.add('highlighted'));
+	stage.classList.toggle('highlighting', beat.targets.length > 0);
+	byId('caption-text').textContent = beat.say;
+	renderSidebar();
+	renderButtons();
+	speak();
+}
+
+function speak() {
+	if (!voiceAvailable) return;
+	window.speechSynthesis.cancel();
+	state.speaking = false;
+	if (!state.voice || !state.playing) return;
+	const utterance = new SpeechSynthesisUtterance(currentBeat().say);
+	utterance.rate = SPEEDS[state.speed].rate;
+	const voices = window.speechSynthesis.getVoices().filter((voice) => voice.lang.startsWith('en'));
+	utterance.voice = voices.find((voice) => /natural|online/i.test(voice.name)) ?? voices[0] ?? null;
+	utterance.onend = utterance.onerror = () => { state.speaking = false; };
+	state.speaking = true;
+	window.speechSynthesis.speak(utterance);
+}
+
+function advance() {
+	const chapter = currentChapter();
+	if (state.beat < chapter.beats.length - 1) return setBeat(state.beat + 1);
+	if (state.mode === 'all' && state.chapter < chapters.length - 1) return setChapter(state.chapter + 1);
+	state.playing = false;
+	state.finished = true;
+	state.elapsed = beatSeconds(currentBeat());
+	renderButtons();
+}
+
+function play(mode) {
+	if (state.playing && state.mode === mode) return pause();
+	state.mode = mode;
+	if (state.finished) {
+		if (mode === 'all' && state.chapter === chapters.length - 1) setChapter(0);
+		else if (mode === 'chapter') setChapter(state.chapter);
+		else setChapter(state.chapter + 1);
+	}
+	state.playing = true;
+	speak();
+	renderButtons();
+}
+
+function pause() {
+	state.playing = false;
+	if (voiceAvailable) window.speechSynthesis.cancel();
+	state.speaking = false;
+	renderButtons();
+}
+
+function step(direction) {
+	const chapter = currentChapter();
+	const next = state.beat + direction;
+	if (next >= 0 && next < chapter.beats.length) return setBeat(next);
+	const nextChapter = state.chapter + direction;
+	if (nextChapter < 0 || nextChapter >= chapters.length) return;
+	setChapter(nextChapter, direction < 0 ? chapters[nextChapter].beats.length - 1 : 0);
+}
+
+let lastFrame = 0;
+function frame(now) {
+	const delta = lastFrame ? (now - lastFrame) / 1000 : 0;
+	lastFrame = now;
+	if (state.playing) {
+		const duration = beatSeconds(currentBeat());
+		state.elapsed += delta;
+		if (state.speaking) state.elapsed = Math.min(state.elapsed, duration * 0.97);
+		else if (state.elapsed >= duration) advance();
+	}
+	paintProgress();
+	requestAnimationFrame(frame);
+}
+
+function buildBars() {
+	const chapter = currentChapter();
+	byId('chapter-bar').replaceChildren(...chapter.beats.map((beat, index) => {
+		const segment = document.createElement('div');
+		segment.className = 'segment';
+		segment.style.flex = `${beatSeconds(beat)} 1 0`;
+		segment.title = beat.note;
+		segment.innerHTML = '<div class="segment-fill"></div>';
+		segment.addEventListener('click', () => setBeat(index));
+		return segment;
+	}));
+	byId('overall-bar').replaceChildren(...chapters.map((candidate, index) => {
+		const segment = document.createElement('div');
+		segment.className = `segment ${candidate.status === 'quiet' ? 'quiet' : ''}`;
+		segment.style.flex = `${chapterSeconds(candidate)} 1 0`;
+		segment.title = candidate.name;
+		segment.innerHTML = '<div class="segment-fill"></div>';
+		segment.addEventListener('click', () => setChapter(index));
+		return segment;
+	}));
+}
+
+function paintProgress() {
+	const chapter = currentChapter();
+	const beatDuration = beatSeconds(currentBeat());
+	const beatFraction = Math.min(1, state.elapsed / beatDuration);
+	byId('chapter-bar').querySelectorAll('.segment').forEach((segment, index) => {
+		segment.classList.toggle('current', index === state.beat);
+		const fill = index < state.beat ? 1 : index === state.beat ? beatFraction : 0;
+		segment.firstChild.style.transform = `scaleX(${fill})`;
+	});
+	const chapterElapsed = chapter.beats.slice(0, state.beat).reduce((total, beat) => total + beatSeconds(beat), 0) + Math.min(state.elapsed, beatDuration);
+	const chapterTotal = chapterSeconds(chapter);
+	byId('overall-bar').querySelectorAll('.segment').forEach((segment, index) => {
+		segment.classList.toggle('current', index === state.chapter);
+		const fill = index < state.chapter ? 1 : index === state.chapter ? chapterElapsed / chapterTotal : 0;
+		segment.firstChild.style.transform = `scaleX(${fill})`;
+	});
+	const before = chapters.slice(0, state.chapter).reduce((total, candidate) => total + chapterSeconds(candidate), 0);
+	const total = chapters.reduce((sum, candidate) => sum + chapterSeconds(candidate), 0);
+	byId('chapter-time').textContent = `${formatTime(chapterElapsed)} / ${formatTime(chapterTotal)}`;
+	byId('overall-time').textContent = `${formatTime(before + chapterElapsed)} / ${formatTime(total)}`;
+	const skip = byId('skip-fill');
+	if (skip) skip.style.transform = `scaleX(${chapterElapsed / chapterTotal})`;
+}
+
+function renderButtons() {
+	const chapterPlaying = state.playing && state.mode === 'chapter';
+	const allPlaying = state.playing && state.mode === 'all';
+	byId('chapter-play').className = `play-button ${chapterPlaying ? 'active' : ''}`;
+	byId('chapter-play').innerHTML = `<span class="icon">${chapterPlaying ? '❚❚' : '▶'}</span>${chapterPlaying ? 'Pause' : 'This area'}`;
+	byId('all-play').className = `play-button ${allPlaying ? 'active' : ''}`;
+	byId('all-play').innerHTML = `<span class="icon">${allPlaying ? '❚❚' : '▶'}</span>${allPlaying ? 'Pause' : 'Play brief'}`;
+	byId('previous').disabled = state.chapter === 0 && state.beat === 0;
+	byId('next').disabled = state.chapter === chapters.length - 1 && state.beat === currentChapter().beats.length - 1;
+}
+
+function renderSidebar() {
+	const list = byId('chapter-list');
+	list.replaceChildren();
+	chapters.forEach((chapter, index) => {
+		const row = document.createElement('button');
+		row.type = 'button';
+		row.className = `chapter-row ${index === state.chapter ? 'current' : ''} ${chapter.status === 'quiet' ? 'quiet' : ''}`;
+		const status = chapter.status === 'quiet' ? '<span class="status quiet">quiet</span>' : `<span class="status ${chapter.status}">${chapter.count}</span>`;
+		row.innerHTML = `<span class="number">${index + 1}</span><span class="name">${chapter.name}</span>${status}`;
+		row.addEventListener('click', () => setChapter(index));
+		list.append(row);
+		if (index !== state.chapter || chapter.status === 'quiet') return;
+		chapter.beats.forEach((beat, beatIndex) => {
+			const note = document.createElement('button');
+			note.type = 'button';
+			note.className = `note-row ${beatIndex === state.beat ? 'current' : beatIndex < state.beat ? 'done' : ''}`;
+			note.textContent = beat.note;
+			note.addEventListener('click', () => setBeat(beatIndex));
+			list.append(note);
+		});
+	});
+}
+
+function renderOptions() {
+	byId('speed').replaceChildren(...Object.entries(SPEEDS).map(([key, { label }]) => {
+		const button = document.createElement('button');
+		button.type = 'button';
+		button.textContent = label;
+		button.className = key === state.speed ? 'selected' : '';
+		button.addEventListener('click', () => { state.speed = key; buildBars(); renderOptions(); speak(); });
+		return button;
+	}));
+	byId('voice').replaceChildren(...[['Captions', false], ['Browser voice', true]].map(([label, value]) => {
+		const button = document.createElement('button');
+		button.type = 'button';
+		button.textContent = label;
+		button.disabled = value && !voiceAvailable;
+		button.className = state.voice === value ? 'selected' : '';
+		button.addEventListener('click', () => { state.voice = value; renderOptions(); speak(); });
+		return button;
+	}));
+}
+
+stage.addEventListener('click', (event) => {
+	const goto = event.target.closest('[data-goto]');
+	if (goto) {
+		event.preventDefault();
+		return setChapter(chapters.findIndex((chapter) => chapter.id === goto.dataset.goto));
+	}
+	const calendarEvent = event.target.closest('[data-event]');
+	if (calendarEvent) {
+		selectedEvent = calendarEvent.dataset.event;
+		stage.querySelectorAll('.event').forEach((element) => element.classList.toggle('selected', element.dataset.event === selectedEvent));
+		byId('prep').innerHTML = renderPrep();
+		return;
+	}
+	const retro = event.target.closest('[data-retro]');
+	if (retro) {
+		retroChoices[retro.dataset.retro] = retro.dataset.choice;
+		try { localStorage.setItem('morning-brief-retro', JSON.stringify(retroChoices)); } catch {}
+		retro.parentElement.querySelectorAll('.choice').forEach((button) => button.classList.toggle('selected', button === retro));
+		return;
+	}
+	const reveal = event.target.closest('[data-reveal]');
+	if (reveal) {
+		const form = reveal.closest('form');
+		form.querySelector('.result').textContent = `Answer: ${form.dataset.answer}`;
+		return;
+	}
+	if (event.target.closest('a[href="#"]')) event.preventDefault();
+});
+stage.addEventListener('submit', (event) => {
+	event.preventDefault();
+	const form = event.target;
+	const given = form.querySelector('input').value.trim().replace(',', '.');
+	const result = form.querySelector('.result');
+	const right = Number(given) === Number(form.dataset.answer);
+	result.className = `result ${right ? 'right' : ''}`;
+	result.textContent = right ? 'Correct.' : 'Not quite. Try again or reveal.';
+});
+
+byId('chapter-play').addEventListener('click', () => play('chapter'));
+byId('all-play').addEventListener('click', () => play('all'));
+byId('previous').addEventListener('click', () => step(-1));
+byId('next').addEventListener('click', () => step(1));
+document.addEventListener('keydown', (event) => {
+	if (event.target.closest('input, textarea')) return;
+	if (event.key === ' ') { event.preventDefault(); play('all'); }
+	if (event.key === 'ArrowRight') step(1);
+	if (event.key === 'ArrowLeft') step(-1);
+});
+
+renderOptions();
+setChapter(0);
+renderButtons();
+requestAnimationFrame(frame);
+</script>

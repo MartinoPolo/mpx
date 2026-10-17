@@ -1,0 +1,146 @@
+---
+name: morning-brief
+description:
+  'Builds the daily morning brief: an interactive narrated page covering calendar, overnight runs,
+  work in flight, Slack, mail, Obsidian triage, session retro, instruction changes and AI news since
+  the last brief, ending with action points whose choices are saved for a separate apply session'
+argument-hint: '[--no-state] [--rebuild]'
+triggers:
+  morning brief; morning summary; daily brief
+metadata:
+  author: MartinoPolo
+  version: '0.1'
+  category: utility
+  mpx:
+    schemaVersion: 1
+    skillPacks: [development]
+    defaultExposure: explicit-only
+---
+
+# Morning brief
+
+Build one page that tells me, in a few minutes, what happened since the last brief and what needs
+me today. Everything here is read-only: never post, reply, react, label, move tickets, merge, push or
+edit notes. My choices are collected on the page and applied later by a separate session.
+
+`--no-state` builds without recording the brief as the last one (test runs). `--rebuild` only
+re-renders an existing `brief.json`.
+
+## Requirements
+
+Launched through `ccw` (or `cc`) so `MPX_ACTIVE_CONTENT_ROOT` is set; `MPX_AI_DUMP` absolute; `node`,
+`bash` and `git` on PATH. Optional: `gh`, `glab`, `kf`, `orca`. A missing optional tool makes only
+its part unavailable.
+
+## Run
+
+Keep the turn open until the page is built: an Orca automation run closes its terminal, and every
+process in it, as soon as the agent stops. Wait for background commands with a bounded foreground
+wait, never by ending the turn.
+
+1. `node "<skill-dir>/scripts/start.mjs"` prints `date`, `dayDirectory`, `since` and `until`. All
+   files of this run go into `dayDirectory`; source files go into its `sources/`.
+2. Start these together, the first in the background:
+   - `node "<skill-dir>/scripts/gather.mjs" <dayDirectory> --since <since> --until <until>` runs
+     one headless connector session per account ([personal](gatherers/personal.md): Gmail and
+     Calendar; [work](gatherers/work.md): Slack, Gmail, and Calendar once connected) and writes
+     `sources/personal.json` and `sources/work.json`, each `ok` with `data` or `unavailable` with
+     `reason`. `--only personal|work` reruns one.
+   - `node "<skill-dir>/scripts/repos.mjs" --since <since> --out <dayDirectory>/sources/repos.json`
+   - `node "<skill-dir>/scripts/sessions.mjs" --since <since> --out <dayDirectory>/sources/sessions.json`
+3. Launch one subagent per area below in parallel. Give each the window, the day folder, its input
+   files, the read-only rule, and a ten-minute budget; each writes `sources/<area>.json` and returns
+   one line. Bound every command with a timeout. A failed area becomes an `unavailable` chapter.
+   If subagents run in the background, wait in the foreground until every expected
+   `sources/<area>.json` exists or the budget ends.
+4. When all are back, write `<dayDirectory>/brief.json` (shape below).
+5. `node "<skill-dir>/scripts/narrate.mjs" <dayDirectory>` voices every beat with ElevenLabs into
+   `audio/` and records `audio` and `audioSeconds` on each beat; unchanged sentences reuse their
+   clips. Exit code 2 without `ELEVENLABS_API_KEY` or on a failed clip: continue, the page falls back
+   to the browser voice. Only the `say` sentences leave the machine.
+6. `node "<skill-dir>/scripts/build.mjs" <dayDirectory> --commit-state` (omit the flag for
+   `--no-state`) validates the brief and renders `index.html`. Open the page in a browser and step
+   through every beat before delivering: nothing overlaps, every highlight lands on what is said.
+
+## Areas
+
+- **Work in flight** (`repos.json`, `work.json` alerts). Split work and personal; every MR, PR,
+  change and local branch with activity in the window or open items becomes a Kanban card whose
+  `state` places it in a column (local, draft, in review, ready, merged). Resolve providers per
+  [provider routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md): open and recently changed
+  MRs/PRs/Gerrit changes with review and pipeline state, KanbanFlow tickets and whether their
+  column matches their MR state, Orca worktrees, uncommitted or unpushed work. Approved and green
+  MRs get the flag "ready to merge". Unaddressed failed pipelines and Sentry alerts from mail attach
+  to their project. Long-untouched dirty checkouts collapse into one leftovers line, not cards.
+- **Overnight runs**: work that kept running while I was away: from my last prompt of the evening to
+  my first of the morning (`sessions.json` `away`). Sessions with `activeWhileAway` (long
+  implementations, renders, AFK executions) and Orca automation runs that did work in that gap; read
+  their final reports for results. One terse line each: outcome, what finished, start time,
+  duration, link to the result. Routines are not reported: skipped or scheduled runs that did
+  nothing, and the brief's own runs.
+- **Obsidian triage**: daily notes in `$MPX_OBSIDIAN_VAULT/Daily/` from the window and today, and
+  changes to `Ideas.md`. Unchecked dump bullets and tasks not yet under a capture heading become
+  items with a proposed project, heading and priority per `_Tooling/TaskGenius/task-system.md` and
+  the project registry. Link each to its note with `obsidian://open?vault=<vault>&file=<path>`.
+- **Retro** (`sessions.json`): problems in sessions of both accounts and harnesses: tool errors,
+  hook blocks, my corrections, repeated attempts at one step. At most five, ranked by cost, each with
+  the transcript lines that show it, a concrete fix, the file it belongs in, and a prompt for a
+  session that would apply the fix.
+- **Instructions**: commits in the window touching agent instructions, rules, skills and decision
+  records (`AGENTS.md`, `CLAUDE.md`, `DECISIONS.md`, mpx `content/`), global first. Per change: one
+  line on what changes for agents, your opinion in one sentence with a verdict (final, watch, needs
+  attention), and whether it is committed, pushed and, for mpx, built into `dist/`.
+- **AI news**: at most three items newer than the window, from different vendors: Claude Code,
+  Codex and Gemini releases, Anthropic, OpenAI and Google announcements, Hacker News front-page AI
+  stories. Read `$MPX_AI_DUMP/morning-brief/taste.md` when present and follow its preferences.
+
+Calendar, Slack and mail come from the gatherers; the main session shapes them into chapters.
+The calendar shows one column per day: earlier days the window covers (greyed as history), today,
+and all of tomorrow; a day without events gets no column, only a clause in the narration. Events are
+coloured by calendar and busy-only work blocks stay untitled. Slack leads with what still waits on
+me, then what is worth knowing, then one sentence on what I already handled; handled messages stay
+listed but are not narrated one by one. A problem someone else is handling names them
+(`handledBy`). Mail lists only what needs action; notifications collapse into one count line, and alerts
+go to work in flight.
+
+## brief.json
+
+[brief.sample.json](templates/brief.sample.json) shows every chapter type; the page template is the
+authoritative reader and `build.mjs` validates it. Top level: `date`, `dayDirectory`, `now`,
+`window` (`since`, `until`, `label`), `sources` (`name`, `status`, `reason`, and `chapters` the
+problem affects), `chapters`. Each chapter has `id`, `type`, `name`, `title`, `status` (`needs`,
+`fyi`, `quiet`, `unavailable`), `count`, `beats`, and `data` for its type; quiet and unavailable
+chapters carry `detail` instead. Calendar days use ISO dates as `id`; give each calendar a distinct
+Google colour, list only calendars with events, and prefer a titled event over its busy-only copy.
+
+Order: calendar, overnight, work, slack, mail, triage, retro, instructions, news, actions. Chapters
+report; what needs me is asked once, at the end: each action point has a `detail` with why and where
+it came from, a link, and its own beat that says both (for example, which email warned about an
+expiring token).
+
+## Narration
+
+Each beat is one spoken sentence (`say`), a sidebar `note` label of at most four words, and
+`targets` naming the elements it lights. Target ids: run and action ids as written;
+`event-<id>`, `day-<day id>`, `card-<id>`, `column-<board column>`, `auto-<id>`, `message-<id>`,
+`slack-addressed`, `mail-<id>`, `task-<id>`, `retro-<id>`, `retro-sessions`, `change-<id>`,
+`news-<id>`. `select` opens a calendar event's popover and `scope` switches work and personal.
+Quiet chapters get one silent beat with `hold` of about two seconds.
+
+- The highlight shows what is being said: each beat targets exactly the items its sentence names,
+  and a new subject starts a new beat with its own targets, never under the previous highlight.
+- Numbers and names, no filler; the asks wait for the action points. The whole brief stays under
+  five minutes.
+- The page carries no more text than the narration covers: names, refs and short status words;
+  detail sits behind links.
+- Write for the ear: no paths, symbols or URLs in `say`.
+- Sound like a colleague, not a press release: plain words, short sentences, an opinion where it
+  helps; no puffery ("pivotal", "seamless"), no "Additionally", no em dashes. Titles in sentence case.
+- Every MR, ticket, message, event, run and file on the page is a link; status words stay short.
+
+## Deliver
+
+Report the `file:///` link to `index.html` first, then sources that were unavailable and why, the
+gatherer cost, narrated characters, and action point count. The page is local. Publish it as an artifact only when asked,
+from the work account; before sharing beyond me, ask whether personal mail and calendar items stay.
+End with the [result line]({{MPX_SHARED_INSTRUCTIONS}}/RESULT_LINE.md) linking the page.

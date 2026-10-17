@@ -1,0 +1,1235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Morning brief</title>
+<style>
+/* Morning brief tokens, derived from prejemesi "Sky Notebook" (C:/_MP_projects/prejemesi/src/app.css). */
+@import url('https://fonts.googleapis.com/css2?family=DynaPuff:wght@400..700&family=Geist:wght@400..700&family=Geist+Mono:wght@400..600&display=swap');
+
+:root {
+	color-scheme: light;
+	--brand: #1e9be9;
+	--brand-deep: #1265a8;
+	--brand-bright: #55b9f3;
+	--ink: #16385c;
+	--ink-soft: color-mix(in srgb, var(--ink) 70%, white);
+	--paper: #ffffff;
+	--desk: color-mix(in srgb, var(--brand) 10%, white);
+	--sticky: #ffc93c;
+	--on-sticky: #16385c;
+	--fail: #e4574c;
+	--done: #14a56f;
+	--warn: #efa00b;
+
+	/* State fills: information lives in backgrounds; text on them stays ink. */
+	--fill-ready: color-mix(in srgb, var(--done) 22%, white);
+	--fill-review: color-mix(in srgb, var(--brand) 18%, white);
+	--fill-draft: color-mix(in srgb, var(--ink) 8%, white);
+	--fill-failing: color-mix(in srgb, var(--fail) 20%, white);
+	--fill-progress: color-mix(in srgb, var(--warn) 22%, white);
+	--fill-merged: color-mix(in srgb, var(--done) 10%, white);
+
+	--font-head: 'DynaPuff', 'Comic Sans MS', sans-serif;
+	--font-body: 'Geist', system-ui, sans-serif;
+	--font-mono: 'Geist Mono', ui-monospace, Consolas, monospace;
+
+	--space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px;
+	--space-6: 24px; --space-8: 32px; --space-10: 40px; --space-12: 48px;
+
+	--radius-panel: 16px;
+	--radius-button: 7px;
+	--radius-badge: 12px;
+	--border-width: 2.5px;
+	--shadow-compact: 1px 1px 0 var(--ink);
+	--shadow-ordinary: 3px 3px 0 var(--ink);
+	--shadow-lifted: 6px 6px 0 var(--ink);
+
+	--duration-fast: 100ms;
+	--duration-normal: 200ms;
+	--duration-slow: 300ms;
+	--ease-standard: cubic-bezier(0.2, 0.7, 0.3, 1);
+	--ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+	--reading-width: 960px;
+
+	/* Native app colours for chapter chrome. */
+	--google-calendar: #1a73e8;
+	--gmail: #ea4335;
+	--slack: #4a154b;
+	--obsidian: #7c3aed;
+	--gitlab: #fc6d26;
+	--github: #24292f;
+	--terminal: #1e1e1e;
+}
+</style>
+<style>
+/* One centred reading column, an outline rail on the left, subtitles under the sheet. Rows on the
+   stage keep at least --row-gap apart so a highlight ring and its shadow never touch a neighbour. */
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+	background-color: var(--desk);
+	background-image: radial-gradient(color-mix(in srgb, var(--ink) 13%, transparent) 1.5px, transparent 1.6px);
+	background-size: 24px 24px;
+	color: var(--ink);
+	font: 400 16px/1.45 var(--font-body);
+	overflow: hidden;
+}
+button, select, input { font: inherit; color: inherit; }
+button { cursor: pointer; background: none; border: 0; padding: 0; }
+a { color: var(--brand-deep); }
+:focus-visible { outline: 3px solid var(--brand-deep); outline-offset: 2px; border-radius: var(--radius-button); }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+svg { flex: none; display: block; }
+
+/* The column centres on the screen while it fits, otherwise it keeps to the right of the rail. */
+.app {
+	--rail-width: 256px; --row-gap: var(--space-3); --caption-height: 84px; --transport-height: 76px;
+	--column-width: min(var(--reading-width), 100vw - var(--rail-width) - 2 * var(--space-6));
+	--column-left: max(var(--rail-width) + var(--space-6), (100vw - var(--column-width)) / 2);
+	height: 100vh; position: relative;
+}
+.column {
+	width: var(--column-width);
+	margin-left: var(--column-left);
+	height: 100vh;
+	display: flex; flex-direction: column;
+	padding: var(--space-5) 0 calc(var(--transport-height) + var(--space-5) + var(--space-3));
+}
+
+/* Outline rail: every row keeps one height, so clicking never moves the rows below it. */
+.rail { position: fixed; top: 0; left: 0; bottom: 0; width: var(--rail-width); padding: var(--space-5) var(--space-3) var(--space-4) var(--space-4); display: flex; flex-direction: column; gap: var(--space-4); z-index: 10; overflow-y: auto; }
+.rail-date { padding-left: var(--space-1); }
+.rail-date .date { font: 600 22px/1.1 var(--font-head); }
+.rail-date .window { font: 400 13px var(--font-mono); color: var(--ink-soft); margin-top: 4px; }
+.outline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; position: relative; }
+.outline::before { content: ''; position: absolute; left: 21px; top: 20px; bottom: 20px; border-left: 2px dashed color-mix(in srgb, var(--ink) 20%, transparent); }
+.outline-chapter { position: relative; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 10px; width: 100%; height: 42px; padding: 0 8px 0 4px; text-align: left; border-radius: 12px; transition: background var(--duration-fast); }
+.outline-chapter:hover { background: color-mix(in srgb, var(--paper) 65%, transparent); }
+.outline-icon { width: 34px; height: 34px; display: grid; place-items: center; background: var(--paper); border-radius: 10px; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ink) 16%, transparent); transition: transform var(--duration-normal) var(--ease-spring); }
+.outline-chapter:hover .outline-icon { transform: translateY(-2px); }
+.outline-name { font-size: 15px; font-weight: 600; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.outline-meta { display: flex; align-items: center; gap: 6px; }
+.count { min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; font: 600 12px/22px var(--font-mono); text-align: center; background: var(--fill-draft); }
+.count.needs { background: var(--sticky); color: var(--on-sticky); }
+.source-warning { color: var(--warn); display: grid; place-items: center; }
+.source-warning svg { stroke: var(--ink); fill: var(--sticky); }
+.outline-item.done .outline-name { color: var(--ink); }
+.outline-item.current .outline-chapter { background: var(--paper); box-shadow: inset 0 0 0 var(--border-width) var(--ink), var(--shadow-compact); }
+.outline-item.current .outline-name { color: var(--ink); font-weight: 700; }
+.outline-item.current .outline-icon { box-shadow: none; }
+
+/* The current chapter's points sit in their own panel below the outline, at a fixed height. */
+.beat-panel { min-height: calc(var(--beat-rows, 4) * 34px + 34px); padding: var(--space-3); border-radius: 14px; background: color-mix(in srgb, var(--paper) 72%, transparent); }
+.beat-panel-head { display: flex; align-items: center; gap: 8px; height: 22px; margin-bottom: 6px; font: 600 12px var(--font-mono); color: var(--ink-soft); letter-spacing: 0.02em; }
+.outline-beats { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.outline-beat { display: flex; gap: 10px; align-items: center; width: 100%; height: 32px; text-align: left; padding: 0 10px; border-radius: var(--radius-button); font-size: 14px; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.outline-beat::before { content: ''; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid currentColor; flex: none; }
+.outline-beat:hover { background: var(--paper); color: var(--ink); }
+.outline-beat.done { color: var(--ink); }
+.outline-beat.done::before { background: currentColor; }
+.outline-beat.current { color: var(--ink); background: var(--paper); font-weight: 650; box-shadow: inset 0 0 0 1.5px var(--ink); }
+.outline-beat.current::before { background: var(--sticky); border-color: var(--ink); }
+.panel-warning { display: flex; gap: 8px; align-items: center; margin-top: 8px; padding: 5px 10px; font-size: 13px; border-radius: var(--radius-button); background: var(--fill-progress); }
+
+/* The sheet keeps one height on every chapter, so the caption and transport never move. */
+.sheet { position: relative; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; background: var(--paper); border: var(--border-width) solid var(--ink); border-radius: var(--radius-panel); box-shadow: var(--shadow-lifted); overflow: hidden; }
+.sheet-head { flex: none; display: flex; align-items: center; gap: var(--space-3); padding: var(--space-5) var(--space-6) var(--space-3); }
+.sheet-head .kicker { font-size: 14px; font-weight: 600; color: var(--ink-soft); }
+.sheet-head h1 { margin: 0; font: 600 26px/1.15 var(--font-head); text-wrap: balance; }
+.sheet-head .position { margin-left: auto; font: 500 13px var(--font-mono); color: var(--ink-soft); align-self: flex-start; padding-top: 4px; }
+.sheet-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--space-3) var(--space-6) var(--space-6); }
+.sheet::after { content: ''; position: absolute; inset: auto 0 0; height: 56px; background: linear-gradient(color-mix(in srgb, var(--paper) 0%, transparent), var(--paper) 85%); opacity: 0; pointer-events: none; transition: opacity var(--duration-fast); }
+.sheet.more-below::after { opacity: 1; }
+
+.caption { flex: none; display: flex; justify-content: center; align-items: center; height: var(--caption-height); margin-top: var(--space-3); }
+.caption p { margin: 0; max-width: 820px; text-align: center; font-size: 20px; line-height: 1.4; font-weight: 500; text-wrap: balance; background: color-mix(in srgb, var(--paper) 88%, transparent); border-radius: 12px; padding: 6px 16px; }
+
+/* Highlight: an ink ring with a hard shadow on what is being said; the rest stays readable. */
+[data-target] { transition: opacity var(--duration-slow) var(--ease-standard), transform var(--duration-normal) var(--ease-spring), box-shadow var(--duration-normal) var(--ease-spring); }
+.highlighting [data-target]:not(.is-target, .on-path) { opacity: 0.8; }
+.is-target { box-shadow: 0 0 0 var(--border-width) var(--ink), 4px 4px 0 var(--border-width) var(--ink) !important; transform: translate(-1px, -2px); position: relative; z-index: 2; }
+.calendar-event.is-target, .all-day-chip.is-target { z-index: 5; }
+
+.icon-link { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: var(--radius-button); color: var(--ink); transition: transform var(--duration-normal) var(--ease-spring), background var(--duration-fast); flex: none; }
+a.icon-link:hover, button.icon-link:hover { background: color-mix(in srgb, var(--ink) 9%, transparent); transform: translateY(-2px); }
+.chip { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; padding: 1px 8px; border-radius: var(--radius-badge); background: var(--paper); white-space: nowrap; }
+.group-title { margin: 0 0 var(--space-2); font-size: 14px; font-weight: 650; color: var(--ink-soft); }
+.muted-line { margin: var(--space-4) 0 0; font-size: 14px; color: var(--ink-soft); }
+.row-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--row-gap); }
+.text-button { display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: var(--radius-button); border: var(--border-width) solid var(--ink); background: var(--sticky); color: var(--on-sticky); font-weight: 650; box-shadow: var(--shadow-ordinary); transition: transform var(--duration-normal) var(--ease-spring), box-shadow var(--duration-normal) var(--ease-spring); }
+.text-button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: var(--shadow-lifted); }
+.text-button:active:not(:disabled) { transform: translateY(1px); box-shadow: var(--shadow-compact); }
+.text-button:disabled { background: var(--fill-draft); box-shadow: none; cursor: not-allowed; color: var(--ink-soft); border-color: var(--ink-soft); }
+.text-button.done { background: var(--fill-ready); }
+.segmented { display: inline-flex; padding: 3px; gap: 3px; border-radius: 10px; background: var(--fill-draft); }
+.segmented button { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: var(--radius-button); font-size: 14px; font-weight: 600; color: var(--ink-soft); transition: background var(--duration-fast); }
+.segmented button:hover { color: var(--ink); background: color-mix(in srgb, var(--paper) 60%, transparent); }
+.segmented button[aria-pressed="true"] { background: var(--paper); color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--ink); }
+.switch { position: relative; display: inline-flex; flex: none; width: 40px; height: 24px; }
+.switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.switch span { width: 100%; height: 100%; border-radius: 12px; background: var(--fill-draft); border: 2px solid var(--ink-soft); transition: background var(--duration-fast); }
+.switch span::after { content: ''; position: absolute; top: 4px; left: 4px; width: 16px; height: 16px; border-radius: 50%; background: var(--ink-soft); transition: transform var(--duration-normal) var(--ease-spring); }
+.switch input:checked + span { background: var(--fill-ready); border-color: var(--ink); }
+.switch input:checked + span::after { transform: translateX(16px); background: var(--ink); }
+.switch input:focus-visible + span { outline: 3px solid var(--brand-deep); outline-offset: 2px; }
+select.small-select { appearance: none; font-size: 14px; padding: 3px 26px 3px 8px; border-radius: var(--radius-button); border: 1.5px solid color-mix(in srgb, var(--ink) 30%, transparent); background: var(--paper) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316385c' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 6px center / 14px; cursor: pointer; }
+select.small-select:hover { border-color: var(--ink); }
+
+/* Calendar: Google Calendar day columns with solid blocks in the calendar colour. */
+.calendar-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-2) var(--space-4); margin: 0 0 var(--space-4); padding: 0; list-style: none; font-size: 14px; }
+.calendar-legend li { display: flex; align-items: center; gap: 6px; }
+.swatch { width: 12px; height: 12px; border-radius: 4px; background: var(--event-color); }
+.calendar-grid { --gutter: 52px; --day-gap: 8px; margin-inline: auto; max-width: calc(var(--gutter) + var(--day-count) * 380px); }
+.calendar-days, .calendar-all-day, .calendar-body { display: grid; grid-template-columns: var(--gutter) repeat(var(--day-count), minmax(0, 1fr)); column-gap: var(--day-gap); }
+.calendar-day-head { display: flex; flex-direction: column; align-items: center; gap: 2px; padding-bottom: 6px; }
+.calendar-day-head .weekday { font-size: 13px; font-weight: 650; letter-spacing: 0.04em; color: var(--ink-soft); }
+.calendar-day-head .date { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; font: 600 22px var(--font-head); }
+.calendar-day-head.focus .weekday { color: var(--google-calendar); }
+.calendar-day-head.focus .date { background: var(--google-calendar); color: #ffffff; }
+.calendar-day-head.past .date, .calendar-day-head.past .weekday { color: var(--ink-soft); }
+.calendar-all-day { padding: 2px 0 8px; min-height: 12px; }
+.calendar-all-day .label { font: 400 12px var(--font-mono); color: var(--ink-soft); align-self: center; text-align: right; padding-right: 6px; }
+.all-day-cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.all-day-chip { text-align: left; font-size: 14px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background: var(--event-color); color: var(--event-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.calendar-body { position: relative; padding-top: 10px; }
+.hour-labels { position: relative; }
+.hour-label { position: absolute; right: 8px; transform: translateY(-50%); font: 400 13px var(--font-mono); color: var(--ink-soft); }
+.day-track { position: relative; min-width: 0; }
+.day-track .hour-line { position: absolute; left: 0; right: 0; border-top: 1px solid color-mix(in srgb, var(--ink) 11%, transparent); }
+.day-track.past { background: color-mix(in srgb, var(--ink) 3%, transparent); border-radius: 6px; }
+.calendar-event { position: absolute; display: flex; flex-direction: column; justify-content: flex-start; text-align: left; overflow: hidden; padding: 3px 7px; border-radius: 6px; background: var(--event-color); color: var(--event-text); font-size: 14px; line-height: 1.25; box-shadow: 0 0 0 1.5px var(--paper); }
+.calendar-event:hover { filter: brightness(0.95); }
+.calendar-event.busy { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--event-color) 45%, white) 0 6px, color-mix(in srgb, var(--event-color) 30%, white) 6px 12px); color: var(--ink); }
+/* Earlier days are history: greyed until the narration points at them. */
+.day-track.past .calendar-event:not(.is-target) { filter: grayscale(0.75); opacity: 0.65; }
+.calendar-event .event-title { font-weight: 650; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--title-lines, 1); overflow-wrap: anywhere; }
+.calendar-event .event-time { font: 400 12px var(--font-mono); white-space: nowrap; }
+.calendar-event.short { flex-direction: row; align-items: center; gap: 6px; padding-block: 0; }
+.calendar-event.narrow { font-size: 13px; padding-inline: 5px; }
+.calendar-event.narrow .event-time { display: none; }
+.calendar-event.tiny { font-size: 12px; line-height: 1; padding-inline: 6px; }
+.calendar-event.tiny .event-time { display: none; }
+.calendar-body { border-top: 1.5px solid color-mix(in srgb, var(--ink) 16%, transparent); }
+.now-line { position: absolute; left: -5px; right: 0; border-top: 2px solid var(--fail); z-index: 4; pointer-events: none; }
+.now-line::before { content: ''; position: absolute; left: -1px; top: -7px; width: 12px; height: 12px; border-radius: 50%; background: var(--fail); }
+/* The popover sits on the calendar body, outside every day column, so dimming a column never reaches it. */
+.event-popover { position: absolute; z-index: 6; width: 270px; border-radius: 12px; padding: var(--space-3) var(--space-4); background: var(--paper); border: var(--border-width) solid var(--ink); box-shadow: var(--shadow-lifted); display: flex; flex-direction: column; gap: 6px; }
+.highlighting .event-popover[data-target] { opacity: 1; }
+.event-popover .head { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 650; color: var(--ink-soft); }
+.event-popover .head .actions { display: flex; margin-left: auto; margin-right: -8px; }
+.event-popover h2 { margin: 0; font-size: 18px; line-height: 1.25; }
+.event-popover .meta { font: 400 14px var(--font-mono); }
+.event-popover .note { font-size: 14px; font-weight: 600; background: var(--fill-progress); border-radius: 6px; padding: 3px 8px; }
+
+/* Work in flight: a Kanban board; the column says where an item stands, its fill says how it is doing. */
+.work-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-4); }
+.board { display: grid; grid-template-columns: var(--board-columns); gap: var(--space-3); align-items: start; }
+.board-column { border-radius: 14px; background: color-mix(in srgb, var(--brand) 7%, white); padding: 8px; min-height: 120px; }
+.board-column.empty { background: none; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ink) 14%, transparent); }
+.board-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; height: 26px; padding: 0 4px; margin-bottom: 8px; font-size: 14px; font-weight: 700; }
+.board-head .count { background: var(--paper); }
+.board-cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(170px, 100%), 1fr)); gap: var(--row-gap); }
+.work-card { display: flex; flex-direction: column; gap: 4px; padding: 8px 6px 4px 10px; border-radius: 10px; background: var(--state-fill); box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 12%, transparent); }
+.work-card .card-project { display: flex; align-items: center; gap: 5px; font: 500 12px var(--font-mono); color: var(--ink-soft); min-width: 0; }
+.work-card .card-project span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.work-card .ref { font: 650 14px var(--font-mono); display: flex; align-items: center; gap: 4px; min-width: 0; }
+.work-card .ref span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.work-card .title { font-weight: 600; font-size: 15px; line-height: 1.3; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.work-card .state { font-size: 13px; }
+.work-card .card-foot { display: flex; align-items: center; justify-content: space-between; gap: 4px; min-height: 34px; margin-right: -2px; }
+.work-card .local { display: inline-flex; gap: 8px; font: 500 13px var(--font-mono); }
+.work-card .local span { display: inline-flex; gap: 3px; align-items: center; }
+.work-card .links { display: flex; align-items: center; margin-left: auto; }
+.work-card .links .icon-link { width: 30px; height: 30px; }
+.icon-link.warn { background: var(--fill-progress); box-shadow: inset 0 0 0 1.5px var(--ink); }
+.quiet-toggle { display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-5); font-size: 15px; }
+
+/* Overnight runs. */
+.run { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto auto 34px; gap: var(--space-3); align-items: center; min-height: 52px; padding: 6px 6px 6px 14px; border-radius: 12px; background: var(--fill-merged); }
+.run.fail { background: var(--fill-failing); }
+.run.check { background: var(--fill-progress); }
+.run .title { font-weight: 650; }
+.run .detail { font-size: 14px; }
+.run .mono { font-size: 14px; }
+.away-line { display: flex; align-items: center; gap: 8px; margin: 0 0 var(--space-4); font: 500 14px var(--font-mono); color: var(--ink-soft); }
+
+/* Slack. */
+.slack-section + .slack-section { margin-top: var(--space-5); }
+.slack-message { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: var(--space-3); padding: 8px 6px 8px 10px; border-radius: 10px; background: var(--paper); }
+.slack-message.waiting { background: var(--fill-progress); }
+.avatar { width: 38px; height: 38px; border-radius: 8px; display: grid; place-items: center; color: #ffffff; font-weight: 700; font-size: 16px; }
+.slack-message .who { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.slack-message .name { font-weight: 750; }
+.slack-message .meta { font: 400 13px var(--font-mono); color: var(--ink-soft); }
+.slack-message .text { font-size: 15px; }
+.owner-chip { margin-top: 4px; background: var(--fill-ready); }
+.mention { background: color-mix(in srgb, var(--sticky) 55%, white); border-radius: 4px; padding: 0 3px; font-weight: 600; }
+.slack-message .side { display: flex; align-items: center; gap: 2px; font: 500 13px var(--font-mono); color: var(--ink-soft); }
+.handled { border-radius: 12px; background: var(--fill-merged); padding: 10px 14px; }
+.handled p { margin: 0; font-size: 15px; display: flex; gap: 8px; align-items: flex-start; }
+.handled p svg { margin-top: 3px; }
+.handled details { margin-top: 8px; }
+.handled summary { cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 650; border-radius: var(--radius-button); list-style: none; }
+.handled summary::-webkit-details-marker { display: none; }
+.handled summary svg { transition: transform var(--duration-normal) var(--ease-spring); }
+.handled details[open] summary svg { transform: rotate(90deg); }
+.handled-list { list-style: none; margin: 8px 0 0; padding: 0 4px 0 0; max-height: 124px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.handled-list li { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 14px; background: var(--paper); border-radius: 8px; padding: 2px 4px 2px 10px; }
+.handled-list li > span:nth-child(2) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Gmail rows. */
+.gmail { list-style: none; margin: 0; padding: 4px; border-radius: 14px; background: color-mix(in srgb, var(--ink) 4%, white); display: flex; flex-direction: column; gap: 10px; }
+.mail-row { display: grid; grid-template-columns: 76px minmax(0, 1fr) auto 34px; gap: var(--space-3); align-items: center; min-height: 58px; padding: 6px 6px 6px 12px; border-radius: 10px; background: var(--paper); }
+.mail-row.unread { background: color-mix(in srgb, var(--gmail) 6%, white); }
+.mail-row .from-line { display: flex; gap: 8px; align-items: baseline; }
+.mail-row .from { font-size: 16px; }
+.mail-row.unread .from, .mail-row.unread .subject { font-weight: 700; }
+.mail-row .subject-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 15px; }
+.mail-row .snippet { color: var(--ink-soft); }
+.mail-row .date { font: 500 13px var(--font-mono); }
+.account-chip { justify-self: start; }
+.account-chip.work { background: var(--fill-review); }
+.account-chip.personal { background: var(--fill-ready); }
+.action-chip { background: var(--fill-draft); }
+.action-chip.act { background: var(--fill-progress); }
+.notifications { display: flex; gap: var(--space-3); flex-wrap: wrap; align-items: center; }
+.notifications span.count-pair { font: 500 14px var(--font-mono); }
+
+/* Obsidian triage grouped by source note. */
+.note-group + .note-group { margin-top: var(--space-5); }
+.note-head { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 2px 0 12px; border-radius: 10px; background: color-mix(in srgb, var(--obsidian) 12%, white); font: 600 14px var(--font-mono); margin-bottom: var(--space-2); }
+.note-head .icon-link { margin-left: auto; width: 30px; height: 30px; }
+.capture { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: var(--space-3); align-items: center; min-height: 44px; padding: 4px 8px 4px 12px; border-radius: 10px; background: var(--paper); }
+.capture .box { width: 16px; height: 16px; border: 2px solid var(--obsidian); border-radius: 4px; }
+.capture .text { font-size: 16px; }
+.capture .selects { display: flex; gap: 6px; }
+
+/* Retro: evidence as a terminal, fix as a diff, sessions confirmed at the bottom. */
+.retro-item { border-radius: 12px; background: var(--fill-draft); }
+.retro-head { display: flex; align-items: center; gap: var(--space-2); padding: 6px 6px 6px 8px; }
+.retro-toggle { display: grid; grid-template-columns: 16px 18px minmax(0, 1fr); gap: var(--space-2); align-items: center; flex: 1; min-width: 0; text-align: left; padding: 2px 4px; border-radius: var(--radius-button); }
+.retro-toggle svg.chevron { transition: transform var(--duration-normal) var(--ease-spring); }
+.retro-toggle[aria-expanded="true"] svg.chevron { transform: rotate(90deg); }
+.retro-toggle .title { font-weight: 650; display: block; }
+.retro-toggle .cost { font: 400 13px var(--font-mono); color: var(--ink-soft); display: block; }
+.retro-body { padding: 0 12px 12px; display: grid; gap: var(--space-2); }
+.retro-body[hidden] { display: none; }
+.terminal { background: var(--terminal); color: #e8e8e8; border-radius: 10px; padding: 8px 12px; font: 400 13px/1.55 var(--font-mono); overflow-wrap: anywhere; }
+.terminal-bar { display: flex; gap: 8px; align-items: center; color: #b4bcc6; font-size: 12px; margin-bottom: 4px; }
+.terminal-line { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 4px; }
+.terminal-line .mark { color: #7ec699; }
+.terminal-line.error { background: color-mix(in srgb, var(--warn) 22%, var(--terminal)); color: #ffd98a; border-radius: 5px; padding: 1px 4px; margin: 2px -4px; }
+.terminal-line.error .mark { color: #ffd98a; padding-top: 3px; }
+.terminal-line.assistant { color: #c9d4de; }
+.terminal-line.assistant .mark { color: #d97757; }
+.terminal-line.user { color: #9fd3ff; }
+.diff { background: var(--paper); border-radius: 10px; padding: 6px 10px; font: 400 13px/1.55 var(--font-mono); }
+.diff .file { font-size: 12px; color: var(--ink-soft); margin-bottom: 2px; }
+.diff .line { white-space: pre-wrap; padding: 0 6px; border-radius: 4px; }
+.diff .line.plus { background: var(--fill-ready); }
+.diff .line.minus { background: var(--fill-failing); }
+.sessions { margin-top: var(--space-5); padding: 12px 14px; border-radius: 12px; background: var(--fill-review); }
+.sessions h2 { margin: 0 0 6px; font-size: 15px; }
+.session-row { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: var(--space-3); align-items: center; padding: 6px 8px; border-radius: 10px; }
+.session-row + .session-row { margin-top: 4px; }
+.session-row.approved { background: var(--fill-ready); }
+.session-row .line-one { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-weight: 600; font-size: 15px; }
+.session-row .prompt { font: 400 13px var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sessions-confirm { display: flex; justify-content: flex-end; align-items: center; gap: var(--space-3); margin-top: var(--space-3); font-size: 14px; }
+
+/* Instructions. */
+.change { display: grid; grid-template-columns: minmax(0, 1fr) auto 34px; gap: var(--space-3); align-items: center; padding: 10px 6px 10px 14px; border-radius: 12px; }
+.change.final { background: var(--fill-ready); }
+.change.watch { background: var(--fill-progress); }
+.change.attention { background: var(--fill-failing); }
+.change .scope-line { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.change .scope { font: 600 14px var(--font-mono); }
+.change .summary { font-size: 15px; font-weight: 600; }
+.change .opinion { font-size: 15px; }
+.state-chips { display: flex; flex-direction: column; gap: 3px; align-items: stretch; }
+.state-chips .chip { justify-content: flex-start; }
+.state-chips .chip.no { background: color-mix(in srgb, var(--paper) 55%, transparent); box-shadow: inset 0 0 0 1.5px var(--ink); }
+
+/* AI news. */
+.news-item { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: var(--space-3); align-items: center; padding: 10px 6px 10px 14px; border-radius: 12px; background: var(--fill-draft); }
+.news-item .title { font-weight: 650; font-size: 16px; }
+.news-item .summary { font-size: 15px; }
+.news-item .meta { font: 400 13px var(--font-mono); color: var(--ink-soft); }
+.news-item .side { display: flex; align-items: center; gap: 2px; }
+.vote[aria-pressed="true"].up { background: var(--fill-ready); box-shadow: inset 0 0 0 1.5px var(--ink); }
+.vote[aria-pressed="true"].down { background: var(--fill-failing); box-shadow: inset 0 0 0 1.5px var(--ink); }
+
+/* Action points. */
+.action { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto auto; gap: var(--space-3); align-items: center; min-height: 54px; padding: 6px 8px 6px 14px; border-radius: 12px; background: var(--fill-review); }
+.action.is-done { background: var(--fill-merged); }
+.action.is-done .text { text-decoration: line-through; text-decoration-thickness: 2px; }
+.action .text { display: block; font-size: 16px; font-weight: 600; }
+.action .detail { display: block; font-size: 14px; color: var(--ink-soft); }
+.checkbox { appearance: none; width: 22px; height: 22px; margin: 0; border: 2px solid var(--ink); border-radius: 6px; background: var(--paper); display: grid; place-items: center; cursor: pointer; }
+.checkbox:checked { background: var(--done) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / 16px no-repeat; }
+.save-area { display: flex; justify-content: flex-end; align-items: center; gap: var(--space-4); margin-top: var(--space-6); }
+.save-area .summary { font-size: 14px; color: var(--ink-soft); text-align: right; }
+
+/* Quiet and unavailable chapters. */
+.quiet-slide { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); padding: var(--space-10) 0; text-align: center; }
+.quiet-slide p { margin: 0; font: 600 22px var(--font-head); }
+.quiet-slide .detail { font: 400 15px var(--font-body); color: var(--ink-soft); }
+
+/* Transport: a floating pill at the bottom centre. */
+.transport { position: fixed; left: var(--column-left); bottom: var(--space-5); z-index: 20; display: flex; align-items: center; gap: 4px; height: var(--transport-height); padding: 0 12px 0 10px; border-radius: 999px; background: var(--paper); border: var(--border-width) solid var(--ink); box-shadow: var(--shadow-ordinary); width: var(--column-width); }
+.control { display: inline-grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; color: var(--ink); transition: transform var(--duration-normal) var(--ease-spring), background var(--duration-fast); }
+.control:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 9%, transparent); transform: translateY(-2px); }
+.control:active:not(:disabled) { transform: translateY(1px); }
+.control:disabled { opacity: 0.4; cursor: default; }
+.control.play { width: 48px; height: 48px; margin-inline: 2px; background: var(--sticky); border: var(--border-width) solid var(--ink); box-shadow: var(--shadow-compact); }
+.control.play:hover { background: var(--sticky); box-shadow: var(--shadow-ordinary); }
+.control.speed { width: auto; border-radius: 19px; padding: 0 8px; grid-auto-flow: column; gap: 3px; font: 600 13px var(--font-mono); }
+.control[aria-pressed="true"].mute { background: var(--fill-progress); }
+.progress { flex: 1; min-width: 120px; display: flex; gap: 4px; align-items: center; height: 30px; margin: 0 12px; }
+.segment { position: relative; height: 14px; border-radius: 7px; background: var(--fill-draft); cursor: pointer; min-width: 10px; overflow: hidden; transition: height var(--duration-fast); }
+/* The ring sits above the fill so the current chapter stays outlined while it fills. */
+.segment::after { content: ''; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 22%, transparent); pointer-events: none; }
+.segment.current { height: 22px; border-radius: 8px; }
+.segment.current::after { box-shadow: inset 0 0 0 2px var(--ink); }
+.segment.quiet { background: var(--fill-merged); }
+.progress:hover .segment:not(.current) { height: 18px; }
+.segment-fill { position: absolute; inset: 0; background: var(--brand); transform-origin: 0 50%; transform: scaleX(0); }
+.tick { position: absolute; top: 3px; bottom: 3px; width: 2px; margin-left: -1px; background: var(--paper); border-radius: 1px; pointer-events: none; }
+.time { font: 500 13px var(--font-mono); color: var(--ink-soft); white-space: nowrap; min-width: 82px; text-align: right; }
+
+/* Below 1280 the rail folds to icons; the points panel hides. */
+@media (max-width: 1279px) {
+	.app { --rail-width: 70px; }
+	.rail { padding-inline: var(--space-3); }
+	.rail-date .window, .outline-name, .outline-meta, .beat-panel { display: none; }
+	.outline-chapter { grid-template-columns: 34px; padding: 0 4px; width: 42px; }
+	.outline::before { left: 21px; }
+	.rail-date .date { font-size: 15px; text-align: center; }
+}
+/* Below 760 the rail becomes a top strip and the page scrolls. */
+@media (max-width: 759px) {
+	body { overflow: auto; }
+	.app { --rail-width: 0px; height: auto; }
+	.rail { position: sticky; top: 0; width: auto; flex-direction: row; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); background: color-mix(in srgb, var(--desk) 92%, white); border-bottom: 1.5px solid color-mix(in srgb, var(--ink) 18%, transparent); overflow: visible; }
+	.rail-date .date { white-space: nowrap; }
+	.outline { flex-direction: row; overflow-x: auto; }
+	.outline::before { display: none; }
+	.column { width: auto; height: auto; padding: var(--space-3) var(--space-3) 150px; }
+	.sheet { flex: none; }
+	.sheet-body, .sheet-head { padding-inline: var(--space-4); }
+	.transport { flex-wrap: wrap; justify-content: center; border-radius: 22px; bottom: var(--space-2); height: auto; padding: 6px 10px; }
+	.progress { order: 10; flex-basis: 100%; margin: 2px 4px 0; }
+	.capture, .change, .news-item { grid-template-columns: minmax(0, 1fr) auto; }
+	.board { grid-template-columns: minmax(0, 1fr); }
+	.board-column.empty { display: none; }
+	.action { grid-template-columns: 26px minmax(0, 1fr) auto; }
+	.action .segmented { grid-column: 2 / -1; justify-self: start; }
+	.mail-row { grid-template-columns: minmax(0, 1fr) auto auto; }
+	.mail-row .account-chip, .capture .box, .news-item > svg, .run > svg:first-child, .run .duration, .time { display: none; }
+	.capture .selects { grid-column: 1 / -1; flex-wrap: wrap; }
+	.run { grid-template-columns: minmax(0, 1fr) auto 34px; }
+	.state-chips { flex-direction: row; grid-column: 1 / -1; grid-row: 2; }
+	.event-popover { position: static; width: auto; margin-top: var(--space-3); }
+}
+@media (prefers-reduced-motion: reduce) {
+	*, *::before, *::after { transition: none !important; }
+	.is-target { transform: none; }
+}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+	<aside class="rail" aria-label="Brief outline">
+		<div class="rail-date"><div class="date" id="rail-date"></div><div class="window" id="rail-window"></div></div>
+		<nav aria-label="Chapters"><ol class="outline" id="outline"></ol></nav>
+		<section class="beat-panel" id="beat-panel" aria-label="Points in this chapter"></section>
+	</aside>
+	<main class="column">
+		<article class="sheet" id="sheet" aria-labelledby="chapter-title">
+			<header class="sheet-head">
+				<span id="chapter-icon"></span>
+				<div><div class="kicker" id="chapter-kicker"></div><h1 id="chapter-title"></h1></div>
+				<span class="position" id="chapter-position"></span>
+			</header>
+			<div class="sheet-body" id="stage"></div>
+		</article>
+		<div class="caption"><p id="caption" aria-live="polite"></p></div>
+	</main>
+	<div class="transport" role="group" aria-label="Playback">
+		<button class="control" id="chapter-previous" type="button" aria-label="Previous chapter" title="Previous chapter (Shift+Left)"></button>
+		<button class="control" id="beat-previous" type="button" aria-label="Previous point" title="Previous point (Left)"></button>
+		<button class="control play" id="play" type="button"></button>
+		<button class="control" id="beat-next" type="button" aria-label="Next point" title="Next point (Right)"></button>
+		<button class="control" id="chapter-next" type="button" aria-label="Next chapter" title="Next chapter (Shift+Right)"></button>
+		<div class="progress" id="progress" aria-label="Brief progress by chapter"></div>
+		<span class="time" id="time" aria-hidden="true"></span>
+		<button class="control speed" id="speed" type="button"></button>
+		<button class="control mute" id="mute" type="button"></button>
+	</div>
+</div>
+<script type="application/json" id="brief-data">{"date":"2026-10-16","window":{"since":"2026-10-15T06:05:00+02:00","until":"2026-10-16T06:00:00+02:00","label":"Thu 15 Oct 06:05 → Fri 16 Oct 06:00"},"now":"2026-10-16T06:00:00+02:00","sources":[{"name":"Personal Google","status":"ok","chapters":["calendar","mail"]},{"name":"Work Slack and mail","status":"ok","chapters":["slack","mail"]},{"name":"Work calendar","status":"skipped","reason":"Connector not approved yet; busy blocks only","chapters":["calendar"]},{"name":"Gerrit","status":"unavailable","reason":"SSH key not loaded","chapters":["work"]},{"name":"OpenAI news","status":"unavailable","reason":"HTTP 403","chapters":["news"]}],"chapters":[{"id":"calendar","type":"calendar","name":"Calendar","title":"Standup, then the dentist","status":"fyi","count":5,"data":{"calendars":[{"id":"personal","name":"Personal","account":"personal","color":"#039be5"},{"id":"family","name":"Family","account":"personal","color":"#33b679"},{"id":"work","name":"Work","account":"work","color":"#7986cb","busyOnly":true}],"days":[{"id":"2026-10-15","label":"Thu","date":"15"},{"id":"today","label":"Fri","date":"16","focus":true},{"id":"tomorrow","label":"Sat","date":"17"}],"events":[{"id":"retro-meeting","calendarId":"work","day":"2026-10-15","start":"14:00","end":"15:00","busyOnly":true},{"id":"swim","calendarId":"family","day":"2026-10-15","start":"17:00","end":"18:00","title":"Swimming lesson","url":"https://calendar.google.com/"},{"id":"standup","calendarId":"work","day":"today","start":"09:30","end":"09:45","busyOnly":true},{"id":"planning","calendarId":"work","day":"today","start":"13:00","end":"14:00","busyOnly":true},{"id":"dentist","calendarId":"personal","day":"today","start":"16:00","end":"17:00","title":"Dentist","place":"Downtown","notes":["Leave by 15:30"],"url":"https://calendar.google.com/"},{"id":"pickup","calendarId":"family","day":"today","start":"17:30","end":"18:00","title":"Kindergarten pickup","url":"https://calendar.google.com/"},{"id":"nameday","calendarId":"family","day":"today","allDay":true,"title":"Name day: Havel"},{"id":"run","calendarId":"personal","day":"tomorrow","start":"08:00","end":"09:00","title":"Park run","url":"https://calendar.google.com/"},{"id":"market","calendarId":"family","day":"tomorrow","start":"10:00","end":"12:00","title":"Farmers market","url":"https://calendar.google.com/"},{"id":"birthday","calendarId":"family","day":"tomorrow","start":"15:00","end":"19:00","title":"Birthday party at Sam's","place":"Oak Park","url":"https://calendar.google.com/"}]},"beats":[{"say":"Good morning. Yesterday, in grey, ended with the swimming lesson.","note":"Yesterday","targets":["event-swim"]},{"say":"Standup at half past nine, planning at one.","note":"Work blocks","targets":["event-standup","event-planning"]},{"say":"The dentist is at four; leave by half past three.","note":"Dentist","targets":["event-dentist"],"select":"dentist"},{"say":"Tomorrow is family day: park run, the market, and Sam's party in Oak Park.","note":"Tomorrow","targets":["event-run","event-market","event-birthday"]}]},{"id":"overnight","type":"overnight","name":"Overnight runs","title":"The render failed, the tests landed","status":"needs","count":1,"data":{"away":{"from":"Thu 22:40","to":"Fri 07:55"},"runs":[{"id":"run-tests","outcome":"ok","app":"claude","title":"prejemesi: wishlist tests","detail":"42 tests added, 3 commits","when":"22:35","duration":"1 h 20 min","url":"file:///C:/AI_DUMP/afk/prejemesi-tests.md"},{"id":"run-render","outcome":"fail","app":"claude","title":"videoLab: 4K render","detail":"Timed out at scene 7","when":"23:10","duration":"3 h 4 min","url":"file:///C:/AI_DUMP/afk/render.log"}]},"beats":[{"say":"After your last prompt at twenty to eleven, the prejemesi session added forty two wishlist tests.","note":"Tests landed","targets":["run-tests"]},{"say":"The 4K render ran for three hours and timed out at scene seven.","note":"Render failed","targets":["run-render"]}]},{"id":"work","type":"work","name":"Work in flight","title":"One merge ready, one review waiting","status":"needs","count":2,"data":{"states":{"ready":"Approved and green","review":"Waiting for review","draft":"Draft","failing":"Pipeline failing","progress":"In progress","local":"Local only","merged":"Merged","stale":"Ticket column is wrong"},"projects":[{"id":"ui-components","scope":"work","name":"ui-components","app":"gitlab","url":"https://example.com/ysc","cards":[{"id":"mr-318","ref":"!318","title":"Payment forms opt out of Enter submit","state":"ready","url":"https://example.com/mr/318","pipeline":{"status":"success","url":"https://example.com/pipelines/318"},"ticket":{"ref":"T-102","column":"In review","expected":"Approved","url":"https://kanbanflow.com/"},"session":{"label":"Orca","url":"orca://"}},{"id":"mr-321","ref":"!321","title":"Date picker keyboard support","state":"review","author":"Alex","url":"https://example.com/mr/321","pipeline":{"status":"success","url":"https://example.com/pipelines/321"}},{"id":"mr-320","ref":"!320","title":"Toast stacking","state":"failing","url":"https://example.com/mr/320","pipeline":{"status":"failed","url":"https://example.com/pipelines/320","job":"lint"}},{"id":"mr-316","ref":"!316","title":"Select clears on reset","state":"merged","url":"https://example.com/mr/316"},{"id":"mr-317","ref":"!317","title":"CI split into lint and test","state":"merged","url":"https://example.com/mr/317"}]},{"id":"mpx","scope":"personal","name":"mpx","app":"github","url":"https://github.com/MartinoPolo/mpx","cards":[{"id":"mpx-brief","ref":"main","title":"Morning brief skill","state":"progress","url":"https://github.com/MartinoPolo/mpx","local":{"uncommitted":9,"unpushed":1}}]},{"id":"prejemesi","scope":"personal","name":"prejemesi","app":"github","url":"https://github.com/MartinoPolo/prejemesi","cards":[{"id":"pr-488","ref":"#488","title":"Agent access part 2: API","state":"draft","url":"https://github.com/MartinoPolo/prejemesi/pull/488","pipeline":{"status":"running","url":"https://github.com/MartinoPolo/prejemesi/actions"}},{"id":"pr-487","ref":"#487","title":"Permanent wishlists","state":"merged","url":"https://github.com/MartinoPolo/prejemesi/pull/487"}]}],"autoHandled":[{"id":"tidy","text":"11 old checkouts with local changes","proposal":"Stash and list them in the weekly review"}],"quiet":["kamosh","orca","flowguard-api"]},"beats":[{"say":"Three eighteen is approved and green, but its ticket still sits in review.","note":"Ready to merge","targets":["card-mr-318"],"scope":"work"},{"say":"In review: Alex's date picker, and toast stacking, which fails in lint.","note":"In review","targets":["card-mr-321","card-mr-320"],"scope":"work"},{"say":"Two merged yesterday.","note":"Merged","targets":["column-merged"],"scope":"work"},{"say":"On the personal side, mpx has the brief skill uncommitted and prejemesi has a draft running checks.","note":"Personal","targets":["card-mpx-brief","card-pr-488"],"scope":"personal"}]},{"id":"slack","type":"slack","name":"Slack","title":"One request waits on you","status":"needs","count":1,"data":{"unaddressed":[{"id":"s1","channel":"#team-ui","author":"Alex","when":"16:40","text":"@you could you look at !321 before Monday? Keyboard nav is the part I am unsure about.","replies":0,"url":"https://example.slack.com/archives/C1/p1"}],"worthKnowing":[{"id":"s2","channel":"#admins","author":"Chris","when":"15:05","text":"Load balancer drops ACKs between the balancer and router; we are watching it.","handledBy":"Chris","replies":6,"url":"https://example.slack.com/archives/C2/p2"},{"id":"s3","channel":"#ai","author":"Kim","when":"11:20","text":"Code review working group kicks off Tuesday, sign-up in the thread.","replies":14,"url":"https://example.slack.com/archives/C3/p3"}],"addressedSummary":"Yesterday you fixed the failing feature tests, finished a review ask, and answered the forms question.","addressed":[{"id":"s4","channel":"#team-ui","author":"Robin","when":"13:16","text":"Feature tests fail on the filter Apply button","url":"https://example.slack.com/archives/C1/p4"},{"id":"s5","channel":"#team-ui","author":"Taylor","when":"14:02","text":"Review please: !317","url":"https://example.slack.com/archives/C1/p5"},{"id":"s6","channel":"DM","author":"Jordan","when":"17:45","text":"Are the payment forms still submitting on Enter?","url":"https://example.slack.com/archives/D1/p6"}],"skipped":35},"beats":[{"say":"Alex wants your review of three twenty one before Monday.","note":"Waiting on you","targets":["message-s1"]},{"say":"Worth knowing: Chris is chasing a load balancer issue, and the AI code review group starts Tuesday.","note":"Worth knowing","targets":["message-s2","message-s3"]},{"say":"Everything else you already handled: the feature tests, a review, and Jordan's forms question.","note":"Handled","targets":["slack-addressed"]}]},{"id":"mail","type":"mail","name":"Mail","title":"Two emails to act on","status":"needs","count":2,"data":{"rows":[{"id":"token","account":"work","from":"GitLab","subject":"Your personal access token expires soon","snippet":"The GitLab Workflow token expires on 21 Oct.","when":"Oct 15","action":"Renew","url":"https://mail.google.com/"},{"id":"trip","account":"personal","from":"TravelCo","subject":"Trip instructions: Lisbon, Oct 21","snippet":"Check-in opens 48 hours before departure.","when":"Oct 15","action":"Read","url":"https://mail.google.com/"},{"id":"bootcamp","account":"work","from":"HR team","subject":"Optional bootcamp in November","snippet":"Optional, sent to everyone.","when":"Oct 15","action":"Optional","url":"https://mail.google.com/"}],"notifications":[{"source":"GitLab","count":9},{"source":"Google","count":6},{"source":"KanbanFlow","count":3},{"source":"Other","count":4}]},"beats":[{"say":"GitLab warns that a token expires on Wednesday, and TravelCo sent the Lisbon check-in steps.","note":"Act on","targets":["mail-token","mail-trip"]},{"say":"The bootcamp invite is optional.","note":"Optional","targets":["mail-bootcamp"]}]},{"id":"triage","type":"triage","name":"Obsidian triage","title":"Three captures to file","status":"fyi","count":3,"data":{"vault":"ObsidianMP","projects":["mpx","orca","prejemesi","skills","videoLab"],"headings":["#AI","#todo","#quick","#tooling","#work"],"groups":[{"id":"daily","note":"Daily/2026-10-15","url":"obsidian://open?vault=ObsidianMP&file=Daily%2F2026-10-15","items":[{"id":"t1","text":"Morning brief should move KF tickets","project":"mpx","heading":"#tooling","priority":"high"},{"id":"t2","text":"Buy a birthday present for Sam","project":"","heading":"#todo","priority":"highest"}]},{"id":"ideas","note":"Ideas","url":"obsidian://open?vault=ObsidianMP&file=Ideas","items":[{"id":"t3","text":"True crime videos with realistic animations","project":"videoLab","heading":"#AI","priority":"low"}]}]},"beats":[{"say":"From yesterday's note: KF moves for the brief, and Sam's present, which is due tomorrow.","note":"Daily note","targets":["task-t1","task-t2"]},{"say":"One idea: true crime animations, parked as low priority.","note":"Ideas","targets":["task-t3"]}]},{"id":"retro","type":"retro","name":"Retro","title":"Two fixes worth a session","status":"fyi","count":2,"data":{"items":[{"id":"substitution","title":"Arithmetic blocked as command substitution","harness":"claude","account":"personal","cost":"about 40 blocked calls in 15 sessions","evidence":{"kind":"terminal","lines":[{"role":"tool","text":"Bash(end=$((SECONDS+2700)); until [ -f done ]; do sleep 5; done)"},{"role":"error","text":"PreToolUse:Bash hook error: Blocked dangerous command: opaque command or process substitution cannot be inspected."},{"role":"assistant","text":"I'll write a scratchpad script instead."}],"session":{"label":"3589dbf6","url":"file:///C:/Users/me/session.jsonl"}},"fix":{"file":"mpx · src/safeguard/shell.ts","diff":"- if (/\\$\\(/.test(command)) return true;\n+ if (/\\$\\((?!\\()/.test(command)) return true;"},"session":{"harness":"claude","account":"personal","project":"mpx","prompt":"Treat $(( )) as arithmetic in hasOpaqueCommandExpansion and add regression tests."}},{"id":"commit","title":"git add and commit chained in one call","harness":"pi","account":"work","cost":"9 blocked commits","evidence":{"kind":"terminal","lines":[{"role":"tool","text":"bash: git add -A && git commit -m \"fix: toast stacking\""},{"role":"error","text":"Finish staging/index mutations in a separate completed tool call before git commit"}],"session":{"label":"8c38ddae","url":"file:///C:/Users/me/session2.jsonl"}},"fix":{"file":"mpx · content/skills/commit/SKILL.md","diff":"+ Stage in one tool call, inspect git diff --cached, then commit in a separate call."},"session":{"harness":"claude","account":"personal","project":"mpx","prompt":"Tell the commit skill to stage and commit in separate calls."}}]},"beats":[{"say":"The shell hook blocks plain arithmetic as if it were command substitution; about forty calls this week.","note":"Arithmetic blocked","targets":["retro-substitution"]},{"say":"Commits also fail when staging shares the call; a one-line skill fix would stop it.","note":"Split commits","targets":["retro-commit"]},{"say":"Each fix has a session prompt ready.","note":"Start sessions","targets":["retro-sessions"]}]},{"id":"instructions","type":"instructions","name":"Instructions","title":"Three changes, one unbuilt","status":"fyi","count":3,"data":{"changes":[{"id":"c1","scope":"mpx output style","summary":"Everything that needs you moves to one final HITL section.","opinion":"Looks final. Answers are easier to scan; nothing to do.","verdict":"final","state":{"committed":true,"pushed":true,"built":true},"url":"https://github.com/MartinoPolo/mpx/commit/d7584c2"},{"id":"c2","scope":"mpx morning-brief","summary":"New skill, plus launcher fixes for slash prompts.","opinion":"Still moving. Not committed, and dist is a day old.","verdict":"attention","state":{"committed":false,"pushed":false,"built":false},"url":"https://github.com/MartinoPolo/mpx"},{"id":"c3","scope":"videoLab AGENTS.md","summary":"Reality first: build scenes only from trusted sources.","opinion":"Good rule; watch that it does not block quick drafts.","verdict":"watch","state":{"committed":true,"pushed":false},"url":"https://github.com/MartinoPolo/videoLab"}]},"beats":[{"say":"The HITL output style looks final; nothing to do.","note":"Output style","targets":["change-c1"]},{"say":"The morning brief work is not committed and the build is stale.","note":"Not committed","targets":["change-c2"]},{"say":"videoLab now insists on trusted sources; fine, but it may slow drafts.","note":"videoLab","targets":["change-c3"]}]},{"id":"news","type":"news","name":"AI news","title":"Three picks","status":"fyi","count":3,"data":{"items":[{"id":"n1","app":"googlegemini","source":"Google","title":"Gemini 3 Flash gets native audio output","summary":"Cheaper speech for apps like this brief.","date":"Oct 15","url":"https://blog.google/"},{"id":"n2","app":"ycombinator","source":"Hacker News","title":"Show HN: local-first agent sandboxes","summary":"412 points; containers per task, no daemon.","date":"Oct 15","url":"https://news.ycombinator.com/"},{"id":"n3","app":"claude","source":"Claude Code","title":"Claude Code 2.1.301","summary":"Idle compaction now configurable per project.","date":"Oct 15","url":"https://github.com/anthropics/claude-code/releases"}]},"beats":[{"say":"Gemini Flash now speaks natively, which could voice this brief cheaply.","note":"Gemini audio","targets":["news-n1"]},{"say":"On Hacker News, local-first agent sandboxes; and a small Claude Code release.","note":"HN, Claude Code","targets":["news-n2","news-n3"]}]},{"id":"actions","type":"actions","name":"Action points","title":"Five action points","status":"needs","count":5,"data":{"items":[{"id":"action-1","text":"Review !321","detail":"Alex asked in #team-ui, wants it before Monday","app":"gitlab","url":"https://example.com/mr/321","chapter":"slack","handoff":"you"},{"id":"action-2","text":"Merge !318 and move T-102","detail":"Approved and green; ticket still in review","app":"gitlab","url":"https://example.com/mr/318","chapter":"work","handoff":"agent"},{"id":"action-3","text":"Renew the GitLab token","detail":"GitLab Workflow token expires 21 Oct · GitLab email, 15 Oct","app":"gmail","url":"https://mail.google.com/","chapter":"mail","handoff":"you"},{"id":"action-4","text":"Rerun the 4K render","detail":"Overnight run timed out at scene 7","app":"claude","url":"file:///C:/AI_DUMP/afk/render.log","chapter":"overnight","handoff":"agent"},{"id":"action-5","text":"Start the hook fix session","detail":"Approve it in the retro first","app":"claude","chapter":"retro","handoff":"agent"}]},"beats":[{"say":"Five things need you. Alex asked in Slack for your review of three twenty one before Monday.","note":"Review !321","targets":["action-1"]},{"say":"Three eighteen is approved and green; I can merge it and move its ticket.","note":"Merge !318","targets":["action-2"]},{"say":"GitLab emailed yesterday that your Workflow token expires on the twenty first; renew it.","note":"Renew token","targets":["action-3"]},{"say":"The overnight render timed out; I can rerun it, and start the hook fix once you approve it.","note":"Render, hook fix","targets":["action-4","action-5"]}]}]}</script>
+<script>
+const brief = JSON.parse(document.getElementById('brief-data').textContent);
+const byId = (id) => document.getElementById(id);
+const stage = byId('stage');
+
+/* Every value from the brief goes through escaping and the link-scheme allowlist. */
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
+const LINK_SCHEMES = ['http:', 'https:', 'obsidian:', 'file:', 'slack:', 'mailto:', 'orca:'];
+function safeUrl(url) {
+	const text = String(url ?? '').trim();
+	if (!text || text.startsWith('//')) return '';
+	const scheme = text.match(/^([a-z][a-z0-9+.-]*):/i);
+	return !scheme || LINK_SCHEMES.includes(`${scheme[1].toLowerCase()}:`) ? text : '';
+}
+const target = (id) => `data-target="${escapeHtml(id)}"`;
+
+/* Brand icons are simple-icons paths inlined by build.mjs; UI icons share one 2px stroke style. */
+const BRAND_ICONS = {"anthropic":{"color":"#191919","path":"M17.3041 3.541h-3.6718l6.696 16.918H24Zm-10.6082 0L0 20.459h3.7442l1.3693-3.5527h7.0052l1.3693 3.5528h3.7442L10.5363 3.5409Zm-.3712 10.2232 2.2914-5.9456 2.2914 5.9456Z"},"claude":{"color":"#D97757","path":"m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z"},"gerrit":{"color":"#2F7E3A","path":"M12.648 2.678l-.245-.266c.004-.004.29-.268.413-.41.121-.146.342-.484.346-.486l.301.195c-.014.016-.234.359-.375.522-.137.165-.428.432-.44.445zm1.577 10.597c-.012-.004-.24-.154-.365-.221-.117-.059-.32-.146-.422-.191l.213-.612-.898-.444-.286.871c-.174.004-.713.053-1.51.389-.959.4-1.688 1.025-1.695 1.029l-.143.125.641.025.02-.016c.006-.006.721-.535 1.119-.705.088-.037.207-.074.33-.105-.209.105-.439.227-.6.32-.199.119-.57.381-.586.393l-.186.129.682.016.018-.01c.012-.008 1.164-.623 1.789-.76l.196-.047c.145-.037.246-.064.422-.064.156 0 .369.021.688.07.398.059.66.158.664.16l.24.094-.322-.436-.012-.008.003-.002zm-8.98-7.298h-.029l-1.006.916v.03c-.016.266.078.52.258.716.182.196.42.309.686.319h.043c.531 0 .965-.413.992-.94.023-.545-.399-1.01-.944-1.041zM5.2 7.808h-.041c-.117-.005-.23-.032-.33-.085.045.008.098.01.148.002.284-.035.481-.291.448-.575-.035-.279-.293-.48-.576-.442-.264.034-.457.267-.446.531-.031-.09-.045-.183-.045-.28l.912-.833c.446.042.79.431.768.882s-.391.8-.842.8H5.2zm9.329-3.725l-.293-.195-.41.265-.395-.285-.301.18.404.291-.416.27.297.18.4-.254.387.28.309-.169-.407-.296M24 19.525c-.213-.209-.418-.416-.629-.627-.48-.488-.957-.984-1.418-1.486-.547-.598-1.082-1.207-1.582-1.844-.225-.283-.441-.58-.646-.881-.254-.387-.469-.795-.668-1.215-.211-.445-.398-.9-.576-1.356.24.21.463.444.664.692.021-.215.041-.43.059-.648l.023-.322c0-.033.012-.066-.008-.096-.016-.029-.033-.051-.053-.075-.121-.149-.264-.282-.406-.413-.189-.181-.387-.36-.584-.533l-.18-.156c-.027-.027-.057-.051-.086-.074-.031-.03-.041-.096-.055-.136l-.154-.479c.607.285 1.109.741 1.578 1.215.004-.219.004-.436 0-.652 0-.114-.002-.229-.008-.346 0-.029.006-.1-.016-.127-.012-.02-.031-.036-.043-.055-.109-.117-.234-.217-.357-.314-.172-.143-.35-.277-.527-.408-.156-.117-.318-.232-.477-.345-.018-.016-.076-.039-.064-.06l.039-.08c.02-.035.014-.045.053-.029l.17.059c.406.156.779.368 1.143.608-.123-.45-.311-.885-.525-1.296-.389-.762-.893-1.468-1.463-2.105-.379-.426-.785-.824-1.219-1.193-.223-.19-.457-.369-.699-.533-.113-.074-.225-.149-.346-.217-.049-.03-.105-.056-.15-.094-.18-.144-.365-.284-.549-.429.238.098.469.21.689.338-.127-.194-.342-.331-.545-.436-.307-.159-.637-.276-.967-.378.113-.12.234-.228.346-.348.113-.12.223-.246.33-.372.127-.15.252-.3.375-.455l-1.156-.726-.48-.303c-.123.246-.277.476-.458.68-.18.203-.391.369-.6.539-.191.156-.379.316-.566.472-.047.04-.092.085-.145.12-.025.021-.096.004-.127.004H10.7c-.297.006-.596.029-.891.068-.058.007-.113.013-.175.008l-.178-.01c-.137-.008-.271-.016-.408-.016-.289-.004-.58 0-.871.025-.244.022-.489.055-.729.112-.238.056-.461.172-.66.312-.193.141-.387.32-.504.53s-.17.456-.213.689c-.135.013-.268.01-.4.016-.141.008-.277.021-.416.039-.27.037-.535.096-.795.18-.496.154-.945.405-1.336.75-.195.181-.377.38-.539.596-.02.025-.037.051-.063.068-.01.009-.027.016-.033.027-.015.027-.033.052-.051.076l-.134.212c-.168.285-.276.595-.383.906l-.045.123.033-.021c-.01.067-.02.135-.025.202l-.008.105v.053l-.066.013c-.135.026-.271.06-.4.101-.12.039-.233.086-.337.15-.105.066-.195.153-.285.239-.318.31-.562.698-.687 1.128-.1.348-.137.735-.059 1.092.021.09.049.188.107.262.074.09.199.126.313.095.131-.036.248-.124.371-.187l.314-.157c.455-.226.93-.446 1.438-.525.035-.005.1.067.131.091.049.037.1.074.148.104.109.069.221.129.334.181.262.114.541.174.818.231.502.105 1.014.171 1.529.18.207.004.416 0 .625-.018.225-.02.451-.049.678-.051.25-.005.496.025.74.055.254.031.51.068.764.105.518.079 1.031.169 1.543.279-.115.18-.227.362-.338.545-.008.013-.072 0-.088 0-.041-.002-.086-.002-.127 0-.074 0-.15.008-.225.019-.211.03-.416.083-.615.156-.49.181-.938.483-1.326.833-.221.195-.43.408-.609.641-.049.064-.094.129-.139.193.105-.023.211-.045.318-.07.061-.016.117-.027.176-.039.021-.008.029-.016.049-.027.219-.203.451-.393.695-.563.111-.08.225-.154.348-.215.166-.083.354-.131.533-.174-.33.18-.678.35-.977.584-.172.139-.328.291-.49.439l.654-.104c.01 0 .014-.004.023-.01l.17-.094c.113-.064.23-.125.346-.186.24-.123.482-.24.732-.34.236-.094.48-.178.732-.225.221-.046.428-.052.648 0 .342.074.67.232.969.414.021.014.035.033.055.014.016-.014.098-.074.09-.092l-.18-.334c-.016-.029-.023-.049-.051-.066l-.131-.077c-.176-.104-.348-.21-.51-.331-.037-.023-.078-.039-.082-.089-.004-.046.014-.093.029-.136.033-.09.08-.169.131-.248.033-.058.072-.111.109-.166.014-.018.01-.021.031-.014l.119.034c.236.077.469.159.711.22.27.068.545.123.82.176l.048.01c-.056-.03-.091-.09-.132-.136-.023-.03-.035-.05-.074-.06l-.105-.02c-.074-.016-.148-.03-.225-.049-.262-.057-.525-.119-.777-.209-.375-.13-.758-.232-1.145-.322-.486-.107-.977-.194-1.465-.275-.25-.041-.498-.074-.75-.109-.246-.034-.496-.07-.746-.087-.539-.034-1.074.087-1.615.081-.365-.004-.734-.055-1.096-.105l-.068-.009c.252-.093.5-.188.75-.285.236-.095.471-.192.705-.289.127-.052.25-.105.373-.157.113-.051.225-.1.328-.17.408-.279.676-.727.975-1.109.273-.361.586-.7.99-.908.129-.066.262-.117.4-.156-.283-.439-.549-.93-.623-1.455.029.012.061.025.094.037.035.012.064.016.072.045l.029.135c.026.091.053.176.086.262.072.191.16.375.26.551.219.396.484.766.766 1.12.539.686 1.145 1.305 1.736 1.941.145.158.275.324.41.492.15.187.303.375.457.561.121.141.234.285.356.426l.094.112c.016.018.037.026.061.036.604.3 1.213.6 1.822.895.434.209.869.42 1.309.623.236.109.471.219.711.32.029.014.066.029.098.039.016.01.029.016.047.023l.016.049c.027.072.051.145.076.217.049.141.098.279.148.416.33.912.695 1.814 1.145 2.676.346.656.715 1.301 1.09 1.939.4.68.811 1.354 1.225 2.025.332.535.666 1.072 1.008 1.605.146.227.289.459.439.688l.063.094.775-1.141.191-.283c.008-.006.082-.102.076-.109l-.156-.24c-.291-.451-.584-.898-.871-1.35l-.828-1.283-.105-.166.656.799 1.115 1.35c.121.146.236.289.354.438.219-.402.439-.801.662-1.201.086-.164.176-.33.266-.492M12.13 1.915c.309-.246.563-.563.757-.906l1.178.743.18.112c-.246.3-.496.604-.775.873-.035.034-.074.069-.107.104-.021.025-.047.051-.07.075l-.033.038c-.023-.007-.045-.016-.068-.02-.146-.041-.289-.08-.436-.111-.292-.066-.589-.117-.886-.152-.191-.021-.385-.04-.578-.058.275-.234.557-.467.838-.698m-1.754 1.37c.232-.096.482-.15.73-.191.49-.082.994-.094 1.489-.04.354.038.701.108 1.041.21l-.141.115-.225-.061c-.141-.029-.281-.06-.422-.082-.246-.037-.497-.06-.749-.065-.461-.008-.926.042-1.371.159-.301.078-.604.188-.879.332-.286.154-.555.346-.78.582-.134.137-.257.289-.359.455-.057.09-.105.18-.15.275-.024.047-.043.096-.061.144l-.029.075c-.004.015-.008.026-.012.038L8.39 5.22l-.082-.011c.234-.719.763-1.286 1.418-1.649.207-.114.426-.218.65-.279m-3.93.374c.266-.381.686-.649 1.139-.743.502-.101 1.016-.119 1.525-.107-.525.131-1.05.326-1.488.652-.34.075-.664.24-.934.459-.09.071-.17.15-.246.236-.035.037-.066.075-.097.116-.014.015-.027.03-.037.049h-.084c.023-.135.055-.27.098-.4.029-.09.064-.18.119-.26m.882.056c-.145.143-.27.303-.391.469-.047.069-.098.153-.18.191-.085.039-.194-.005-.28-.031.224-.279.521-.494.851-.629M2.308 6.585c.08-.16.182-.315.275-.465.016-.027.053-.046.074-.063.049-.034.096-.069.143-.106.309-.225.621-.446.939-.656.166-.107.33-.213.502-.307.182-.101.369-.18.565-.244.347-.112.707-.189 1.068-.244.174-.025.361-.057.531-.015-.33.188-.658.375-.99.558-.342.191-.689.367-1.035.552-.332.18-.66.375-.981.577-.336.206-.67.419-1.002.629-.08.051-.16.105-.24.155.045-.125.09-.251.151-.371m1.009 3.056c-.029.056-.134.042-.187.042-.094 0-.186 0-.279.006-.258.015-.51.06-.758.138-.475.147-.922.375-1.365.604-.1.055-.203.135-.316.162-.061.015-.131-.008-.166-.063-.035-.061-.053-.131-.064-.198-.027-.12-.035-.245-.033-.368 0-.33.076-.66.215-.96.096-.21.221-.401.371-.574.15-.175.326-.351.539-.45.355-.162.775-.213 1.164-.235.072-.005.145-.007.217-.007.1 0 .217-.016.311.019.074.027.121.105.15.173.045.105.074.225.1.336.061.26.123.525.145.791.01.119.016.239.004.359-.009.073-.014.156-.05.223m2.829-1.973c-.194.123-.403.218-.616.298-.215.077-.436.144-.66.181-.097.013-.195.025-.293.021-.101-.003-.193-.036-.293-.067-.195-.063-.393-.13-.57-.233-.064-.039-.135-.084-.174-.15-.029-.052-.029-.116-.023-.174.012-.231.094-.458.203-.66.187-.343.482-.612.84-.775.879-.396 1.865-.029 2.611.49l.08.061c-.154.165-.311.321-.473.477-.199.189-.404.381-.634.531M8.31 5.739c-.475-.203-.926-.458-1.356-.738.449.188.934.3 1.414.37.258.037.521.072.781.08.281.008.564-.021.84-.075.545-.103 1.068-.305 1.566-.551.494-.245.964-.537 1.413-.859.217-.155.43-.315.633-.487.021-.016.174-.161.184-.154l.041.031.537.416c.328.254.658.51.988.762-.906.326-1.826.629-2.752.904-.519.156-1.038.301-1.565.42-.412.098-.834.189-1.256.21-.507.022-1.006-.135-1.47-.33m8.85 3.942c.076.021.145.045.215.067l.094.033c.016.006.031.015.045.02l.021.06c.045.146.09.289.139.432-.15-.127-.301-.254-.451-.379l-.09-.074c-.021-.016-.045-.021-.029-.046l.059-.114m-.671 1.444l.035-.063.027-.046c.012-.018.008-.022.029-.012.129.054.258.111.385.17.24.11.475.23.703.364.107.065.217.135.322.205l.15.105.074.057c.033.027.041.063.057.102.104.282.219.564.338.844.078.189.162.379.248.566-.293-.371-.621-.715-.957-1.045-.346-.346-.705-.671-1.078-.981l-.323-.264m3.746 6.42l-.121.09.008.016.063.094.271.42.904 1.402c.311.48.621.963.932 1.445l.309.48.084.133c.004.004.029.041.029.045-.26.385-.523.77-.783 1.154-.027.037-.051.076-.074.111-.24-.373-.479-.744-.715-1.117-.4-.635-.795-1.277-1.184-1.916-.434-.709-.855-1.418-1.264-2.141-.383-.674-.75-1.361-1.059-2.076-.301-.697-.563-1.408-.811-2.121.486.193.98.367 1.48.521.145.045.289.09.436.127l.063.018c.008 0 .014-.039.018-.049.018-.064.031-.129.045-.195.031-.125.051-.254.074-.381.205.428.436.844.701 1.236.215.314.445.621.686.92.521.656 1.074 1.283 1.643 1.898.463.494.934.984 1.408 1.465l.389.389c.006.006.039.031.037.041l-.031.053-.148.275-.588 1.068c-.18-.219-.361-.436-.541-.658l-1.125-1.361c-.314-.387-.637-.773-.953-1.16l-.186-.225"},"github":{"color":"#24292F","path":"M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"},"gitlab":{"color":"#FC6D26","path":"m23.6004 9.5927-.0337-.0862L20.3.9814a.851.851 0 0 0-.3362-.405.8748.8748 0 0 0-.9997.0539.8748.8748 0 0 0-.29.4399l-2.2055 6.748H7.5375l-2.2057-6.748a.8573.8573 0 0 0-.29-.4412.8748.8748 0 0 0-.9997-.0537.8585.8585 0 0 0-.3362.4049L.4332 9.5015l-.0325.0862a6.0657 6.0657 0 0 0 2.0119 7.0105l.0113.0087.03.0213 4.976 3.7264 2.462 1.8633 1.4995 1.1321a1.0085 1.0085 0 0 0 1.2197 0l1.4995-1.1321 2.4619-1.8633 5.006-3.7489.0125-.01a6.0682 6.0682 0 0 0 2.0094-7.003z"},"gmail":{"color":"#EA4335","path":"M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.273H1.636A1.636 1.636 0 0 1 0 19.366V5.457c0-2.023 2.309-3.178 3.927-1.964L5.455 4.64 12 9.548l6.545-4.91 1.528-1.145C21.69 2.28 24 3.434 24 5.457z"},"googlecalendar":{"color":"#1A73E8","path":"M18.316 5.684H24v12.632h-5.684V5.684zM5.684 24h12.632v-5.684H5.684V24zM18.316 5.684V0H1.895A1.894 1.894 0 0 0 0 1.895v16.421h5.684V5.684h12.632zm-7.207 6.25v-.065c.272-.144.5-.349.687-.617s.279-.595.279-.982c0-.379-.099-.72-.3-1.025a2.05 2.05 0 0 0-.832-.714 2.703 2.703 0 0 0-1.197-.257c-.6 0-1.094.156-1.481.467-.386.311-.65.671-.793 1.078l1.085.452c.086-.249.224-.461.413-.633.189-.172.445-.257.767-.257.33 0 .602.088.816.264a.86.86 0 0 1 .322.703c0 .33-.12.589-.36.778-.24.19-.535.284-.886.284h-.567v1.085h.633c.407 0 .748.109 1.02.327.272.218.407.499.407.843 0 .336-.129.614-.387.832s-.565.327-.924.327c-.351 0-.651-.103-.897-.311-.248-.208-.422-.502-.521-.881l-1.096.452c.178.616.505 1.082.977 1.401.472.319.984.478 1.538.477a2.84 2.84 0 0 0 1.293-.291c.382-.193.684-.458.902-.794.218-.336.327-.72.327-1.149 0-.429-.115-.797-.344-1.105a2.067 2.067 0 0 0-.881-.689zm2.093-1.931l.602.913L15 10.045v5.744h1.187V8.446h-.827l-2.158 1.557zM22.105 0h-3.289v5.184H24V1.895A1.894 1.894 0 0 0 22.105 0zm-3.289 23.5l4.684-4.684h-4.684V23.5zM0 22.105C0 23.152.848 24 1.895 24h3.289v-5.184H0v3.289z"},"googlegemini":{"color":"#8E75B2","path":"M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81"},"huggingface":{"color":"#FFB000","path":"M12.025 1.13c-5.77 0-10.449 4.647-10.449 10.378 0 1.112.178 2.181.503 3.185.064-.222.203-.444.416-.577a.96.96 0 0 1 .524-.15c.293 0 .584.124.84.284.278.173.48.408.71.694.226.282.458.611.684.951v-.014c.017-.324.106-.622.264-.874s.403-.487.762-.543c.3-.047.596.06.787.203s.31.313.4.467c.15.257.212.468.233.542.01.026.653 1.552 1.657 2.54.616.605 1.01 1.223 1.082 1.912.055.537-.096 1.059-.38 1.572.637.121 1.294.187 1.967.187.657 0 1.298-.063 1.921-.178-.287-.517-.44-1.041-.384-1.581.07-.69.465-1.307 1.081-1.913 1.004-.987 1.647-2.513 1.657-2.539.021-.074.083-.285.233-.542.09-.154.208-.323.4-.467a1.08 1.08 0 0 1 .787-.203c.359.056.604.29.762.543s.247.55.265.874v.015c.225-.34.457-.67.683-.952.23-.286.432-.52.71-.694.257-.16.547-.284.84-.285a.97.97 0 0 1 .524.151c.228.143.373.388.43.625l.006.04a10.3 10.3 0 0 0 .534-3.273c0-5.731-4.678-10.378-10.449-10.378M8.327 6.583a1.5 1.5 0 0 1 .713.174 1.487 1.487 0 0 1 .617 2.013c-.183.343-.762-.214-1.102-.094-.38.134-.532.914-.917.71a1.487 1.487 0 0 1 .69-2.803m7.486 0a1.487 1.487 0 0 1 .689 2.803c-.385.204-.536-.576-.916-.71-.34-.12-.92.437-1.103.094a1.487 1.487 0 0 1 .617-2.013 1.5 1.5 0 0 1 .713-.174m-10.68 1.55a.96.96 0 1 1 0 1.921.96.96 0 0 1 0-1.92m13.838 0a.96.96 0 1 1 0 1.92.96.96 0 0 1 0-1.92M8.489 11.458c.588.01 1.965 1.157 3.572 1.164 1.607-.007 2.984-1.155 3.572-1.164.196-.003.305.12.305.454 0 .886-.424 2.328-1.563 3.202-.22-.756-1.396-1.366-1.63-1.32q-.011.001-.02.006l-.044.026-.01.008-.03.024q-.018.017-.035.036l-.032.04a1 1 0 0 0-.058.09l-.014.025q-.049.088-.11.19a1 1 0 0 1-.083.116 1.2 1.2 0 0 1-.173.18q-.035.029-.075.058a1.3 1.3 0 0 1-.251-.243 1 1 0 0 1-.076-.107c-.124-.193-.177-.363-.337-.444-.034-.016-.104-.008-.2.022q-.094.03-.216.087-.06.028-.125.063l-.13.074q-.067.04-.136.086a3 3 0 0 0-.135.096 3 3 0 0 0-.26.219 2 2 0 0 0-.12.121 2 2 0 0 0-.106.128l-.002.002a2 2 0 0 0-.09.132l-.001.001a1.2 1.2 0 0 0-.105.212q-.013.036-.024.073c-1.139-.875-1.563-2.317-1.563-3.203 0-.334.109-.457.305-.454m.836 10.354c.824-1.19.766-2.082-.365-3.194-1.13-1.112-1.789-2.738-1.789-2.738s-.246-.945-.806-.858-.97 1.499.202 2.362c1.173.864-.233 1.45-.685.64-.45-.812-1.683-2.896-2.322-3.295s-1.089-.175-.938.647 2.822 2.813 2.562 3.244-1.176-.506-1.176-.506-2.866-2.567-3.49-1.898.473 1.23 2.037 2.16c1.564.932 1.686 1.178 1.464 1.53s-3.675-2.511-4-1.297c-.323 1.214 3.524 1.567 3.287 2.405-.238.839-2.71-1.587-3.216-.642-.506.946 3.49 2.056 3.522 2.064 1.29.33 4.568 1.028 5.713-.624m5.349 0c-.824-1.19-.766-2.082.365-3.194 1.13-1.112 1.789-2.738 1.789-2.738s.246-.945.806-.858.97 1.499-.202 2.362c-1.173.864.233 1.45.685.64.451-.812 1.683-2.896 2.322-3.295s1.089-.175.938.647-2.822 2.813-2.562 3.244 1.176-.506 1.176-.506 2.866-2.567 3.49-1.898-.473 1.23-2.037 2.16c-1.564.932-1.686 1.178-1.464 1.53s3.675-2.511 4-1.297c.323 1.214-3.524 1.567-3.287 2.405.238.839 2.71-1.587 3.216-.642.506.946-3.49 2.056-3.522 2.064-1.29.33-4.568 1.028-5.713-.624"},"jenkins":{"color":"#D24939","path":"M2.872 24h-.975a3.866 3.866 0 01-.07-.197c-.215-.666-.594-1.49-.692-2.154-.146-.984.78-1.039 1.374-1.465.915-.66 1.635-1.025 2.627-1.62.295-.179 1.182-.624 1.281-.829.201-.408-.345-.982-.49-1.3-.225-.507-.345-.937-.376-1.435-.824-.13-1.455-.627-1.844-1.185-.63-.925-1.066-2.635-.525-3.936.045-.103.254-.305.285-.463.06-.308-.105-.72-.12-1.048-.06-1.692.284-3.15 1.425-3.66.463-1.84 2.113-2.453 3.673-3.367.58-.342 1.224-.562 1.89-.807 2.372-.877 6.027-.712 7.994.783.836.633 2.176 1.97 2.656 2.939 1.262 2.555 1.17 6.825.287 9.934-.12.421-.29 1.032-.533 1.533-.168.35-.689 1.05-.625 1.36.064.314 1.19 1.17 1.432 1.395.434.422 1.26.975 1.324 1.5.07.557-.248 1.336-.41 1.875-.217.721-.436 1.441-.654 2.131H2.87zm11.104-3.54c-.545-.3-1.361-.622-2.065-.757-.87-.164-.78 1.188-.75 1.994.03.643.36 1.316.51 1.744.076.197.09.41.256.449.3.068 1.29-.326 1.575-.479.6-.328 1.064-.844 1.574-1.189.016-.17.016-.34.03-.508a2.648 2.648 0 00-1.095-.277c.314-.15.75-.15 1.035-.332l.016-.193c-.496-.03-.69-.254-1.021-.436zm7.454 2.935a17.78 17.78 0 00.465-1.752c.06-.287.215-.918.178-1.176-.059-.459-.684-.799-1.004-1.086-.584-.525-.95-.975-1.56-1.469-.249.375-.78.615-.983.914 1.447-.689 1.71 2.625 1.141 3.69.09.329.391.45.514.735l-.086.166h1.29c.013 0 .03 0 .044.014zm-6.634-.012c-.05-.074-.1-.135-.15-.209l-.301.195h.45zm2.77 0c.008-.209.018-.404.03-.598-.53.029-.825-.48-1.196-.527-.324-.045-.6.361-1.02.195-.095.105-.183.227-.284.316.154.18.295.375.424.584h.815c.014-.164.135-.285.3-.285.165 0 .284.121.284.27h.66zm2.116 0c-.314-.479-.947-.898-1.68-.555l-.03.541h1.71zm-8.51 0l-.104-.344c-.225-.72-.36-1.26-.405-1.68-.914-.436-1.875-.87-2.654-1.426-.15-.105-1.109-1.35-1.23-1.305-1.739.676-3.359 1.86-4.814 2.984.256.557.48 1.141.69 1.74h8.505zm8.265-2.113c-.029-.512-.164-1.56-.48-1.74-.66-.39-1.846.78-2.34.943.045.15.135.271.15.48.285-.074.645-.029.898.092-.299.03-.629.03-.824.164-.074.195.016.48-.029.764.69.197 1.5.303 2.385.332.164-.227.225-.645.211-1.082zm-4.08-.36c-.044.375.046.51.12.943 1.26.391 1.034-1.74-.135-.959zM8.76 19.5c-.45.457 1.27 1.082 1.814 1.115 0-.29.165-.564.135-.77-.65-.118-1.502-.042-1.945-.347zm5.565.215c0 .043-.061.03-.068.064.58.451 1.014.545 1.802.51.354-.262.67-.563 1.043-.807-.855.074-1.931.607-2.774.23zm3.42-17.726c-1.606-.906-4.35-1.591-6.076-.731-1.38.692-3.27 1.84-3.899 3.292.6 1.402-.166 2.686-.226 4.109-.018.757.36 1.42.391 2.242-.2.338-.825.38-1.26.356-.146-.729-.4-1.549-1.155-1.63-1.064-.116-1.845.764-1.89 1.683-.06 1.08.833 2.864 2.085 2.745.488-.046.608-.54 1.139-.54.285.57-.445.75-.523 1.154-.016.105.06.511.104.705.233.944.744 2.16 1.245 2.88.635.9 1.884 1.051 3.229 1.141.24-.525 1.125-.48 1.706-.346-.691-.27-1.336-.945-1.875-1.529-.615-.676-1.23-1.41-1.261-2.28 1.155 1.604 2.1 3 4.2 3.704 1.59.525 3.45-.254 4.664-1.109.51-.359.811-.93 1.17-1.439 1.35-1.936 1.98-4.71 1.846-7.394-.06-1.111-.06-2.221-.436-2.955-.389-.781-1.695-1.471-2.475-.781-.15-.764.63-1.23 1.545-.96-.66-.854-1.336-1.858-2.266-2.384zM13.58 14.896c.615 1.544 2.724 1.363 4.505 1.323-.084.194-.256.435-.465.515-.57.232-2.145.408-2.937-.012-.506-.27-.824-.873-1.102-1.227-.137-.172-.795-.608-.012-.609zm.164-.87c.893.464 2.52.517 3.731.48.066.267.066.593.068.913-1.55.08-3.386-.304-3.794-1.395h-.005zm6.675-.586c-.473.9-1.145 1.897-2.539 1.928-.023-.284-.045-.735 0-.904 1.064-.103 1.727-.646 2.543-1.017zm-.649-.667c-1.02.66-2.154 1.375-3.824 1.21-.351-.31-.485-1-.14-1.458.181.313.06.885.57.97.944.165 2.038-.579 2.73-.84.42-.713-.046-.976-.42-1.433-.782-.93-1.83-2.1-1.802-3.51.314-.224.346.346.391.45.404.96 1.424 2.175 2.174 3 .18.21.48.39.51.524.092.39-.254.854-.209 1.11zm-13.439-.675c-.314-.184-.393-.99-.768-1.01-.535-.03-.438 1.05-.436 1.68-.37-.33-.435-1.365-.164-1.89-.308-.15-.445.164-.618.284.22-1.59 2.34-.734 1.99.96zM4.713 5.995c-.685.756-.54 2.174-.459 3.188 1.244-.785 2.898.06 2.883 1.394.595-.016.223-.744.115-1.215-.353-1.528.592-3.187.041-4.59-1.064.084-1.939.52-2.578 1.215zm9.12 1.113c.307.562.404 1.148.84 1.57.195.19.574.424.387.95-.045.121-.365.391-.551.45-.674.195-2.254.03-1.721-.81.563.015 1.314.36 1.732-.045-.314-.524-.885-1.53-.674-2.13zm6.198-.013h.068c.33.668.6 1.375 1.004 1.965-.27.628-2.053 1.19-2.023.057.39-.17 1.05-.035 1.395-.25-.193-.556-.48-1.006-.434-1.771zm-6.927-1.617c-1.422-.33-2.131.592-2.56 1.553-.384-.094-.231-.615-.135-.883.255-.701 1.28-1.633 2.119-1.506.359.057.848.386.576.834zM9.642 1.593c-1.56.44-3.56 1.574-4.2 2.974.495-.07.84-.321 1.33-.351.186-.016.428.074.641.015.424-.104.78-1.065 1.102-1.41.31-.345.685-.496.94-.81.167-.09.409-.074.42-.33-.073-.075-.15-.135-.232-.105v.017z"},"obsidian":{"color":"#7C3AED","path":"M19.355 18.538a68.967 68.959 0 0 0 1.858-2.954.81.81 0 0 0-.062-.9c-.516-.685-1.504-2.075-2.042-3.362-.553-1.321-.636-3.375-.64-4.377a1.707 1.707 0 0 0-.358-1.05l-3.198-4.064a3.744 3.744 0 0 1-.076.543c-.106.503-.307 1.004-.536 1.5-.134.29-.29.6-.446.914l-.31.626c-.516 1.068-.997 2.227-1.132 3.59-.124 1.26.046 2.73.815 4.481.128.011.257.025.386.044a6.363 6.363 0 0 1 3.326 1.505c.916.79 1.744 1.922 2.415 3.5zM8.199 22.569c.073.012.146.02.22.02.78.024 2.095.092 3.16.29.87.16 2.593.64 4.01 1.055 1.083.316 2.198-.548 2.355-1.664.114-.814.33-1.735.725-2.58l-.01.005c-.67-1.87-1.522-3.078-2.416-3.849a5.295 5.295 0 0 0-2.778-1.257c-1.54-.216-2.952.19-3.84.45.532 2.218.368 4.829-1.425 7.531zM5.533 9.938c-.023.1-.056.197-.098.29L2.82 16.059a1.602 1.602 0 0 0 .313 1.772l4.116 4.24c2.103-3.101 1.796-6.02.836-8.3-.728-1.73-1.832-3.081-2.55-3.831zM9.32 14.01c.615-.183 1.606-.465 2.745-.534-.683-1.725-.848-3.233-.716-4.577.154-1.552.7-2.847 1.235-3.95.113-.235.223-.454.328-.664.149-.297.288-.577.419-.86.217-.47.379-.885.46-1.27.08-.38.08-.72-.014-1.043-.095-.325-.297-.675-.68-1.06a1.6 1.6 0 0 0-1.475.36l-4.95 4.452a1.602 1.602 0 0 0-.513.952l-.427 2.83c.672.59 2.328 2.316 3.335 4.711.09.21.175.43.253.653z"},"openai":{"color":"#111111","path":"M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"},"sentry":{"color":"#362D59","path":"M13.91 2.505c-.873-1.448-2.972-1.448-3.844 0L6.904 7.92a15.478 15.478 0 0 1 8.53 12.811h-2.221A13.301 13.301 0 0 0 5.784 9.814l-2.926 5.06a7.65 7.65 0 0 1 4.435 5.848H2.194a.365.365 0 0 1-.298-.534l1.413-2.402a5.16 5.16 0 0 0-1.614-.913L.296 19.275a2.182 2.182 0 0 0 .812 2.999 2.24 2.24 0 0 0 1.086.288h6.983a9.322 9.322 0 0 0-3.845-8.318l1.11-1.922a11.47 11.47 0 0 1 4.95 10.24h5.915a17.242 17.242 0 0 0-7.885-15.28l2.244-3.845a.37.37 0 0 1 .504-.13c.255.14 9.75 16.708 9.928 16.9a.365.365 0 0 1-.327.543h-2.287c.029.612.029 1.223 0 1.831h2.297a2.206 2.206 0 0 0 1.922-3.31z"},"slack":{"color":"#4A154B","path":"M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z"},"windowsterminal":{"color":"#4D4D4D","path":"M8.165 6V3h7.665v3H8.165zm-.5-3H1c-.55 0-1 .45-1 1v2h7.665V3zM23 3h-6.67v3H24V4c0-.55-.45-1-1-1zM0 6.5h24V20c0 .55-.45 1-1 1H1c-.55 0-1-.45-1-1V6.5zM11.5 18c0 .3.2.5.5.5h8c.3 0 .5-.2.5-.5v-1.5c0-.3-.2-.5-.5-.5h-8c-.3 0-.5.2-.5.5V18zm-5.2-4.55l-3.1 3.1c-.25.25-.25.6 0 .8l.9.9c.25.25.6.25.8 0l4.4-4.4a.52.52 0 0 0 0-.8l-4.4-4.4c-.2-.2-.6-.2-.8 0l-.9.9c-.25.2-.25.55 0 .8l3.1 3.1z"},"ycombinator":{"color":"#F0652F","path":"M0 24V0h24v24H0zM6.951 5.896l4.112 7.708v5.064h1.583v-4.972l4.148-7.799h-1.749l-2.457 4.875c-.372.745-.688 1.434-.688 1.434s-.297-.708-.651-1.434L8.831 5.896h-1.88z"}};
+const UI_ICONS = {
+	play: '<path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/>',
+	pause: '<path d="M8.5 5.5v13M15.5 5.5v13" stroke-width="3"/>',
+	beatPrevious: '<path d="M15 6l-6 6 6 6"/>',
+	beatNext: '<path d="M9 6l6 6-6 6"/>',
+	chapterPrevious: '<path d="M5 5.5v13M19 6l-6 6 6 6M13 6l-6 6 6 6"/>',
+	chapterNext: '<path d="M19 5.5v13M5 6l6 6-6 6M11 6l6 6-6 6"/>',
+	speed: '<path d="M4.6 17.5a8.5 8.5 0 1 1 14.8 0"/><path d="M12 14l4-4.5"/>',
+	volume: '<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M15.5 9.2a4 4 0 0 1 0 5.6M18.3 6.5a7.8 7.8 0 0 1 0 11"/>',
+	muted: '<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/>',
+	external: '<path d="M14 4h6v6M20 4l-8.5 8.5M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+	goto: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+	check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+	cross: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
+	warning: '<path d="M12 3.8L2.8 19.5h18.4z"/><path d="M12 10v4.2M12 17v.1"/>',
+	chevron: '<path d="M9 6l6 6-6 6"/>',
+	branch: '<circle cx="6.5" cy="5.5" r="2"/><circle cx="6.5" cy="18.5" r="2"/><circle cx="17.5" cy="7.5" r="2"/><path d="M6.5 7.5v9M17.5 9.5c0 4.5-6 3.5-10 7.5"/>',
+	sunrise: '<path d="M3 19h18M7 19a5 5 0 0 1 10 0M12 4v5M4.6 11.6l1.6 1.6M19.4 11.6l-1.6 1.6M9.5 6.5L12 4l2.5 2.5"/>',
+	moon: '<path d="M19.5 14.5A8 8 0 1 1 9.5 4.5a6.4 6.4 0 0 0 10 10z"/>',
+	news: '<path d="M4 5h12.5v14H6a2 2 0 0 1-2-2z"/><path d="M16.5 9H20v8a2 2 0 0 1-2 2M7.5 9h5.5M7.5 12.5h5.5M7.5 16h3.5"/>',
+	checklist: '<path d="M4 6.5l1.6 1.6L8.5 5M11.5 7H20M4 12.5l1.6 1.6 2.9-3.1M11.5 13H20M11.5 19H20"/><path d="M5.5 18.5h1.5v1.5H5.5z"/>',
+	pipelineSuccess: '<circle cx="12" cy="12" r="8.5"/><path d="M8.4 12.3l2.5 2.5 4.8-5"/>',
+	pipelineFailed: '<circle cx="12" cy="12" r="8.5"/><path d="M9.3 9.3l5.4 5.4M14.7 9.3l-5.4 5.4"/>',
+	pipelineRunning: '<circle cx="12" cy="12" r="8.5" stroke-dasharray="4 2.6"/><path d="M12 7.8V12l2.8 1.8"/>',
+	eye: '<path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/>',
+	ticket: '<path d="M3.5 7.5h17V10a2 2 0 0 0 0 4v2.5h-17V14a2 2 0 0 0 0-4z"/><path d="M14.5 8v1.5M14.5 11.25v1.5M14.5 14.5V16"/>',
+	terminal: '<path d="M3.5 5h17v14h-17z"/><path d="M7 9.5l3 2.5-3 2.5M12.5 15h4.5"/>',
+	thumbUp: '<path d="M7.5 11v9h-3v-9zM7.5 11l3.8-6.6a1.9 1.9 0 0 1 3.4 1.6l-1 4h5a2 2 0 0 1 2 2.4l-1.2 5.8a2 2 0 0 1-2 1.8H7.5"/>',
+	thumbDown: '<g transform="rotate(180 12 12)"><path d="M7.5 11v9h-3v-9zM7.5 11l3.8-6.6a1.9 1.9 0 0 1 3.4 1.6l-1 4h5a2 2 0 0 1 2 2.4l-1.2 5.8a2 2 0 0 1-2 1.8H7.5"/></g>',
+	note: '<path d="M6 3.5h8l4 4v13H6z"/><path d="M14 3.5v4h4"/>',
+	pencil: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
+	arrowUp: '<path d="M12 19V5M6.5 10.5L12 5l5.5 5.5"/>',
+	download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
+	thread: '<path d="M4.5 5.5h15v10h-8l-4.5 3.5v-3.5H4.5z"/>',
+};
+function icon(name, size = 20, label = '') {
+	const labelled = label ? `role="img" aria-label="${escapeHtml(label)}"` : 'aria-hidden="true"';
+	const brand = BRAND_ICONS[name];
+	if (brand) return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="${brand.color}" ${labelled}><path d="${brand.path}"/></svg>`;
+	return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${labelled}>${UI_ICONS[name] ?? UI_ICONS.terminal}</svg>`;
+}
+const APP_NAMES = { gitlab: 'GitLab', github: 'GitHub', gerrit: 'Gerrit', gmail: 'Gmail', googlecalendar: 'Google Calendar', claude: 'Claude', anthropic: 'Anthropic', openai: 'OpenAI', obsidian: 'Obsidian', slack: 'Slack', googlegemini: 'Google Gemini', ycombinator: 'Hacker News', huggingface: 'Hugging Face', jenkins: 'Jenkins', sentry: 'Sentry', orca: 'Orca', pi: 'Pi' };
+const appIcon = (app, size = 20) => icon(BRAND_ICONS[app] ? app : app === 'orca' || app === 'pi' ? 'terminal' : 'news', size);
+function iconLink(url, label, iconName = 'external', className = '') {
+	const href = safeUrl(url);
+	if (!href) return '';
+	const graphic = iconName.startsWith('<') ? iconName : icon(iconName, 20);
+	return `<a class="icon-link ${className}" href="${escapeHtml(href)}" target="_blank" rel="noopener" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">${graphic}</a>`;
+}
+
+const CHAPTER_ICONS = { calendar: 'googlecalendar', work: 'gitlab', overnight: 'moon', slack: 'slack', mail: 'gmail', triage: 'obsidian', retro: 'claude', instructions: 'github', news: 'news', actions: 'checklist' };
+const QUIET_HOLD_SECONDS = 2;
+const chapters = brief.chapters.map((chapter) => chapter.status === 'quiet' || chapter.status === 'unavailable' || !chapter.beats?.length
+	? { ...chapter, beats: chapter.beats?.length ? chapter.beats : [{ say: chapter.title, note: chapter.status === 'unavailable' ? 'Unavailable' : 'Quiet', targets: [], hold: QUIET_HOLD_SECONDS }] }
+	: chapter);
+const chapterOfType = (type) => chapters.find((chapter) => chapter.type === type);
+const sourceProblems = (chapter) => (brief.sources ?? []).filter((source) => source.status !== 'ok' && source.chapters?.includes(chapter.id));
+const problemText = (problems) => problems.map((source) => `${source.name}: ${source.reason ?? source.status}`).join('; ');
+
+/* Choices live in memory and download as choices.json from the action points. */
+const choices = { news: {}, triage: {}, retro: { approved: {}, confirmed: false }, actions: {}, autoHandled: {} };
+for (const group of chapterOfType('triage')?.data?.groups ?? []) for (const item of group.items) choices.triage[item.id] = { project: item.project ?? '', heading: item.heading ?? '', priority: item.priority ?? '' };
+for (const item of chapterOfType('actions')?.data?.items ?? []) choices.actions[item.id] = { done: false, handoff: item.handoff ?? 'you' };
+for (const item of chapterOfType('work')?.data?.autoHandled ?? []) choices.autoHandled[item.id] = true;
+function exportedChoices() {
+	const retroItems = chapterOfType('retro')?.data?.items ?? [];
+	return {
+		date: brief.date,
+		exported: new Date().toISOString(),
+		triage: (chapterOfType('triage')?.data?.groups ?? []).flatMap((group) => group.items.map((item) => ({ id: item.id, note: group.note, text: item.text, ...choices.triage[item.id] }))),
+		retroSessions: {
+			confirmed: choices.retro.confirmed,
+			sessions: retroItems.filter((item) => choices.retro.approved[item.id]).map((item) => ({ id: item.id, title: item.title, ...item.session })),
+		},
+		news: (chapterOfType('news')?.data?.items ?? []).filter((item) => choices.news[item.id]).map((item) => ({ id: item.id, title: item.title, url: item.url, vote: choices.news[item.id] })),
+		actions: (chapterOfType('actions')?.data?.items ?? []).map((item) => ({ id: item.id, text: item.text, ...choices.actions[item.id] })),
+		autoHandled: (chapterOfType('work')?.data?.autoHandled ?? []).map((item) => ({ id: item.id, text: item.text, proposal: item.proposal, enabled: choices.autoHandled[item.id] })),
+	};
+}
+function choiceSummary() {
+	const exported = exportedChoices();
+	const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
+	const agentCount = exported.actions.filter((item) => item.handoff === 'agent').length;
+	return `${plural(exported.news.length, 'news vote')} · ${plural(exported.retroSessions.sessions.length, 'fix session')}${exported.retroSessions.confirmed ? ' confirmed' : ''} · ${plural(agentCount, 'agent handoff')} · ${plural(exported.triage.length, 'capture')} filed`;
+}
+function downloadChoices() {
+	const blob = new Blob([JSON.stringify(exportedChoices(), null, 2)], { type: 'application/json' });
+	const anchor = document.createElement('a');
+	anchor.href = URL.createObjectURL(blob);
+	anchor.download = `morning-brief-choices-${brief.date}.json`;
+	document.body.append(anchor);
+	anchor.click();
+	anchor.remove();
+	setTimeout(() => URL.revokeObjectURL(anchor.href), 1000);
+	const button = stage.querySelector('[data-action="save"]');
+	if (button) { button.classList.add('done'); button.innerHTML = `${icon('check', 18)} Saved`; }
+}
+
+const AVATAR_FILLS = ['var(--brand-deep)', 'var(--slack)', 'var(--ink)', 'var(--github)'];
+const avatarFill = (name) => AVATAR_FILLS[[...String(name)].reduce((sum, character) => sum + character.charCodeAt(0), 0) % AVATAR_FILLS.length];
+const minutesOf = (time) => { const [hours, minutes] = String(time ?? '0:0').split(':').map(Number); return hours * 60 + (minutes || 0); };
+const STATE_FILLS = { ready: 'var(--fill-ready)', review: 'var(--fill-review)', draft: 'var(--fill-draft)', failing: 'var(--fill-failing)', progress: 'var(--fill-progress)', local: 'var(--fill-draft)', merged: 'var(--fill-merged)', stale: 'var(--fill-progress)' };
+const BOARD_COLUMNS = [
+	{ id: 'local', name: 'Local', states: ['local', 'progress'] },
+	{ id: 'draft', name: 'Draft', states: ['draft'] },
+	{ id: 'review', name: 'In review', states: ['review', 'failing', 'stale'] },
+	{ id: 'ready', name: 'Ready', states: ['ready'] },
+	{ id: 'merged', name: 'Merged', states: ['merged'] },
+];
+// An unknown state still shows, in the first column.
+const boardColumnOf = (state) => BOARD_COLUMNS.find((column) => column.states.includes(state)) ?? BOARD_COLUMNS[0];
+const PIPELINE_ICONS = { success: ['pipelineSuccess', 'var(--done)', 'passed'], failed: ['pipelineFailed', 'var(--fail)', 'failed'], running: ['pipelineRunning', 'var(--brand-deep)', 'running'] };
+const PRIORITIES = ['highest', 'high', 'medium', 'low', 'lowest'];
+const INK = '#16385c';
+
+/* Event text is white or ink, whichever contrasts more with the calendar colour. */
+function relativeLuminance(hex) {
+	const channels = String(hex).match(/^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+	if (!channels) return undefined;
+	return channels.slice(1).map((channel) => parseInt(channel, 16) / 255)
+		.map((value) => value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4)
+		.reduce((total, value, index) => total + value * [0.2126, 0.7152, 0.0722][index], 0);
+}
+function textOn(hex) {
+	const background = relativeLuminance(hex);
+	if (background === undefined) return INK;
+	const contrast = (other) => (Math.max(background, other) + 0.05) / (Math.min(background, other) + 0.05);
+	return contrast(1) >= contrast(relativeLuminance(INK)) ? '#ffffff' : INK;
+}
+
+/* Chapter renderers, keyed by chapter type. Each returns markup for the sheet body. */
+const RENDERERS = {
+	calendar(data, chapter) {
+		const calendars = new Map((data.calendars ?? []).map((calendar) => [calendar.id, calendar]));
+		const colorOf = (event) => calendars.get(event.calendarId)?.color ?? '#039be5';
+		const eventStyle = (event) => `--event-color:${escapeHtml(colorOf(event))};--event-text:${textOn(colorOf(event))}`;
+		const events = data.events ?? [];
+		// A day without events is a wasted column; the focus day always stays.
+		const days = (data.days ?? []).filter((day) => day.focus || events.some((event) => event.day === day.id));
+		const timed = events.filter((event) => !event.allDay && event.start && event.end);
+		const nowMatch = String(brief.now ?? brief.window?.until ?? '').match(/T(\d\d):(\d\d)/);
+		const nowHours = nowMatch ? Number(nowMatch[1]) + Number(nowMatch[2]) / 60 : undefined;
+		const firstHour = Math.min(8, ...timed.map((event) => Math.floor(minutesOf(event.start) / 60)));
+		const lastHour = Math.max(18, ...timed.map((event) => Math.ceil(minutesOf(event.end) / 60)));
+		const allDayEvents = events.filter((event) => event.allDay);
+		// The week view fits the sheet so the stage never scrolls; legend, day heads and padding take the rest.
+		const chromeHeight = 150 + (allDayEvents.length ? 40 : 0);
+		const hourHeight = Math.max(26, Math.min(48, Math.floor((stage.clientHeight - chromeHeight) / (lastHour - firstHour))));
+		const minimumBlockHeight = 16;
+		const trackHeight = (lastHour - firstHour) * hourHeight;
+		const hours = Array.from({ length: lastHour - firstHour + 1 }, (_, index) => firstHour + index);
+		const eventTitle = (event) => event.busyOnly ? 'Busy' : event.title;
+		const focusIndex = Math.max(0, days.findIndex((day) => day.focus));
+		const topOf = (event) => (minutesOf(event.start) / 60 - firstHour) * hourHeight;
+
+		const dayColumn = (day, dayIndex) => {
+			const past = dayIndex < focusIndex;
+			const dayEvents = timed.filter((event) => event.day === day.id).sort((left, right) => minutesOf(left.start) - minutesOf(right.start) || minutesOf(right.end) - minutesOf(left.end));
+			// Lanes follow the drawn extent, so a short block stretched to the minimum height never covers the next one.
+			const drawnEnd = (event) => Math.max(minutesOf(event.end), minutesOf(event.start) + (minimumBlockHeight + 1) / hourHeight * 60);
+			const laneEnds = [];
+			for (const event of dayEvents) {
+				let lane = laneEnds.findIndex((end) => end <= minutesOf(event.start));
+				if (lane < 0) { lane = laneEnds.length; laneEnds.push(0); }
+				laneEnds[lane] = drawnEnd(event);
+				event.lane = lane;
+			}
+			const blocks = dayEvents.map((event) => {
+				const overlapping = dayEvents.filter((other) => minutesOf(other.start) < drawnEnd(event) && drawnEnd(other) > minutesOf(event.start));
+				const laneCount = Math.max(...overlapping.map((other) => other.lane)) + 1;
+				const height = Math.max((minutesOf(event.end) - minutesOf(event.start)) / 60 * hourHeight - 3, minimumBlockHeight);
+				const width = 100 / laneCount;
+				const classes = ['calendar-event', event.busyOnly && 'busy', height < 40 && 'short', height < 22 && 'tiny', laneCount > 1 && 'narrow', event.id === chapter.selected && 'selected'].filter(Boolean).join(' ');
+				const label = `${eventTitle(event)}, ${event.start} to ${event.end}`;
+				// Tall blocks wrap the title over the lines that fit above the time.
+				const titleLines = height < 40 ? 1 : Math.max(1, Math.floor((height - 24) / 18));
+				return `<button class="${classes}" type="button" data-event="${escapeHtml(event.id)}" ${target(`event-${event.id}`)}
+					aria-label="${escapeHtml(label)}" aria-pressed="${event.id === chapter.selected}" title="${escapeHtml(label)}"
+					style="${eventStyle(event)};--title-lines:${titleLines};top:${topOf(event) + 1}px;height:${height}px;left:calc(${event.lane * width}% + 2px);width:calc(${width}% - 4px)">
+					<span class="event-title">${escapeHtml(eventTitle(event))}</span><span class="event-time">${escapeHtml(event.start)}${height < 40 ? '' : `–${escapeHtml(event.end)}`}</span>
+				</button>`;
+			}).join('');
+			const nowLine = day.focus && nowHours !== undefined && nowHours >= firstHour && nowHours <= lastHour
+				? `<div class="now-line" style="top:${(nowHours - firstHour) * hourHeight}px" role="img" aria-label="Now"></div>` : '';
+			return `<div class="day-track ${past ? 'past' : ''}" ${target(`day-${day.id}`)} style="height:${trackHeight}px">${hours.map((hour) => `<div class="hour-line" style="top:${(hour - firstHour) * hourHeight}px"></div>`).join('')}${blocks}${nowLine}</div>`;
+		};
+
+		const selected = timed.find((event) => event.id === chapter.selected && days.some((day) => day.id === event.day));
+		const popover = selected ? (() => {
+			const dayIndex = days.findIndex((day) => day.id === selected.day);
+			const day = days[dayIndex];
+			// Day column edges in the calendar body grid: gutter, then equal columns separated by the day gap.
+			const columnWidth = `((100% - var(--gutter) - ${days.length} * var(--day-gap)) / ${days.length})`;
+			const columnLeft = `(var(--gutter) + var(--day-gap) + ${dayIndex} * (${columnWidth} + var(--day-gap)))`;
+			const side = dayIndex < days.length - 1 ? `left:calc(${columnLeft} + ${columnWidth} + 10px)` : `right:calc(100% - ${columnLeft} + 10px)`;
+			const top = Math.max(0, Math.min(topOf(selected), trackHeight - 170)) + 10;
+			return `
+			<aside class="event-popover" ${target('event-detail')} style="${side};top:${top}px" aria-label="Selected event">
+				<div class="head"><span class="swatch" style="--event-color:${escapeHtml(colorOf(selected))}"></span>${escapeHtml(calendars.get(selected.calendarId)?.name ?? '')}
+					<span class="actions">${iconLink(selected.url, 'Open in Google Calendar')}<button class="icon-link" type="button" data-action="close-event" aria-label="Close event" title="Close event">${icon('cross', 18)}</button></span></div>
+				<h2>${escapeHtml(eventTitle(selected))}</h2>
+				<div class="meta">${escapeHtml(`${day.label} ${day.date}`)} · ${escapeHtml(selected.start)}–${escapeHtml(selected.end)}</div>
+				${selected.place ? `<div>${escapeHtml(selected.place)}</div>` : ''}
+				${(selected.notes ?? []).map((note) => `<div class="note">${escapeHtml(note)}</div>`).join('')}
+			</aside>`; })() : '';
+
+		return `
+			<ul class="calendar-legend">${[...calendars.values()].map((calendar) => `<li><span class="swatch" style="--event-color:${escapeHtml(calendar.color)}"></span>${escapeHtml(calendar.name)}${calendar.busyOnly ? ' <span class="mono" style="color:var(--ink-soft);font-size:13px">busy only</span>' : ''}</li>`).join('')}</ul>
+			<div class="calendar-grid" style="--day-count:${days.length}">
+				<div class="calendar-days"><span></span>${days.map((day, index) => `<div class="calendar-day-head ${day.focus ? 'focus' : ''} ${index < focusIndex ? 'past' : ''}"><span class="weekday">${escapeHtml(day.label)}</span><span class="date">${escapeHtml(day.date)}</span></div>`).join('')}</div>
+				${allDayEvents.length ? `<div class="calendar-all-day"><span class="label">all day</span>${days.map((day) => `<div class="all-day-cell">${allDayEvents.filter((event) => event.day === day.id).map((event) => `<button class="all-day-chip" type="button" data-event="${escapeHtml(event.id)}" ${target(`event-${event.id}`)} style="${eventStyle(event)}" title="${escapeHtml(event.title)}">${escapeHtml(event.title)}</button>`).join('')}</div>`).join('')}</div>` : ''}
+				<div class="calendar-body">
+					<div class="hour-labels" style="height:${trackHeight}px">${hours.map((hour) => `<span class="hour-label" style="top:${(hour - firstHour) * hourHeight}px">${String(hour).padStart(2, '0')}:00</span>`).join('')}</div>
+					${days.map(dayColumn).join('')}
+					${popover}
+				</div>
+			</div>`;
+	},
+
+	work(data, chapter) {
+		const scopes = [...new Set((data.projects ?? []).map((project) => project.scope))];
+		if (!scopes.includes(chapter.scope)) chapter.scope = scopes.includes('work') ? 'work' : scopes[0];
+		const scopeIcon = { work: 'gitlab', personal: 'github' };
+		const openCount = (scope) => (data.projects ?? []).filter((project) => project.scope === scope).flatMap((project) => project.cards).filter((card) => card.state !== 'merged').length;
+		const card = (item, project, column) => {
+			const pipeline = item.pipeline ? PIPELINE_ICONS[item.pipeline.status] : undefined;
+			const ticketWrong = item.ticket?.expected && item.ticket.column !== item.ticket.expected;
+			const ticketLabel = item.ticket ? `KanbanFlow ${item.ticket.ref}: ${item.ticket.column}${ticketWrong ? `, should be ${item.ticket.expected}` : ''}` : '';
+			// Merge request, pull request and commit refs read as refs; a long one is a branch name.
+			const isBranch = String(item.ref).length > 8;
+			// The column already names the usual state; only a different one is written out.
+			const stateWord = item.state === column.states[0] ? '' : data.states?.[item.state] ?? item.state;
+			const detail = [stateWord, item.author, item.pipeline?.job].filter(Boolean).join(' · ');
+			return `
+				<li class="work-card" ${target(`card-${item.id}`)} style="--state-fill:${STATE_FILLS[item.state] ?? 'var(--fill-draft)'}">
+					<div class="card-project">${appIcon(project.app, 14)}<span>${escapeHtml(project.name)}</span></div>
+					<div class="ref" title="${escapeHtml(isBranch ? `Branch ${item.ref}` : item.ref)}">${isBranch ? icon('branch', 15) : ''}<span>${escapeHtml(item.ref)}</span></div>
+					<div class="title" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</div>
+					${detail ? `<div class="state">${escapeHtml(detail)}</div>` : ''}
+					<div class="card-foot">
+						${item.local ? `<span class="local" aria-label="${escapeHtml(`${item.local.uncommitted ?? 0} uncommitted files, ${item.local.unpushed ?? 0} unpushed commits`)}">${item.local.uncommitted ? `<span title="Uncommitted files">${icon('pencil', 14)}${escapeHtml(item.local.uncommitted)}</span>` : ''}${item.local.unpushed ? `<span title="Unpushed commits">${icon('arrowUp', 14)}${escapeHtml(item.local.unpushed)}</span>` : ''}</span>` : ''}
+						<span class="links">
+							${iconLink(item.url, `Open ${item.ref} in ${APP_NAMES[project.app] ?? project.app}`, BRAND_ICONS[project.app] ? project.app : 'external')}
+							${pipeline ? iconLink(item.pipeline.url, `Pipeline ${pipeline[2]}`, `<span style="color:${pipeline[1]}">${icon(pipeline[0], 20)}</span>`) : ''}
+							${item.ticket ? iconLink(item.ticket.url, ticketLabel, 'ticket', ticketWrong ? 'warn' : '') : ''}
+							${item.session ? iconLink(item.session.url, `Open live session in ${item.session.label}`, 'terminal') : ''}
+						</span>
+					</div>
+				</li>`;
+		};
+		const items = (data.projects ?? []).filter((project) => project.scope === chapter.scope).flatMap((project) => project.cards.map((item) => ({ item, project })));
+		const columns = BOARD_COLUMNS.map((column) => ({ column, cards: items.filter(({ item }) => boardColumnOf(item.state) === column) }));
+		// Busy columns widen and wrap their cards in pairs; empty ones stay narrow but keep their place.
+		const boardTracks = columns.map(({ cards }) => cards.length ? `minmax(0, ${Math.min(3, Math.ceil(cards.length / 2))}fr)` : 'minmax(96px, 0.6fr)').join(' ');
+		return `
+			${scopes.length > 1 ? `<div class="work-top"><div class="segmented" role="group" aria-label="Scope">${scopes.map((scope) => `<button type="button" data-scope="${escapeHtml(scope)}" aria-pressed="${scope === chapter.scope}">${icon(scopeIcon[scope] ?? 'terminal', 16)}${escapeHtml(scope[0].toUpperCase() + scope.slice(1))} <span class="mono">${openCount(scope)}</span></button>`).join('')}</div></div>` : ''}
+			<div class="board" style="--board-columns:${boardTracks}">${columns.map(({ column, cards }) => `
+				<section class="board-column ${cards.length ? '' : 'empty'}" ${target(`column-${column.id}`)} aria-label="${escapeHtml(column.name)}">
+					<div class="board-head"><span>${escapeHtml(column.name)}</span>${cards.length ? `<span class="count">${cards.length}</span>` : ''}</div>
+					<ul class="board-cards">${cards.map(({ item, project }) => card(item, project, column)).join('')}</ul>
+				</section>`).join('')}
+			</div>
+			${(data.autoHandled ?? []).map((item) => `
+				<label class="quiet-toggle" title="${escapeHtml(item.proposal)}" ${target(`auto-${item.id}`)}>
+					<span class="switch"><input type="checkbox" data-auto="${escapeHtml(item.id)}" ${choices.autoHandled[item.id] ? 'checked' : ''} aria-label="${escapeHtml(`Handle automatically: ${item.text}. ${item.proposal}`)}"><span></span></span>
+					<span>${escapeHtml(item.proposal)}: ${escapeHtml(item.text)}</span>
+				</label>`).join('')}
+			${data.quiet?.length ? `<p class="muted-line">Quiet: ${data.quiet.map(escapeHtml).join(', ')}</p>` : ''}`;
+	},
+
+	overnight(data) {
+		const OUTCOMES = { ok: ['pipelineSuccess', 'var(--done)', 'Succeeded'], fail: ['pipelineFailed', 'var(--fail)', 'Failed'], check: ['eye', 'var(--ink)', 'Needs a check'] };
+		return `${data.away ? `<p class="away-line">${icon('moon', 16)}<span>Away ${escapeHtml(data.away.from)} to ${escapeHtml(data.away.to)}</span></p>` : ''}<ul class="row-list">${(data.runs ?? []).map((run) => {
+			const [iconName, color, label] = OUTCOMES[run.outcome] ?? OUTCOMES.ok;
+			return `
+			<li class="run ${escapeHtml(run.outcome)}" ${target(run.id)}>
+				<span style="color:${color}">${icon(iconName, 22, label)}</span>
+				<div><div class="title">${escapeHtml(run.title)}</div>${run.detail ? `<div class="detail">${escapeHtml(run.detail)}</div>` : ''}</div>
+				<span class="mono">${escapeHtml(run.when)}</span>
+				<span class="mono duration">${escapeHtml(run.duration ?? '')}</span>
+				${iconLink(run.url, `Open ${run.title} output`) || '<span></span>'}
+			</li>`; }).join('')}</ul>`;
+	},
+
+	slack(data, chapter) {
+		const mentionize = (text) => escapeHtml(text).replace(/(^|\s)(@[\w.\-]+)/g, '$1<span class="mention">$2</span>');
+		const message = (item, waiting) => `
+			<li class="slack-message ${waiting ? 'waiting' : ''}" ${target(`message-${item.id}`)}>
+				<span class="avatar" style="background:${avatarFill(item.author)}" aria-hidden="true">${escapeHtml([...String(item.author)][0] ?? '?')}</span>
+				<div style="min-width:0"><div class="who"><span class="name">${escapeHtml(item.author)}</span><span class="meta">${escapeHtml(item.channel)} · ${escapeHtml(item.when)}</span></div><div class="text">${mentionize(item.text)}</div>${item.handledBy ? `<span class="chip owner-chip">${icon('check', 14)}${escapeHtml(item.handledBy)} is on it</span>` : ''}</div>
+				<div class="side">${item.replies ? `<span title="${escapeHtml(item.replies)} replies">${icon('thread', 16)}</span>${escapeHtml(item.replies)}` : ''}${iconLink(item.url, 'Open in Slack')}</div>
+			</li>`;
+		const section = (title, items, waiting) => items?.length ? `<section class="slack-section"><h2 class="group-title">${title}</h2><ul class="row-list">${items.map((item) => message(item, waiting)).join('')}</ul></section>` : '';
+		return `
+			${section('Waiting on you', data.unaddressed, true)}
+			${section('Worth knowing', data.worthKnowing, false)}
+			${data.addressedSummary ? `
+			<section class="slack-section handled" ${target('slack-addressed')}>
+				<p>${icon('check', 16)}<span>${escapeHtml(data.addressedSummary)}</span></p>
+				${data.addressed?.length ? `<details data-disclosure="slack" ${chapter.disclosureOpen ? 'open' : ''}><summary>${icon('chevron', 16)}${escapeHtml(data.addressed.length)} handled threads</summary>
+					<ul class="handled-list">${data.addressed.map((item) => `<li><span class="mono" style="font-size:13px">${escapeHtml(item.when)}</span><span title="${escapeHtml(item.text)}"><strong>${escapeHtml(item.author)}</strong> ${escapeHtml(item.text)}</span>${iconLink(item.url, 'Open in Slack') || '<span></span>'}</li>`).join('')}</ul></details>` : ''}
+			</section>` : ''}
+			${data.skipped ? `<p class="muted-line">${escapeHtml(data.skipped)} messages skipped as noise</p>` : ''}`;
+	},
+
+	mail(data) {
+		return `
+			<ul class="gmail">${(data.rows ?? []).map((row) => {
+				const acts = row.class !== 'fyi';
+				return `
+				<li class="mail-row ${acts ? 'unread' : ''}" ${target(`mail-${row.id}`)}>
+					<span class="chip account-chip ${escapeHtml(row.account)}">${escapeHtml(row.account)}</span>
+					<div style="min-width:0">
+						<div class="from-line"><span class="from">${escapeHtml(row.from)}</span>${row.action ? `<span class="chip action-chip ${acts ? 'act' : ''}">${escapeHtml(row.action)}</span>` : ''}</div>
+						<div class="subject-line" title="${escapeHtml(`${row.subject}: ${row.snippet ?? ''}`)}"><span class="subject">${escapeHtml(row.subject)}</span>${row.snippet ? ` <span class="snippet">– ${escapeHtml(row.snippet)}</span>` : ''}</div>
+					</div>
+					<span class="date">${escapeHtml(row.when)}</span>
+					${iconLink(row.url, 'Open in Gmail') || '<span></span>'}
+				</li>`; }).join('')}</ul>
+			${data.notifications?.length ? `<p class="muted-line notifications"><span>Notifications</span>${data.notifications.map((item) => `<span class="count-pair">${escapeHtml(item.source)} ${escapeHtml(item.count)}</span>`).join('')}</p>` : ''}`;
+	},
+
+	triage(data) {
+		const options = (values, current, labelFor = (value) => value) => values.map((value) => `<option value="${escapeHtml(value)}" ${value === current ? 'selected' : ''}>${escapeHtml(labelFor(value))}</option>`).join('');
+		return (data.groups ?? []).map((group) => `
+			<section class="note-group" aria-label="${escapeHtml(group.note)}">
+				<div class="note-head">${icon('note', 16)}<span>${escapeHtml(group.note)}</span>${iconLink(group.url, `Open ${group.note} in Obsidian`, 'obsidian')}</div>
+				<ul class="row-list">${group.items.map((item) => {
+					const choice = choices.triage[item.id];
+					return `
+					<li class="capture" ${target(`task-${item.id}`)}>
+						<span class="box" aria-hidden="true"></span>
+						<span class="text">${escapeHtml(item.text)}</span>
+						<span class="selects">
+							<select class="small-select" data-triage="${escapeHtml(item.id)}" data-field="project" aria-label="Project for ${escapeHtml(item.text)}" title="Project">${options(['', ...(data.projects ?? [])], choice.project, (value) => value || 'No project')}</select>
+							<select class="small-select" data-triage="${escapeHtml(item.id)}" data-field="heading" aria-label="Heading for ${escapeHtml(item.text)}" title="Heading">${options(data.headings ?? [], choice.heading)}</select>
+							<select class="small-select" data-triage="${escapeHtml(item.id)}" data-field="priority" aria-label="Priority for ${escapeHtml(item.text)}" title="Priority">${options(PRIORITIES, choice.priority)}</select>
+						</span>
+					</li>`; }).join('')}</ul>
+			</section>`).join('');
+	},
+
+	retro(data, chapter) {
+		if (!chapter.openItem) chapter.openItem = data.items?.[0]?.id;
+		const harnessIcon = (harness, size = 18) => harness === 'claude' ? icon('claude', size) : icon('terminal', size);
+		const harnessName = (harness) => harness === 'claude' ? 'Claude Code' : harness === 'pi' ? 'Pi' : harness;
+		const MARKS = { tool: '●', error: icon('warning', 14), assistant: '›', user: '»' };
+		const approvedCount = (data.items ?? []).filter((item) => choices.retro.approved[item.id]).length;
+		return `
+			<div class="row-list">${(data.items ?? []).map((item) => {
+				const open = item.id === chapter.openItem;
+				return `
+				<section class="retro-item" ${target(`retro-${item.id}`)}>
+					<div class="retro-head">
+						<button class="retro-toggle" type="button" data-retro-open="${escapeHtml(item.id)}" aria-expanded="${open}" aria-controls="retro-body-${escapeHtml(item.id)}">
+							${icon('chevron', 16).replace('<svg', '<svg class="chevron"')}${harnessIcon(item.harness)}<span><span class="title">${escapeHtml(item.title)}</span><span class="cost">${escapeHtml(item.cost)}</span></span>
+						</button>
+						${iconLink(item.evidence?.session?.url, `Open session ${item.evidence?.session?.label ?? ''} transcript`)}
+					</div>
+					<div class="retro-body" id="retro-body-${escapeHtml(item.id)}" ${open ? '' : 'hidden'}>
+						<div class="terminal" role="log" aria-label="Transcript evidence">
+							<div class="terminal-bar">${harnessIcon(item.harness, 14).replace(/fill="[^"]*"/, 'fill="#b4bcc6"')}<span>${escapeHtml(harnessName(item.harness))} · ${escapeHtml(item.account)} · ${escapeHtml(item.evidence?.session?.label ?? '')}</span></div>
+							${(item.evidence?.lines ?? []).map((line) => `<div class="terminal-line ${escapeHtml(line.role)}"><span class="mark" aria-hidden="true">${MARKS[line.role] ?? '·'}</span><span>${line.role === 'error' ? '<span class="visually-hidden">Warning: </span>' : ''}${escapeHtml(line.text)}</span></div>`).join('')}
+						</div>
+						${item.fix ? `<div class="diff" aria-label="Proposed fix"><div class="file">${escapeHtml(item.fix.file)}</div>${String(item.fix.diff).split('\n').map((line) => `<div class="line ${line.startsWith('+') ? 'plus' : line.startsWith('-') ? 'minus' : ''}">${escapeHtml(line)}</div>`).join('')}</div>` : ''}
+					</div>
+				</section>`; }).join('')}</div>
+			<section class="sessions" ${target('retro-sessions')} aria-labelledby="sessions-title">
+				<h2 id="sessions-title">Start fix sessions</h2>
+				${(data.items ?? []).filter((item) => item.session).map((item) => {
+					const approved = Boolean(choices.retro.approved[item.id]);
+					return `
+					<div class="session-row ${approved ? 'approved' : ''}">
+						<span class="switch"><input type="checkbox" data-retro-approve="${escapeHtml(item.id)}" ${approved ? 'checked' : ''} aria-label="Approve a fix session for ${escapeHtml(item.title)}"><span></span></span>
+						<div style="min-width:0">
+							<div class="line-one">${escapeHtml(item.title)} <span class="chip">${harnessIcon(item.session.harness, 14)}${escapeHtml(item.session.harness)} · ${escapeHtml(item.session.account)} · ${escapeHtml(item.session.project)}</span></div>
+							<div class="prompt" title="${escapeHtml(item.session.prompt)}">${escapeHtml(item.session.prompt)}</div>
+						</div>
+					</div>`; }).join('')}
+				<div class="sessions-confirm">
+					${choices.retro.confirmed ? '<span>Saved with your choices at the end</span>' : ''}
+					<button class="text-button ${choices.retro.confirmed ? 'done' : ''}" type="button" data-action="confirm-sessions" ${approvedCount ? '' : 'disabled'}>
+						${choices.retro.confirmed ? `${icon('check', 18)} ${approvedCount} confirmed` : approvedCount ? `Confirm ${approvedCount} session${approvedCount === 1 ? '' : 's'}` : 'Approve a fix first'}
+					</button>
+				</div>
+			</section>`;
+	},
+
+	instructions(data) {
+		const VERDICTS = { final: 'Final', watch: 'Watch', attention: 'Needs attention' };
+		return `<ul class="row-list">${(data.changes ?? []).map((change) => {
+			const states = Object.entries(change.state ?? {});
+			return `
+			<li class="change ${escapeHtml(change.verdict)}" ${target(`change-${change.id}`)}>
+				<div>
+					<div class="scope-line"><span class="scope">${escapeHtml(change.scope)}</span><span class="chip">${escapeHtml(VERDICTS[change.verdict] ?? change.verdict)}</span></div>
+					<div class="summary">${escapeHtml(change.summary)}</div>
+					<div class="opinion">${escapeHtml(change.opinion)}</div>
+				</div>
+				<div class="state-chips">${states.map(([key, value]) => `<span class="chip ${value ? '' : 'no'}" title="${escapeHtml(`${value ? '' : 'Not '}${key}`)}">${icon(value ? 'check' : 'cross', 14, value ? 'yes' : 'no')}${escapeHtml(key)}</span>`).join('')}</div>
+				${iconLink(change.url, `Open ${change.scope} change`, /github\.com/.test(change.url ?? '') ? 'github' : /gitlab/.test(change.url ?? '') ? 'gitlab' : 'external') || '<span></span>'}
+			</li>`; }).join('')}</ul>`;
+	},
+
+	news(data) {
+		return `<ul class="row-list">${(data.items ?? []).map((item) => `
+			<li class="news-item" ${target(`news-${item.id}`)}>
+				${appIcon(item.app, 24)}
+				<div>
+					<div class="meta">${escapeHtml(item.source)} · ${escapeHtml(item.date)}</div>
+					<div class="title">${escapeHtml(item.title)}</div>
+					<div class="summary">${escapeHtml(item.summary)}</div>
+				</div>
+				<div class="side">
+					${iconLink(item.url, `Open on ${item.source}`)}
+					${['up', 'down'].map((vote) => `<button class="icon-link vote ${vote}" type="button" data-news="${escapeHtml(item.id)}" data-vote="${vote}" aria-pressed="${choices.news[item.id] === vote}" aria-label="${vote === 'up' ? 'More like this' : 'Less like this'}: ${escapeHtml(item.title)}" title="${vote === 'up' ? 'More like this' : 'Less like this'}">${icon(vote === 'up' ? 'thumbUp' : 'thumbDown', 20)}</button>`).join('')}
+				</div>
+			</li>`).join('')}</ul>`;
+	},
+
+	actions(data) {
+		return `
+			<ul class="row-list">${(data.items ?? []).map((item) => {
+				const choice = choices.actions[item.id];
+				const destination = chapters.find((chapter) => chapter.id === item.chapter);
+				return `
+				<li class="action ${choice.done ? 'is-done' : ''}" ${target(item.id)}>
+					<input class="checkbox" type="checkbox" data-action-done="${escapeHtml(item.id)}" ${choice.done ? 'checked' : ''} aria-label="Done: ${escapeHtml(item.text)}">
+					<span><span class="text">${escapeHtml(item.text)}</span>${item.detail ? `<span class="detail">${escapeHtml(item.detail)}</span>` : ''}</span>
+					<span style="display:flex">${iconLink(item.url, `Open in ${APP_NAMES[item.app] ?? 'app'}`, appIcon(item.app)) || (destination ? `<button class="icon-link" type="button" data-goto="${escapeHtml(destination.id)}" aria-label="Go to ${escapeHtml(destination.name)}" title="Go to ${escapeHtml(destination.name)}">${appIcon(item.app)}</button>` : '')}</span>
+					<span class="segmented" role="group" aria-label="Who does it">${['you', 'agent'].map((handoff) => `<button type="button" data-handoff="${escapeHtml(item.id)}" data-value="${handoff}" aria-pressed="${choice.handoff === handoff}">${handoff === 'you' ? 'You' : 'Agent'}</button>`).join('')}</span>
+				</li>`; }).join('')}</ul>
+			<div class="save-area">
+				<span class="summary" id="choice-summary">${escapeHtml(choiceSummary())}</span>
+				<button class="text-button" type="button" data-action="save">${icon('download', 18)} Save choices</button>
+			</div>`;
+	},
+};
+
+function renderBody(chapter) {
+	if (chapter.status === 'quiet' || chapter.status === 'unavailable') {
+		return `<div class="quiet-slide">${icon(chapter.status === 'quiet' ? 'check' : 'warning', 40)}<p>${escapeHtml(chapter.title)}</p>${chapter.detail ? `<span class="detail">${escapeHtml(chapter.detail)}</span>` : ''}</div>`;
+	}
+	return RENDERERS[chapter.type]?.(chapter.data ?? {}, chapter) ?? '';
+}
+
+/* Player: one play/pause for the brief. A beat lasts its narration clip, or an estimate at 2.6 words
+   per second when the brief has no audio; the browser voice is the fallback narrator. */
+const SPEEDS = [1, 1.25, 1.5, 2];
+const WORDS_PER_SECOND = 2.6;
+const BEAT_PAUSE_SECONDS = 0.5;
+const state = { chapter: 0, beat: 0, elapsed: 0, playing: false, speedIndex: 0, voice: true, finished: false, speaking: false };
+const speed = () => SPEEDS[state.speedIndex];
+const browserVoice = 'speechSynthesis' in window;
+const clip = new Audio();
+clip.preload = 'auto';
+const beatSeconds = (beat) => (beat.hold ?? (beat.audioSeconds ?? beat.say.split(/\s+/).length / WORDS_PER_SECOND) + BEAT_PAUSE_SECONDS) / speed();
+const chapterSeconds = (chapter) => chapter.beats.reduce((total, beat) => total + beatSeconds(beat), 0);
+const currentChapter = () => chapters[state.chapter];
+const currentBeat = () => currentChapter().beats[state.beat];
+const formatTime = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
+const maximumBeats = Math.max(...chapters.map((chapter) => chapter.beats.length));
+
+function renderStage() {
+	const scrollTop = stage.scrollTop;
+	stage.innerHTML = renderBody(currentChapter());
+	stage.scrollTop = scrollTop;
+	highlight();
+	showScrollHint();
+}
+// Fades the sheet's lower edge while more of a long chapter waits below.
+function showScrollHint() {
+	stage.parentElement.classList.toggle('more-below', stage.scrollTop + stage.clientHeight < stage.scrollHeight - 2);
+}
+stage.addEventListener('scroll', showScrollHint, { passive: true });
+function renderHeader() {
+	const chapter = currentChapter();
+	byId('chapter-icon').innerHTML = icon(CHAPTER_ICONS[chapter.type] ?? 'sunrise', 30);
+	byId('chapter-kicker').textContent = chapter.name;
+	byId('chapter-title').textContent = chapter.title;
+	byId('chapter-position').textContent = `${String(state.chapter + 1).padStart(2, '0')} / ${String(chapters.length).padStart(2, '0')}`;
+}
+function renderOutline() {
+	byId('outline').innerHTML = chapters.map((chapter, index) => {
+		const problems = sourceProblems(chapter);
+		const current = index === state.chapter;
+		const marker = chapter.status === 'quiet' ? 'quiet' : `${chapter.count ?? ''} ${chapter.status === 'needs' ? 'need you' : 'to know'}`;
+		const label = `${chapter.name}, ${marker}${problems.length ? `. Source problem: ${problemText(problems)}` : ''}`;
+		return `
+			<li class="outline-item ${current ? 'current' : ''} ${index < state.chapter ? 'done' : ''}">
+				<button class="outline-chapter" type="button" data-goto="${escapeHtml(chapter.id)}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}" ${current ? 'aria-current="step"' : ''}>
+					<span class="outline-icon">${icon(CHAPTER_ICONS[chapter.type] ?? 'sunrise', 20)}</span>
+					<span class="outline-name">${escapeHtml(chapter.name)}</span>
+					<span class="outline-meta">${problems.length ? `<span class="source-warning">${icon('warning', 16)}</span>` : ''}${chapter.count ? `<span class="count ${chapter.status === 'needs' ? 'needs' : ''}">${escapeHtml(chapter.count)}</span>` : ''}</span>
+				</button>
+			</li>`;
+	}).join('');
+	const chapter = currentChapter();
+	const panel = byId('beat-panel');
+	panel.style.setProperty('--beat-rows', String(maximumBeats));
+	panel.innerHTML = `
+		<div class="beat-panel-head">${String(state.chapter + 1).padStart(2, '0')} · ${escapeHtml(chapter.name)}</div>
+		<ol class="outline-beats">${chapter.beats.map((beat, beatIndex) => `<li><button class="outline-beat ${beatIndex === state.beat ? 'current' : beatIndex < state.beat ? 'done' : ''}" type="button" data-beat="${beatIndex}" title="${escapeHtml(beat.say)}" ${beatIndex === state.beat ? 'aria-current="step"' : ''}>${escapeHtml(beat.note ?? `Point ${beatIndex + 1}`)}</button></li>`).join('')}</ol>
+		${sourceProblems(chapter).map((source) => `<div class="panel-warning" title="${escapeHtml(source.reason ?? source.status)}">${icon('warning', 14)}<span>${escapeHtml(source.name)}: ${escapeHtml(source.reason ?? source.status)}</span></div>`).join('')}`;
+}
+function highlight() {
+	const beat = currentBeat();
+	const targets = [...(beat.targets ?? []), ...(beat.select ? ['event-detail'] : [])];
+	stage.querySelectorAll('.is-target, .on-path').forEach((element) => element.classList.remove('is-target', 'on-path'));
+	const lit = [];
+	for (const name of targets) stage.querySelectorAll(`[data-target="${CSS.escape(name)}"]`).forEach((element) => {
+		element.classList.add('is-target');
+		lit.push(element);
+		// Opacity multiplies down the tree, so containers of a target must not be dimmed.
+		for (let ancestor = element.parentElement; ancestor && ancestor !== stage; ancestor = ancestor.parentElement) ancestor.classList.add('on-path');
+	});
+	stage.classList.toggle('highlighting', lit.length > 0);
+	scrollTargetsIntoView(lit);
+}
+// Brings every lit item into view when they fit together, otherwise the first one.
+function scrollTargetsIntoView(elements) {
+	if (!elements.length) return;
+	const stageTop = stage.getBoundingClientRect().top;
+	const ringMargin = 12;
+	const top = Math.min(...elements.map((element) => element.getBoundingClientRect().top)) - stageTop + stage.scrollTop - ringMargin;
+	const bottom = Math.max(...elements.map((element) => element.getBoundingClientRect().bottom)) - stageTop + stage.scrollTop + ringMargin;
+	const visibleBottom = stage.scrollTop + stage.clientHeight;
+	let scrollTop = stage.scrollTop;
+	if (bottom - top > stage.clientHeight || top < stage.scrollTop) scrollTop = top;
+	else if (bottom > visibleBottom) scrollTop = bottom - stage.clientHeight;
+	if (scrollTop !== stage.scrollTop) stage.scrollTo({ top: scrollTop, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+}
+function setChapter(index, beatIndex = 0) {
+	state.chapter = index;
+	state.finished = false;
+	renderHeader();
+	stage.innerHTML = renderBody(currentChapter());
+	stage.scrollTop = 0;
+	setBeat(beatIndex);
+}
+function setBeat(index) {
+	state.beat = index;
+	state.elapsed = 0;
+	const chapter = currentChapter();
+	const beat = currentBeat();
+	let changed = false;
+	if (beat.select && beat.select !== chapter.selected) { chapter.selected = beat.select; changed = true; }
+	if (!beat.select && chapter.type === 'calendar' && chapter.selected) { chapter.selected = undefined; changed = true; }
+	if (beat.scope && beat.scope !== chapter.scope) { chapter.scope = beat.scope; changed = true; }
+	const retroTarget = chapter.type === 'retro' && (beat.targets ?? []).map((name) => name.replace(/^retro-/, '')).find((id) => chapter.data.items.some((item) => item.id === id));
+	if (retroTarget && retroTarget !== chapter.openItem) { chapter.openItem = retroTarget; changed = true; }
+	if (changed) renderStage(); else highlight();
+	byId('caption').textContent = beat.say;
+	renderOutline();
+	renderTransport();
+	speak();
+}
+function stopVoice() {
+	clip.pause();
+	if (browserVoice) window.speechSynthesis.cancel();
+	state.speaking = false;
+}
+function speak() {
+	stopVoice();
+	if (!state.voice || !state.playing) return;
+	const beat = currentBeat();
+	if (beat.audio) {
+		clip.src = beat.audio;
+		clip.playbackRate = speed();
+		clip.onended = clip.onerror = () => { state.speaking = false; };
+		state.speaking = true;
+		clip.play().catch(() => { state.speaking = false; });
+		return;
+	}
+	if (!browserVoice || beat.hold) return;
+	const utterance = new SpeechSynthesisUtterance(beat.say);
+	utterance.rate = speed();
+	const voices = window.speechSynthesis.getVoices().filter((voice) => voice.lang.startsWith('en'));
+	utterance.voice = voices.find((voice) => /natural|online/i.test(voice.name)) ?? voices[0] ?? null;
+	utterance.onend = utterance.onerror = () => { state.speaking = false; };
+	state.speaking = true;
+	window.speechSynthesis.speak(utterance);
+}
+function advance() {
+	if (state.beat < currentChapter().beats.length - 1) return setBeat(state.beat + 1);
+	if (state.chapter < chapters.length - 1) return setChapter(state.chapter + 1);
+	state.playing = false;
+	state.finished = true;
+	state.elapsed = beatSeconds(currentBeat());
+	renderTransport();
+}
+function togglePlay() {
+	if (state.playing) {
+		state.playing = false;
+		stopVoice();
+		return renderTransport();
+	}
+	state.playing = true;
+	if (state.finished) setChapter(0); else speak();
+	renderTransport();
+}
+function stepBeat(direction) {
+	const next = state.beat + direction;
+	if (next >= 0 && next < currentChapter().beats.length) return setBeat(next);
+	const nextChapter = state.chapter + direction;
+	if (nextChapter < 0 || nextChapter >= chapters.length) return;
+	setChapter(nextChapter, direction < 0 ? chapters[nextChapter].beats.length - 1 : 0);
+}
+function stepChapter(direction) {
+	// Going back from inside a chapter restarts it first, like a media player.
+	if (direction < 0 && state.beat > 0) return setChapter(state.chapter);
+	const next = state.chapter + direction;
+	if (next >= 0 && next < chapters.length) setChapter(next);
+}
+function buildProgress() {
+	const totalWeight = chapters.reduce((total, chapter) => total + chapterSeconds(chapter), 0);
+	byId('progress').innerHTML = chapters.map((chapter, index) => {
+		const duration = chapterSeconds(chapter);
+		let running = 0;
+		const ticks = chapter.beats.slice(0, -1).map((beat) => { running += beatSeconds(beat); return `<span class="tick" style="left:${(running / duration) * 100}%"></span>`; }).join('');
+		return `<div class="segment ${chapter.status === 'quiet' ? 'quiet' : ''}" data-segment="${index}" title="${escapeHtml(chapter.name)}" style="flex:${duration / totalWeight} 1 0"><div class="segment-fill"></div>${ticks}</div>`;
+	}).join('');
+}
+function renderTransport() {
+	const play = byId('play');
+	for (const [id, name] of [['chapter-previous', 'chapterPrevious'], ['beat-previous', 'beatPrevious'], ['beat-next', 'beatNext'], ['chapter-next', 'chapterNext']]) byId(id).innerHTML = icon(name, 20);
+	play.innerHTML = icon(state.playing ? 'pause' : 'play', 22);
+	const playLabel = state.playing ? 'Pause' : state.finished ? 'Play again' : 'Play';
+	play.setAttribute('aria-label', playLabel);
+	play.title = `${playLabel} (Space)`;
+	byId('chapter-previous').disabled = state.chapter === 0 && state.beat === 0;
+	byId('beat-previous').disabled = state.chapter === 0 && state.beat === 0;
+	byId('beat-next').disabled = state.chapter === chapters.length - 1 && state.beat === currentChapter().beats.length - 1;
+	byId('chapter-next').disabled = state.chapter === chapters.length - 1;
+	const speedButton = byId('speed');
+	speedButton.innerHTML = `${icon('speed', 18)}<span>${speed()}×</span>`;
+	speedButton.setAttribute('aria-label', `Speed ${speed()} times, change speed`);
+	speedButton.title = `Speed ${speed()}×`;
+	const mute = byId('mute');
+	mute.innerHTML = icon(state.voice ? 'volume' : 'muted', 20);
+	mute.setAttribute('aria-pressed', String(!state.voice));
+	mute.setAttribute('aria-label', 'Mute voice');
+	mute.title = state.voice ? 'Mute voice' : 'Unmute voice';
+}
+function paintProgress() {
+	const chapter = currentChapter();
+	const beatDuration = beatSeconds(currentBeat());
+	const chapterElapsed = chapter.beats.slice(0, state.beat).reduce((total, beat) => total + beatSeconds(beat), 0) + Math.min(state.elapsed, beatDuration);
+	byId('progress').querySelectorAll('.segment').forEach((element, index) => {
+		element.classList.toggle('current', index === state.chapter);
+		const fraction = index < state.chapter ? 1 : index === state.chapter ? chapterElapsed / chapterSeconds(chapter) : 0;
+		element.firstElementChild.style.transform = `scaleX(${fraction})`;
+	});
+	const before = chapters.slice(0, state.chapter).reduce((total, item) => total + chapterSeconds(item), 0);
+	const total = chapters.reduce((sum, item) => sum + chapterSeconds(item), 0);
+	byId('time').textContent = `${formatTime(before + chapterElapsed)} / ${formatTime(total)}`;
+}
+let lastFrame = 0;
+function frame(now) {
+	const delta = lastFrame ? Math.min((now - lastFrame) / 1000, 0.25) : 0;
+	lastFrame = now;
+	if (state.playing) {
+		const duration = beatSeconds(currentBeat());
+		state.elapsed += delta;
+		// The voice owns the beat while it speaks; the timer only adds the pause after it.
+		if (state.speaking) state.elapsed = Math.min(state.elapsed, duration - BEAT_PAUSE_SECONDS / speed());
+		else if (state.elapsed >= duration) advance();
+	}
+	paintProgress();
+	requestAnimationFrame(frame);
+}
+
+byId('play').addEventListener('click', togglePlay);
+byId('beat-previous').addEventListener('click', () => stepBeat(-1));
+byId('beat-next').addEventListener('click', () => stepBeat(1));
+byId('chapter-previous').addEventListener('click', () => stepChapter(-1));
+byId('chapter-next').addEventListener('click', () => stepChapter(1));
+byId('speed').addEventListener('click', () => { state.speedIndex = (state.speedIndex + 1) % SPEEDS.length; clip.playbackRate = speed(); buildProgress(); renderTransport(); });
+byId('mute').addEventListener('click', () => { state.voice = !state.voice; renderTransport(); speak(); });
+byId('progress').addEventListener('click', (event) => {
+	const segment = event.target.closest('[data-segment]');
+	if (!segment) return;
+	const chapter = chapters[Number(segment.dataset.segment)];
+	const fraction = (event.clientX - segment.getBoundingClientRect().left) / segment.offsetWidth;
+	let running = 0;
+	const beatIndex = chapter.beats.findIndex((beat) => (running += beatSeconds(beat)) / chapterSeconds(chapter) > fraction);
+	setChapter(Number(segment.dataset.segment), Math.max(0, beatIndex));
+});
+byId('outline').addEventListener('click', (event) => {
+	const chapterButton = event.target.closest('[data-goto]');
+	if (chapterButton) setChapter(chapters.findIndex((chapter) => chapter.id === chapterButton.dataset.goto));
+});
+byId('beat-panel').addEventListener('click', (event) => {
+	const beatButton = event.target.closest('[data-beat]');
+	if (beatButton) setBeat(Number(beatButton.dataset.beat));
+});
+stage.addEventListener('click', (event) => {
+	const chapter = currentChapter();
+	const element = event.target.closest('[data-goto], [data-event], [data-scope], [data-retro-open], [data-news], [data-handoff], [data-action]');
+	if (!element) return;
+	if (element.dataset.goto) return setChapter(chapters.findIndex((item) => item.id === element.dataset.goto));
+	if (element.dataset.event) { chapter.selected = element.dataset.event; return renderStage(); }
+	if (element.dataset.scope) { chapter.scope = element.dataset.scope; return renderStage(); }
+	if (element.dataset.retroOpen) { chapter.openItem = chapter.openItem === element.dataset.retroOpen ? undefined : element.dataset.retroOpen; return renderStage(); }
+	if (element.dataset.news) { choices.news[element.dataset.news] = choices.news[element.dataset.news] === element.dataset.vote ? undefined : element.dataset.vote; return renderStage(); }
+	if (element.dataset.handoff) { choices.actions[element.dataset.handoff].handoff = element.dataset.value; return renderStage(); }
+	if (element.dataset.action === 'close-event') { chapter.selected = undefined; return renderStage(); }
+	if (element.dataset.action === 'confirm-sessions') { choices.retro.confirmed = true; return renderStage(); }
+	if (element.dataset.action === 'save') downloadChoices();
+});
+stage.addEventListener('change', (event) => {
+	const element = event.target;
+	if (element.dataset.triage) choices.triage[element.dataset.triage][element.dataset.field] = element.value;
+	if (element.dataset.auto) choices.autoHandled[element.dataset.auto] = element.checked;
+	if (element.dataset.retroApprove) { choices.retro.approved[element.dataset.retroApprove] = element.checked; choices.retro.confirmed = false; renderStage(); }
+	if (element.dataset.actionDone) { choices.actions[element.dataset.actionDone].done = element.checked; renderStage(); }
+});
+stage.addEventListener('toggle', (event) => { if (event.target.dataset?.disclosure) currentChapter().disclosureOpen = event.target.open; }, true);
+document.addEventListener('keydown', (event) => {
+	if (event.target.closest?.('input, select, textarea') || event.altKey || event.ctrlKey || event.metaKey) return;
+	if (event.key === ' ') {
+		if (event.target.closest?.('button, a, summary')) return;
+		event.preventDefault();
+		togglePlay();
+	} else if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+		event.preventDefault();
+		const direction = event.key === 'ArrowRight' ? 1 : -1;
+		if (event.shiftKey) stepChapter(direction); else stepBeat(direction);
+	}
+});
+
+const briefDate = new Date(`${brief.date}T12:00:00`);
+document.title = `Morning brief, ${briefDate.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}`;
+byId('rail-date').textContent = briefDate.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+const since = new Date(brief.window?.since ?? '');
+byId('rail-window').textContent = Number.isNaN(since.getTime()) ? '' : `since ${since.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`;
+byId('rail-window').title = brief.window?.label ?? '';
+buildProgress();
+setChapter(0);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

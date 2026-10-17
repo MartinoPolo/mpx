@@ -1,0 +1,1542 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Morning brief player, variant A</title>
+<link rel="stylesheet" href="../../tokens.css">
+<style>
+:root {
+	--ink-muted: color-mix(in srgb, var(--ink) 82%, white);
+	--line: color-mix(in srgb, var(--ink) 16%, white);
+	--warn-ink: color-mix(in srgb, var(--warn) 50%, var(--ink));
+	--fail-ink: color-mix(in srgb, var(--fail) 78%, var(--ink));
+	--done-ink: color-mix(in srgb, var(--done) 72%, var(--ink));
+	--sticky-soft: color-mix(in srgb, var(--sticky) 40%, white);
+	--dot: color-mix(in srgb, var(--ink) 13%, transparent);
+	--column-width: var(--reading-width);
+	/* Native chrome colours, used only inside the matching app window for fidelity. */
+	--gcal-grid: #dadce0;
+	--gmail-surface: #f6f8fc;
+	--github-board: #f6f8fa;
+	--gitlab-board: #fbfafd;
+	--obsidian-bar: #262626;
+	--terminal-bar: #2d2d2d;
+	--dark-text: #e3e3e3;
+	--dark-muted: #a8a8a8;
+	--obsidian-accent: #a88bfa;
+	--terminal-warning: #ffc66d;
+	--claude: #d97757;
+	--gemini: #8e75b2;
+	--hacker-news: #f0652f;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+	margin: 0; overflow: hidden; color: var(--ink);
+	background-color: var(--desk);
+	background-image: radial-gradient(var(--dot) 1.5px, transparent 1.6px);
+	background-size: 24px 24px;
+	font: 400 15px/1.45 var(--font-body);
+}
+button, select, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+h1, h2, h3, p, ol, ul { margin: 0; }
+ol, ul { padding: 0; list-style: none; }
+a { color: inherit; }
+:focus-visible { outline: 3px dashed currentColor; outline-offset: 3px; border-radius: 4px; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--ink-muted); }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+svg { flex: none; }
+
+/* Shell */
+.app { display: grid; grid-template-columns: 264px minmax(0, 1fr); height: 100vh; }
+.outline {
+	margin: 16px 0 16px 16px; padding: 14px 10px; min-height: 0; overflow-y: auto;
+	background: var(--paper); border: var(--border-width) solid var(--ink); border-radius: var(--radius-panel); box-shadow: var(--shadow-ordinary);
+}
+.outline-date { padding: 2px 8px 12px; margin-bottom: 10px; border-bottom: 2px dashed var(--line); }
+.outline-weekday { display: block; font: 600 26px/1.1 var(--font-head); }
+.outline-weekday-short { display: none; font: 600 18px/1.1 var(--font-head); }
+.outline-day { display: block; font: 500 16px/1.3 var(--font-head); }
+.outline-window { display: block; margin-top: 4px; font-size: 12px; color: var(--ink-muted); }
+.chapter-list { display: flex; flex-direction: column; gap: 2px; }
+.chapter-row {
+	position: relative; display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 8px;
+	border: 2px solid transparent; border-radius: 10px; background: none; text-align: left; font-weight: 600; font-size: 14.5px;
+	transition: transform var(--duration-normal) var(--ease-spring), background-color var(--duration-fast), box-shadow var(--duration-fast);
+}
+.chapter-row:hover { background: var(--desk); border-color: var(--ink); transform: translateY(-2px); box-shadow: var(--shadow-compact); }
+.chapter-item.is-current > .chapter-row { background: var(--fill-review); border-color: var(--ink); box-shadow: var(--shadow-compact); }
+.chapter-icon { display: inline-grid; place-items: center; width: 22px; height: 22px; }
+.chapter-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chapter-item.is-quiet .chapter-name { color: var(--ink-muted); font-weight: 500; }
+.marker { display: inline-grid; place-items: center; min-width: 24px; height: 22px; padding: 0 6px; border-radius: var(--radius-badge); font: 600 12px var(--font-mono); font-variant-numeric: tabular-nums; }
+.marker-needs { background: var(--sticky); color: var(--on-sticky); border: 2px solid var(--ink); }
+.marker-fyi, .marker-quiet { color: var(--ink-muted); }
+.source-warning { display: inline-grid; place-items: center; color: var(--warn-ink); }
+.beat-list { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 8px 30px; }
+.beat-row {
+	display: flex; align-items: center; gap: 6px; width: 100%; padding: 3px 8px; text-align: left;
+	border: 2px solid transparent; border-radius: var(--radius-button); background: none; font-size: 13.5px; color: var(--ink-muted);
+	transition: transform var(--duration-normal) var(--ease-spring), background-color var(--duration-fast);
+}
+.beat-row:hover { background: var(--desk); transform: translateY(-2px); }
+.beat-row.is-done { color: var(--ink); }
+.beat-row.is-current { background: var(--sticky-soft); border-color: var(--ink); color: var(--ink); font-weight: 600; }
+
+.main { position: relative; display: grid; grid-template-rows: minmax(0, 1fr) auto auto; min-width: 0; min-height: 0; padding: 14px 24px 16px; }
+.variant-tag {
+	position: absolute; top: 12px; right: 18px; z-index: 5; padding: 3px 9px; transform: rotate(1deg);
+	font: 500 11px var(--font-mono); color: var(--ink-muted); background: var(--paper); border: 1.5px solid var(--ink); border-radius: var(--radius-button);
+}
+.variant-tag-short { display: none; }
+.column { width: min(100%, var(--column-width)); margin-inline: auto; display: flex; flex-direction: column; min-height: 0; }
+.chapter-header { display: flex; align-items: center; gap: 12px; padding: 6px 0 8px; }
+.chapter-header .chapter-icon { width: 30px; height: 30px; }
+.kicker { font-size: 13px; font-weight: 600; color: var(--ink-muted); display: flex; gap: 8px; align-items: baseline; }
+.chapter-title { font: 600 26px/1.15 var(--font-head); text-wrap: balance; }
+.stage { flex: 1; min-height: 0; overflow: auto; padding: 10px 14px 18px; margin: 0 -14px; }
+
+.caption-row { width: min(100%, var(--column-width)); margin: 4px auto 0; }
+.caption {
+	display: flex; align-items: baseline; gap: 12px; min-height: 52px; padding: 12px 16px;
+	background: var(--paper); border: var(--border-width) solid var(--ink); border-radius: 12px; box-shadow: var(--shadow-compact);
+	font-size: 18px; font-weight: 500; line-height: 1.35;
+}
+.caption-text { flex: 1; }
+.caption-count { font-size: 12px; color: var(--ink-muted); }
+
+.transport {
+	width: min(100%, 1000px); margin: 12px auto 0; display: flex; align-items: center; gap: 14px; padding: 8px 14px;
+	background: var(--paper); border: var(--border-width) solid var(--ink); border-radius: var(--radius-panel); box-shadow: var(--shadow-ordinary);
+}
+.transport-buttons { display: flex; align-items: center; gap: 4px; }
+.icon-button, .icon-link {
+	display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 32px; height: 32px; padding: 0 5px;
+	border: 2px solid transparent; border-radius: var(--radius-button); background: transparent; color: inherit; text-decoration: none;
+	transition: transform var(--duration-normal) var(--ease-spring), background-color var(--duration-fast), box-shadow var(--duration-fast);
+}
+.icon-button:hover:not(:disabled), a.icon-link:hover { background: color-mix(in srgb, currentColor 10%, transparent); border-color: currentColor; transform: translateY(-2px); }
+.icon-button:active:not(:disabled), a.icon-link:active { transform: translateY(1px); }
+.icon-button:disabled { opacity: 0.4; cursor: default; }
+.transport .icon-button { min-width: 38px; height: 38px; }
+.play-button.icon-button {
+	width: 48px; height: 48px; margin: 0 4px; background: var(--brand); color: var(--ink); border: var(--border-width) solid var(--ink); border-radius: 12px; box-shadow: var(--shadow-ordinary);
+}
+.play-button.icon-button:hover { background: var(--brand-bright); border-color: var(--ink); box-shadow: var(--shadow-lifted); }
+.progress { flex: 1; display: flex; align-items: center; gap: 4px; min-width: 120px; height: 24px; }
+.segment {
+	position: relative; flex-basis: 0; min-width: 10px; height: 12px; padding: 0; overflow: hidden;
+	background: var(--paper); border: 2px solid var(--ink); border-radius: 6px; transition: height var(--duration-fast);
+}
+.segment:hover { height: 16px; }
+.segment.is-current { height: 16px; }
+.segment.is-quiet { border-style: dashed; }
+.segment-fill { position: absolute; inset: 0; background: var(--brand); transform-origin: 0 50%; transform: scaleX(0); }
+.tick { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--ink); opacity: 0.55; }
+.time { font-size: 13px; color: var(--ink-muted); white-space: nowrap; }
+.speed-value { font: 600 12px var(--font-mono); }
+
+/* Highlight: outline ring plus lift; the rest stays readable. */
+[data-target] { position: relative; transition: opacity var(--duration-slow) var(--ease-standard), transform var(--duration-normal) var(--ease-spring), box-shadow var(--duration-normal) var(--ease-standard); }
+.stage.is-highlighting [data-target]:not(.is-target, .is-path) { opacity: 0.78; }
+.is-target { z-index: 2; transform: translateY(-2px); box-shadow: inset 0 0 0 3px var(--sticky), 0 0 0 2.5px var(--ink), 4px 4px 0 2.5px var(--ink) !important; }
+
+/* Shared pieces */
+.paper { background: var(--paper); border: var(--border-width) solid var(--ink); border-radius: var(--radius-panel); box-shadow: var(--shadow-ordinary); }
+.window { background: var(--body-bg, var(--paper)); border: var(--border-width) solid var(--ink); border-radius: var(--radius-panel); box-shadow: var(--shadow-ordinary); color: var(--body-text, var(--ink)); }
+.window-bar {
+	display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 3px 8px 3px 12px;
+	background: var(--bar-bg, var(--paper)); color: var(--bar-text, var(--ink)); border-bottom: var(--border-width) solid var(--ink);
+	border-radius: calc(var(--radius-panel) - 3px) calc(var(--radius-panel) - 3px) 0 0; font-size: 14px; font-weight: 600;
+}
+.window-context { font-weight: 400; color: var(--bar-muted, var(--ink-muted)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.window-actions { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+.window-body { padding: var(--space-3); }
+.theme-gmail { --bar-bg: var(--gmail-surface); --body-bg: var(--gmail-surface); }
+.theme-slack { --bar-bg: var(--slack); --bar-text: #ffffff; --bar-muted: color-mix(in srgb, #ffffff 82%, var(--slack)); }
+.theme-gitlab { --body-bg: var(--gitlab-board); }
+.theme-github { --bar-bg: var(--github-board); --body-bg: var(--github-board); }
+.theme-obsidian { --bar-bg: var(--obsidian-bar); --body-bg: var(--terminal); --bar-text: var(--dark-text); --bar-muted: var(--dark-muted); --body-text: var(--dark-text); }
+.theme-terminal { --bar-bg: var(--terminal-bar); --body-bg: var(--terminal); --bar-text: var(--dark-text); --bar-muted: var(--dark-muted); --body-text: var(--dark-text); }
+.quiet-line { margin-top: var(--space-3); font-size: 14px; color: var(--ink-muted); }
+.switch {
+	position: relative; flex: none; width: 42px; height: 24px; padding: 0; border: 2px solid var(--ink); border-radius: 999px; background: var(--fill-draft);
+	transition: background-color var(--duration-fast);
+}
+.switch::after {
+	content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--paper); border: 2px solid var(--ink);
+	transition: transform var(--duration-normal) var(--ease-spring);
+}
+.switch[aria-checked="true"] { background: var(--done); }
+.switch[aria-checked="true"]::after { transform: translateX(18px); }
+.text-button {
+	display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; font-weight: 600; font-size: 15px;
+	background: var(--brand); color: var(--ink); border: var(--border-width) solid var(--ink); border-radius: var(--radius-button); box-shadow: var(--shadow-ordinary);
+	transition: transform var(--duration-normal) var(--ease-spring), box-shadow var(--duration-fast), background-color var(--duration-fast);
+}
+.text-button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: var(--shadow-lifted); background: var(--brand-bright); }
+.text-button:active:not(:disabled) { transform: translateY(1px); box-shadow: var(--shadow-compact); }
+.text-button:disabled { background: var(--fill-draft); color: var(--ink-muted); box-shadow: none; cursor: default; }
+.text-button.is-confirmed { background: var(--fill-ready); }
+
+/* Overview */
+.overview { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: var(--space-8); align-items: start; padding-top: var(--space-2); }
+.date-note {
+	padding: var(--space-5) var(--space-4); transform: rotate(-1.5deg);
+	background: var(--sticky); color: var(--on-sticky); border: var(--border-width) solid var(--ink); border-radius: 12px; box-shadow: var(--shadow-ordinary);
+}
+.date-weekday { display: block; font: 600 40px/1 var(--font-head); }
+.date-day { display: block; margin-top: 6px; font: 500 22px/1.2 var(--font-head); }
+.date-window { display: block; margin-top: 12px; font-size: 12px; }
+.needs { display: flex; flex-direction: column; gap: var(--space-3); }
+.need {
+	display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: var(--space-3); align-items: center; padding: 10px 12px 10px 14px;
+	background: var(--paper); border: var(--border-width) solid var(--ink); border-radius: 12px; box-shadow: var(--shadow-compact);
+}
+.need-text strong { display: block; font-size: 16px; }
+.need-text span { font-size: 14px; }
+.row-actions { display: flex; gap: 2px; align-items: center; }
+
+/* Google Calendar */
+.gcal { display: grid; grid-template-columns: auto 236px; gap: var(--space-5); align-items: start; justify-content: center; }
+.gcal-main { --gutter: 58px; --day: 168px; }
+.gcal-row { display: grid; grid-template-columns: var(--gutter) repeat(var(--days), var(--day)); }
+.gcal-zone { align-self: end; padding: 0 8px 4px 0; text-align: right; font-size: 11px; color: var(--ink-muted); }
+.gcal-dayhead { display: flex; flex-direction: column; align-items: center; gap: 2px; padding-bottom: 6px; }
+.gcal-weekday { font-size: 14px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-muted); }
+.gcal-date { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; font: 500 24px/1 var(--font-head); }
+.gcal-dayhead.is-focus .gcal-weekday { color: var(--google-calendar); }
+.gcal-dayhead.is-focus .gcal-date { background: var(--google-calendar); color: #ffffff; }
+.gcal-allday { min-height: 32px; border-bottom: 1px solid var(--gcal-grid); }
+.gcal-allday-cell { display: flex; flex-direction: column; gap: 2px; padding: 3px 4px 4px; border-left: 1px solid var(--gcal-grid); }
+.gcal-chip, .gcal-event {
+	--fill: color-mix(in srgb, var(--event) 72%, white);
+	background: var(--fill); color: var(--ink); border: 1.5px solid var(--paper); border-radius: 6px; text-align: left; font-size: 14px; line-height: 1.2;
+}
+.gcal-chip { width: 100%; padding: 3px 8px; font-weight: 600; }
+.gcal-grid { position: relative; }
+.gcal-hours { position: relative; }
+.gcal-hour { position: absolute; right: 8px; transform: translateY(-50%); font-size: 13px; color: var(--ink-muted); }
+.gcal-day {
+	position: relative; border-left: 1px solid var(--gcal-grid);
+	background-image: repeating-linear-gradient(to bottom, var(--gcal-grid) 0 1px, transparent 1px var(--hour));
+}
+.gcal-event { position: absolute; left: 2px; right: 8px; padding: 2px 7px; overflow: hidden; cursor: pointer; display: flex; flex-direction: column; justify-content: flex-start; }
+.gcal-event.is-short { flex-direction: row; align-items: center; gap: 4px; white-space: nowrap; }
+.gcal-event:not(.is-short) .event-title { white-space: normal; }
+.gcal-fact .mono { white-space: nowrap; }
+.gcal-event:hover { box-shadow: var(--shadow-compact); }
+.gcal-event.is-selected { border: 2px solid var(--ink); box-shadow: var(--shadow-ordinary); }
+.event-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.event-time { font-size: 13px; }
+.gcal-now { position: absolute; left: -1px; right: 0; height: 2px; background: var(--fail); z-index: 3; pointer-events: none; }
+.gcal-now::before { content: ''; position: absolute; left: -6px; top: -5px; width: 12px; height: 12px; border-radius: 50%; background: var(--fail); }
+.gcal-side { display: flex; flex-direction: column; gap: var(--space-4); }
+.gcal-detail { padding: 12px 12px 14px; background: var(--paper); border: var(--border-width) solid var(--ink); border-radius: 12px; box-shadow: var(--shadow-ordinary); }
+.gcal-detail-head { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
+.gcal-detail-head h3 { flex: 1; font-size: 19px; line-height: 1.25; font-weight: 600; }
+.swatch { flex: none; display: inline-block; width: 14px; height: 14px; margin-top: 4px; border-radius: 4px; background: var(--event); }
+.gcal-fact { display: flex; gap: 8px; align-items: center; font-size: 14px; padding: 3px 0; }
+.gcal-note { margin-top: 6px; padding: 5px 8px; background: var(--fill-progress); border-radius: var(--radius-button); font-weight: 600; }
+.gcal-legend { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.gcal-legend-title { font-size: 13px; font-weight: 600; color: var(--ink-muted); }
+.gcal-legend li { display: flex; gap: 8px; align-items: center; }
+.gcal-legend .swatch { margin-top: 0; }
+
+/* GitLab and GitHub */
+.scope-tabs { display: flex; gap: 4px; }
+.scope-tab {
+	display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; font-size: 13.5px; font-weight: 600;
+	background: transparent; border: 2px solid transparent; border-radius: var(--radius-button);
+	transition: transform var(--duration-normal) var(--ease-spring), background-color var(--duration-fast);
+}
+.scope-tab:hover { border-color: var(--ink); transform: translateY(-2px); }
+.scope-tab[aria-pressed="true"] { background: var(--paper); border-color: var(--ink); box-shadow: var(--shadow-compact); }
+.scope-count { font-size: 12px; color: var(--ink-muted); }
+.repo + .repo { margin-top: var(--space-4); }
+.repo-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-weight: 600; }
+.mr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(196px, 1fr)); gap: var(--space-3); }
+.mr-card {
+	display: flex; flex-direction: column; gap: 4px; padding: 9px 10px 6px; min-height: 104px;
+	background: var(--state-fill, var(--paper)); border: 2px solid var(--ink); border-radius: 10px; box-shadow: var(--shadow-compact);
+}
+.mr-card.is-merged { min-height: 0; }
+.mr-top { display: flex; align-items: baseline; gap: 8px; }
+.mr-ref { font-weight: 600; font-size: 14px; }
+.mr-state { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--ink-muted); text-align: right; }
+.mr-title { font-weight: 600; font-size: 14.5px; line-height: 1.3; }
+.mr-links { display: flex; align-items: center; gap: 2px; margin-top: auto; }
+.state-ready { --state-fill: var(--fill-ready); }
+.state-review { --state-fill: var(--fill-review); }
+.state-draft, .state-local { --state-fill: var(--fill-draft); }
+.state-failing { --state-fill: var(--fill-failing); }
+.state-progress, .state-stale { --state-fill: var(--fill-progress); }
+.state-merged { --state-fill: var(--fill-merged); }
+.pipeline-success { color: var(--done-ink); }
+.pipeline-failed { color: var(--fail-ink); }
+.pipeline-running { color: var(--warn-ink); }
+.ticket-chip, .local-chip { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 6px; font-size: 13px; border-radius: var(--radius-button); text-decoration: none; border: 2px solid transparent; }
+a.ticket-chip:hover { border-color: currentColor; }
+.ticket-chip.is-wrong { background: var(--paper); color: var(--warn-ink); border-color: var(--warn-ink); font-weight: 600; }
+.auto-line { display: flex; align-items: center; gap: 10px; margin-top: var(--space-4); padding-top: var(--space-3); border-top: 2px dashed var(--line); font-size: 14px; }
+.auto-line .auto-text { flex: 1; }
+
+/* Run log */
+.runs { display: flex; flex-direction: column; gap: var(--space-2); }
+.run { display: grid; grid-template-columns: 28px 22px minmax(0, 1fr) auto auto auto; gap: 12px; align-items: center; padding: 8px 10px; border-radius: 10px; border: 2px solid var(--ink); }
+.run-ok { background: var(--fill-merged); }
+.run-fail { background: var(--fill-failing); }
+.run-outcome { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; border: 2px solid var(--ink); background: var(--paper); }
+.run-ok .run-outcome { color: var(--done-ink); }
+.run-fail .run-outcome { color: var(--fail-ink); }
+.run-title { font-weight: 600; }
+.run-when, .run-duration { font-size: 14px; }
+
+/* Slack */
+.slack-section + .slack-section { margin-top: var(--space-3); }
+.slack-heading { margin-bottom: 4px; font-size: 13px; font-weight: 700; color: var(--ink-muted); }
+.slack-message { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; gap: 10px; padding: 8px 8px 8px 10px; border-radius: 10px; }
+.slack-message.is-waiting { background: var(--sticky-soft); }
+.slack-message + .slack-message { margin-top: 2px; }
+.slack-avatar { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 8px; color: #ffffff; font-weight: 700; font-size: 15px; }
+.slack-meta { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.slack-meta strong { font-size: 15px; }
+.slack-time, .slack-channel { font-size: 12.5px; color: var(--ink-muted); }
+.slack-text { margin-top: 1px; }
+.mention { padding: 0 3px; border-radius: 4px; background: var(--sticky); font-weight: 600; }
+.slack-replies { display: inline-flex; align-items: center; gap: 4px; margin-top: 3px; font-size: 13px; font-weight: 600; color: var(--brand-deep); }
+.slack-handled { margin-top: var(--space-3); padding: 8px 10px; border-radius: 10px; background: var(--fill-merged); }
+.slack-summary { display: flex; gap: 8px; align-items: flex-start; font-size: 14.5px; }
+.slack-summary svg { margin-top: 2px; color: var(--done-ink); }
+.slack-disclosure { margin-top: 6px; }
+.slack-disclosure summary { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; font-size: 13.5px; font-weight: 600; list-style: none; border-radius: 6px; padding: 2px 4px; }
+.slack-disclosure summary::-webkit-details-marker { display: none; }
+.slack-disclosure[open] summary svg { transform: rotate(90deg); }
+.slack-disclosure summary svg { transition: transform var(--duration-normal) var(--ease-spring); }
+.slack-scroll { max-height: 132px; overflow-y: auto; margin-top: 6px; padding: 2px; background: var(--paper); border: 2px solid var(--line); border-radius: 8px; }
+.slack-scroll .slack-message { padding: 6px 8px; }
+
+/* Gmail */
+.gmail-list { background: var(--paper); border: 2px solid var(--ink); border-radius: 10px; }
+.gmail-row { display: grid; grid-template-columns: 74px 92px minmax(0, 1fr) auto 50px auto; gap: 10px; align-items: center; padding: 8px 8px 8px 12px; }
+.gmail-row + .gmail-row { border-top: 1px solid var(--gcal-grid); }
+.gmail-row:first-child { border-radius: 8px 8px 0 0; }
+.gmail-row:last-child { border-radius: 0 0 8px 8px; }
+.gmail-from { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gmail-subject { min-width: 0; }
+.gmail-subject strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gmail-snippet { display: block; font-size: 14px; color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gmail-date { font-size: 13px; font-weight: 600; text-align: right; }
+.chip { display: inline-block; padding: 2px 8px; border-radius: var(--radius-badge); font-size: 12.5px; font-weight: 600; text-align: center; white-space: nowrap; }
+.account-work { background: var(--fill-review); }
+.account-personal { background: var(--fill-ready); }
+.action-word { border: 2px solid var(--ink); }
+.action-renew { background: var(--fill-progress); }
+.action-read { background: var(--fill-review); }
+.action-optional { background: var(--fill-draft); }
+.gmail-foot { margin-top: var(--space-3); font-size: 14px; color: var(--ink-muted); display: flex; gap: 14px; flex-wrap: wrap; }
+.gmail-foot b { color: var(--ink); }
+
+/* Obsidian */
+.obs-group + .obs-group { margin-top: var(--space-4); }
+.obs-note { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid #3a3a3a; }
+.obs-note h3 { font-size: 17px; font-weight: 700; color: var(--dark-text); }
+.obs-note .obs-path { font-size: 12.5px; color: var(--dark-muted); }
+.obs-task { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 6px 8px; border-radius: 8px; }
+.obs-checkbox { width: 16px; height: 16px; border: 2px solid var(--dark-muted); border-radius: 4px; }
+.obs-text { color: var(--dark-text); }
+.obs-fields { display: flex; gap: 6px; }
+.obs-select { color-scheme: dark; height: 28px; padding: 0 4px; font-size: 13px; cursor: pointer; max-width: 120px; background: #2a2a2a; border: 1.5px solid #4a4a4a; border-radius: 6px; color: var(--dark-text); }
+.obs-select:hover { border-color: var(--obsidian-accent); }
+.obs-select.is-tag { color: var(--obsidian-accent); }
+
+/* Retro */
+.retro-items { display: flex; flex-direction: column; gap: var(--space-3); }
+.retro-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+.retro-head h3 { font-size: 16px; font-weight: 700; }
+.retro-cost { font-size: 13px; color: var(--ink-muted); }
+.retro-evidence { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: var(--space-3); align-items: start; }
+.term-lines { font: 13px/1.45 var(--font-mono); display: flex; flex-direction: column; gap: 3px; }
+.term-line { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 6px; overflow-wrap: anywhere; }
+.term-tool .term-mark { color: #7ee2a8; }
+.term-assistant .term-mark { color: var(--dark-muted); }
+.term-error { color: var(--terminal-warning); padding: 3px 6px 3px 2px; margin-left: -2px; border-radius: 6px; background: color-mix(in srgb, var(--fail) 24%, var(--terminal)); }
+.term-error .term-mark { display: grid; place-items: center; padding-top: 2px; }
+.diff-card { background: var(--paper); border: 2px solid var(--ink); border-radius: 10px; box-shadow: var(--shadow-compact); }
+.diff-file { display: flex; align-items: center; gap: 6px; padding: 6px 10px; font-size: 12.5px; border-bottom: 2px solid var(--ink); background: var(--github-board); border-radius: 8px 8px 0 0; }
+.diff { margin: 0; padding: 6px 0; font: 13px/1.5 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.diff span { display: block; padding: 0 10px; }
+.diff .plus { background: var(--fill-ready); }
+.diff .minus { background: var(--fill-failing); }
+.sessions { margin-top: var(--space-4); padding: var(--space-3) var(--space-4); }
+.sessions h3 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+.session-row { display: grid; grid-template-columns: auto 240px minmax(0, 1fr); gap: 12px; align-items: center; padding: 4px 8px; border-radius: 8px; }
+.session-row.is-approved { background: var(--fill-ready); }
+.session-harness { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.session-prompt { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-muted); }
+.session-row.is-approved .session-prompt { color: var(--ink); }
+.sessions-foot { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-4); margin-top: var(--space-2); }
+
+/* Instructions */
+.changes { display: flex; flex-direction: column; gap: var(--space-2); }
+.change { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 9px 10px 9px 14px; border: 2px solid var(--ink); border-radius: 10px; }
+.verdict-final { background: var(--fill-ready); }
+.verdict-watch { background: var(--fill-progress); }
+.verdict-attention { background: var(--fill-failing); }
+.change-top { display: flex; align-items: baseline; gap: 10px; }
+.change-scope { font-size: 13px; font-weight: 600; }
+.verdict-word { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.change-summary { font-weight: 600; }
+.change-opinion { font-size: 14px; color: var(--ink-muted); }
+.change-state { display: flex; gap: 4px; }
+.state-chip { display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px 2px 5px; border-radius: var(--radius-badge); font-size: 12.5px; font-weight: 600; border: 2px solid var(--ink); background: var(--paper); }
+.state-chip.is-no { border-style: dashed; color: var(--fail-ink); border-color: var(--fail-ink); }
+
+/* News */
+.news-list { padding: var(--space-2); }
+.news-item { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 10px 10px 10px 12px; border-radius: 10px; }
+.news-item + .news-item { margin-top: 2px; }
+.news-meta { display: flex; gap: 10px; font-size: 13px; color: var(--ink-muted); }
+.news-title { font-weight: 700; font-size: 16px; }
+.news-summary { font-size: 14px; }
+.vote { display: flex; gap: 4px; }
+.vote .icon-button[aria-pressed="true"] { border-color: var(--ink); box-shadow: var(--shadow-compact); }
+.vote .vote-up[aria-pressed="true"] { background: var(--fill-ready); }
+.vote .vote-down[aria-pressed="true"] { background: var(--fill-failing); }
+
+/* Action points */
+.todo { padding: var(--space-3) var(--space-4) var(--space-4); }
+.todo-list { display: flex; flex-direction: column; }
+.todo-item { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 9px 8px; border-radius: 10px; }
+.todo-item + .todo-item { border-top: 2px dashed var(--line); }
+.todo-item.is-done .todo-text { text-decoration: line-through; color: var(--ink-muted); }
+.check-box { position: relative; display: inline-grid; place-items: center; width: 24px; height: 24px; }
+.check-box input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+.check-box span { display: grid; place-items: center; width: 24px; height: 24px; border: var(--border-width) solid var(--ink); border-radius: 6px; background: var(--paper); color: transparent; pointer-events: none; }
+.check-box input:checked + span { background: var(--fill-ready); color: var(--ink); }
+.check-box input:focus-visible + span { outline: 3px dashed var(--ink); outline-offset: 3px; }
+.todo-text { font-size: 16px; font-weight: 600; cursor: pointer; }
+.handoff { display: flex; padding: 3px; gap: 3px; border: 2px solid var(--ink); border-radius: 10px; background: var(--paper); }
+.handoff button { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; font-size: 13.5px; font-weight: 600; border: 2px solid transparent; border-radius: 7px; background: none; color: var(--ink-muted); }
+.handoff button:hover { color: var(--ink); }
+.handoff button[aria-pressed="true"] { color: var(--ink); border-color: var(--ink); }
+.handoff button[data-value="you"][aria-pressed="true"] { background: var(--fill-review); }
+.handoff button[data-value="agent"][aria-pressed="true"] { background: var(--sticky-soft); }
+.save-row { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-4); margin-top: var(--space-4); padding-top: var(--space-3); border-top: var(--border-width) solid var(--ink); }
+.choice-summary { font-size: 13px; color: var(--ink-muted); }
+
+.quiet-slide { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-6); }
+.quiet-slide svg { color: var(--done-ink); }
+
+@media (max-width: 1024px) {
+	.app { grid-template-columns: 80px minmax(0, 1fr); }
+	.outline { padding: 10px 6px; }
+	.outline-weekday, .outline-day, .outline-window, .chapter-name, .beat-list { display: none; }
+	.outline-weekday-short { display: block; text-align: center; }
+	.outline-date { padding: 2px 0 10px; }
+	.chapter-row { justify-content: center; padding: 8px 4px; }
+	.chapter-row .marker { position: absolute; top: -4px; right: -4px; min-width: 20px; height: 18px; padding: 0 4px; font-size: 11px; }
+	.chapter-row .marker-fyi, .chapter-row .marker-quiet { display: none; }
+	.chapter-row .source-warning { position: absolute; bottom: -3px; right: -2px; background: var(--paper); border-radius: 50%; }
+	.main { padding: 12px 16px 14px; }
+	.variant-tag-long { display: none; }
+	.variant-tag-short { display: inline; }
+	.gcal { grid-template-columns: auto 210px; }
+	.retro-evidence { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 760px) {
+	body { overflow: auto; }
+	.app { display: flex; flex-direction: column; height: auto; min-height: 100vh; }
+	.outline { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 8px; margin: 8px; padding: 6px; overflow-x: auto; overflow-y: hidden; }
+	.outline-date { margin: 0; padding: 0 8px; border-bottom: 0; border-right: 2px dashed var(--line); }
+	.chapter-list { flex-direction: row; gap: 4px; }
+	.main { display: block; padding: 8px 10px 0; }
+	.variant-tag { position: static; display: inline-block; margin-bottom: 4px; }
+	.column, .caption-row { width: 100%; }
+	.stage { overflow: visible; }
+	.transport { position: sticky; bottom: 8px; flex-wrap: wrap; gap: 8px; }
+	.progress { order: 5; flex-basis: 100%; }
+	.overview, .gcal { grid-template-columns: minmax(0, 1fr); }
+	.date-note { transform: none; }
+	.gcal-main { --gutter: 48px; --day: minmax(120px, 1fr); }
+	.gmail-row { grid-template-columns: minmax(0, 1fr) auto; }
+	.gmail-row .gmail-from { grid-column: 1; }
+	.gmail-row .account-chip { justify-self: start; }
+	.obs-task { grid-template-columns: 18px minmax(0, 1fr); }
+	.obs-fields { grid-column: 2; flex-wrap: wrap; }
+	.session-row { grid-template-columns: auto minmax(0, 1fr); }
+	.session-prompt { grid-column: 1 / -1; white-space: normal; }
+	.change, .news-item, .todo-item { grid-template-columns: minmax(0, 1fr) auto; }
+	.news-source, .todo-item .check-box { display: none; }
+	.run { grid-template-columns: 28px minmax(0, 1fr) auto; }
+	.run .brand-mark, .run-duration { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+	*, *::before, *::after { transition: none !important; scroll-behavior: auto !important; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+	<nav class="outline" aria-label="Brief outline">
+		<header class="outline-date">
+			<span class="outline-weekday" id="outline-weekday"></span>
+			<span class="outline-weekday-short" id="outline-weekday-short"></span>
+			<span class="outline-day" id="outline-day"></span>
+			<span class="outline-window mono" id="outline-window"></span>
+		</header>
+		<ol class="chapter-list" id="chapter-list"></ol>
+	</nav>
+	<main class="main" id="main">
+		<div class="variant-tag" aria-hidden="true"><span class="variant-tag-long">Variant A · native windows on the notebook desk</span><span class="variant-tag-short">Variant A</span></div>
+		<div class="column">
+			<header class="chapter-header">
+				<span class="chapter-icon" id="chapter-icon"></span>
+				<div><p class="kicker" id="kicker"></p><h1 class="chapter-title" id="chapter-title"></h1></div>
+			</header>
+			<section class="stage" id="stage" aria-labelledby="chapter-title"></section>
+		</div>
+		<div class="caption-row">
+			<p class="caption" aria-live="polite"><span class="caption-text" id="caption-text"></span><span class="caption-count mono" id="caption-count"></span></p>
+		</div>
+		<div class="transport" role="group" aria-label="Playback">
+			<div class="transport-buttons">
+				<button class="icon-button" type="button" id="chapter-previous" aria-label="Previous chapter" title="Previous chapter (Shift+Left)"></button>
+				<button class="icon-button" type="button" id="beat-previous" aria-label="Previous point" title="Previous point (Left)"></button>
+				<button class="icon-button play-button" type="button" id="play"></button>
+				<button class="icon-button" type="button" id="beat-next" aria-label="Next point" title="Next point (Right)"></button>
+				<button class="icon-button" type="button" id="chapter-next" aria-label="Next chapter" title="Next chapter (Shift+Right)"></button>
+			</div>
+			<div class="progress" id="progress" role="group" aria-label="Brief progress by chapter"></div>
+			<span class="time mono" id="time"></span>
+			<button class="icon-button" type="button" id="speed"></button>
+			<button class="icon-button" type="button" id="mute"></button>
+		</div>
+	</main>
+</div>
+<script type="application/json" id="brief-data">{
+  "date": "2026-10-16",
+  "window": { "since": "2026-10-15T06:05:00+02:00", "until": "2026-10-16T06:00:00+02:00", "label": "Thu 15 Oct 06:05 → Fri 16 Oct 06:00" },
+  "now": "2026-10-16T06:00:00+02:00",
+  "sources": [
+    { "name": "Personal Google", "status": "ok", "chapters": ["calendar", "mail"] },
+    { "name": "Work Slack and mail", "status": "ok", "chapters": ["slack", "mail"] },
+    { "name": "Work calendar", "status": "skipped", "reason": "Connector not approved yet; busy blocks only", "chapters": ["calendar"] },
+    { "name": "Gerrit", "status": "unavailable", "reason": "SSH key not loaded", "chapters": ["work"] },
+    { "name": "OpenAI news", "status": "unavailable", "reason": "HTTP 403", "chapters": ["news"] }
+  ],
+  "chapters": [
+    {
+      "id": "overview", "type": "overview", "name": "Good morning", "title": "Four things need you", "status": "needs", "count": 4,
+      "data": {
+        "greeting": "Good morning",
+        "weekday": "Friday", "dayLabel": "16 October",
+        "needs": [
+          { "id": "need-1", "text": "Review !321", "detail": "Alex asked twice", "app": "gitlab", "url": "https://example.com/mr/321", "chapter": "slack" },
+          { "id": "need-2", "text": "Merge !318", "detail": "Approved and green", "app": "gitlab", "url": "https://example.com/mr/318", "chapter": "work" },
+          { "id": "need-3", "text": "Renew the GitLab token", "detail": "Expires Wednesday", "app": "gmail", "url": "https://mail.google.com/", "chapter": "mail" },
+          { "id": "need-4", "text": "Dentist at 16:00", "detail": "Leave by 15:30", "app": "googlecalendar", "url": "https://calendar.google.com/", "chapter": "calendar" }
+        ]
+      },
+      "beats": [
+        { "say": "Good morning. Four things need you today.", "note": "Today", "targets": ["need-1", "need-2", "need-3", "need-4"] },
+        { "say": "Alex is waiting on your review of three twenty one, and three eighteen is ready to merge.", "note": "Reviews", "targets": ["need-1", "need-2"] },
+        { "say": "Your GitLab token expires on Wednesday, and the dentist is at four.", "note": "Token, dentist", "targets": ["need-3", "need-4"] }
+      ]
+    },
+    {
+      "id": "calendar", "type": "calendar", "name": "Calendar", "title": "Standup, then the dentist", "status": "fyi", "count": 5,
+      "data": {
+        "calendars": [
+          { "id": "personal", "name": "Personal", "account": "personal", "color": "#039be5" },
+          { "id": "family", "name": "Family", "account": "personal", "color": "#33b679" },
+          { "id": "work", "name": "Work", "account": "work", "color": "#7986cb", "busyOnly": true }
+        ],
+        "days": [
+          { "id": "today", "label": "Fri", "date": "16", "focus": true },
+          { "id": "tomorrow", "label": "Sat", "date": "17" }
+        ],
+        "events": [
+          { "id": "standup", "calendarId": "work", "day": "today", "start": "09:30", "end": "09:45", "busyOnly": true },
+          { "id": "planning", "calendarId": "work", "day": "today", "start": "13:00", "end": "14:00", "busyOnly": true },
+          { "id": "dentist", "calendarId": "personal", "day": "today", "start": "16:00", "end": "17:00", "title": "Dentist", "place": "Downtown", "notes": ["Leave by 15:30"], "url": "https://calendar.google.com/" },
+          { "id": "pickup", "calendarId": "family", "day": "today", "start": "17:30", "end": "18:00", "title": "Kindergarten pickup", "url": "https://calendar.google.com/" },
+          { "id": "nameday", "calendarId": "family", "day": "today", "allDay": true, "title": "Name day: Havel" },
+          { "id": "run", "calendarId": "personal", "day": "tomorrow", "start": "08:00", "end": "09:00", "title": "Park run", "url": "https://calendar.google.com/" },
+          { "id": "market", "calendarId": "family", "day": "tomorrow", "start": "10:00", "end": "12:00", "title": "Farmers market", "url": "https://calendar.google.com/" },
+          { "id": "birthday", "calendarId": "family", "day": "tomorrow", "start": "15:00", "end": "19:00", "title": "Birthday party at Sam's", "place": "Oak Park", "url": "https://calendar.google.com/" }
+        ]
+      },
+      "beats": [
+        { "say": "Standup at half past nine, planning at one.", "note": "Work blocks", "targets": ["event-standup", "event-planning"] },
+        { "say": "The dentist is at four; leave by half past three.", "note": "Dentist", "targets": ["event-dentist"], "select": "dentist" },
+        { "say": "Tomorrow is family day: park run, the market, and Sam's party in Oak Park.", "note": "Tomorrow", "targets": ["event-run", "event-market", "event-birthday"] }
+      ]
+    },
+    {
+      "id": "work", "type": "work", "name": "Work in flight", "title": "One merge ready, one review waiting", "status": "needs", "count": 2,
+      "data": {
+        "states": {
+          "ready": "Approved and green", "review": "Waiting for review", "draft": "Draft", "failing": "Pipeline failing",
+          "progress": "In progress", "local": "Local only", "merged": "Merged", "stale": "Ticket column is wrong"
+        },
+        "projects": [
+          {
+            "id": "ui-components", "scope": "work", "name": "ui-components", "app": "gitlab", "url": "https://example.com/ysc",
+            "cards": [
+              { "id": "mr-318", "ref": "!318", "title": "Payment forms opt out of Enter submit", "state": "ready", "url": "https://example.com/mr/318", "pipeline": { "status": "success", "url": "https://example.com/pipelines/318" }, "ticket": { "ref": "T-102", "column": "In review", "expected": "Approved", "url": "https://kanbanflow.com/" }, "session": { "label": "Orca", "url": "orca://" } },
+              { "id": "mr-321", "ref": "!321", "title": "Date picker keyboard support", "state": "review", "author": "Alex", "url": "https://example.com/mr/321", "pipeline": { "status": "success", "url": "https://example.com/pipelines/321" } },
+              { "id": "mr-320", "ref": "!320", "title": "Toast stacking", "state": "failing", "url": "https://example.com/mr/320", "pipeline": { "status": "failed", "url": "https://example.com/pipelines/320", "job": "lint" } },
+              { "id": "mr-316", "ref": "!316", "title": "Select clears on reset", "state": "merged", "url": "https://example.com/mr/316" },
+              { "id": "mr-317", "ref": "!317", "title": "CI split into lint and test", "state": "merged", "url": "https://example.com/mr/317" }
+            ]
+          },
+          {
+            "id": "mpx", "scope": "personal", "name": "mpx", "app": "github", "url": "https://github.com/MartinoPolo/mpx",
+            "cards": [
+              { "id": "mpx-brief", "ref": "main", "title": "Morning brief skill", "state": "progress", "url": "https://github.com/MartinoPolo/mpx", "local": { "uncommitted": 9, "unpushed": 1 } }
+            ]
+          },
+          {
+            "id": "prejemesi", "scope": "personal", "name": "prejemesi", "app": "github", "url": "https://github.com/MartinoPolo/prejemesi",
+            "cards": [
+              { "id": "pr-488", "ref": "#488", "title": "Agent access part 2: API", "state": "draft", "url": "https://github.com/MartinoPolo/prejemesi/pull/488", "pipeline": { "status": "running", "url": "https://github.com/MartinoPolo/prejemesi/actions" } },
+              { "id": "pr-487", "ref": "#487", "title": "Permanent wishlists", "state": "merged", "url": "https://github.com/MartinoPolo/prejemesi/pull/487" }
+            ]
+          }
+        ],
+        "autoHandled": [
+          { "id": "tidy", "text": "11 old checkouts with local changes", "proposal": "Stash and list them in the weekly review" }
+        ],
+        "quiet": ["kamosh", "orca", "flowguard-api"]
+      },
+      "beats": [
+        { "say": "Three eighteen is approved and green; merge it, and I will move T-102 to Approved.", "note": "Ready to merge", "targets": ["card-mr-318"], "scope": "work" },
+        { "say": "Alex's date picker waits for your review.", "note": "Review waiting", "targets": ["card-mr-321"], "scope": "work" },
+        { "say": "Toast stacking fails in lint.", "note": "Lint failing", "targets": ["card-mr-320"], "scope": "work" },
+        { "say": "On the personal side, mpx has the brief skill uncommitted and prejemesi has a draft running checks.", "note": "Personal", "targets": ["card-mpx-brief", "card-pr-488"], "scope": "personal" }
+      ]
+    },
+    {
+      "id": "overnight", "type": "overnight", "name": "Overnight runs", "title": "The 06:00 brief ran", "status": "fyi", "count": 2,
+      "data": {
+        "runs": [
+          { "id": "run-morning", "outcome": "ok", "app": "orca", "title": "Morning brief", "when": "06:00", "duration": "9 min", "url": "file:///C:/AI_DUMP/morning-brief/2026-10-16/" },
+          { "id": "run-afk", "outcome": "fail", "app": "claude", "title": "AFK: videoLab render", "when": "02:14", "duration": "41 min", "detail": "Render timed out at scene 7", "url": "file:///C:/AI_DUMP/afk/" }
+        ]
+      },
+      "beats": [
+        { "say": "The overnight render failed at scene seven; the brief itself ran fine.", "note": "Render failed", "targets": ["run-afk"] }
+      ]
+    },
+    {
+      "id": "slack", "type": "slack", "name": "Slack", "title": "One request waits on you", "status": "needs", "count": 1,
+      "data": {
+        "unaddressed": [
+          { "id": "s1", "channel": "#team-ui", "author": "Alex", "when": "16:40", "text": "@you could you look at !321 before Monday? Keyboard nav is the part I am unsure about.", "replies": 0, "url": "https://example.slack.com/archives/C1/p1" }
+        ],
+        "worthKnowing": [
+          { "id": "s2", "channel": "#admins", "author": "Chris", "when": "15:05", "text": "Load balancer drops ACKs between the balancer and router; we are watching it.", "replies": 6, "url": "https://example.slack.com/archives/C2/p2" },
+          { "id": "s3", "channel": "#ai", "author": "Kim", "when": "11:20", "text": "Code review working group kicks off Tuesday, sign-up in the thread.", "replies": 14, "url": "https://example.slack.com/archives/C3/p3" }
+        ],
+        "addressedSummary": "Yesterday you fixed the failing feature tests, finished a review ask, and answered the forms question.",
+        "addressed": [
+          { "id": "s4", "channel": "#team-ui", "author": "Robin", "when": "13:16", "text": "Feature tests fail on the filter Apply button", "url": "https://example.slack.com/archives/C1/p4" },
+          { "id": "s5", "channel": "#team-ui", "author": "Taylor", "when": "14:02", "text": "Review please: !317", "url": "https://example.slack.com/archives/C1/p5" },
+          { "id": "s6", "channel": "DM", "author": "Jordan", "when": "17:45", "text": "Are the payment forms still submitting on Enter?", "url": "https://example.slack.com/archives/D1/p6" }
+        ],
+        "skipped": 35
+      },
+      "beats": [
+        { "say": "Alex wants your review of three twenty one before Monday.", "note": "Waiting on you", "targets": ["message-s1"] },
+        { "say": "Worth knowing: admins are still chasing a load balancer issue, and the AI code review group starts Tuesday.", "note": "Worth knowing", "targets": ["message-s2", "message-s3"] },
+        { "say": "Everything else you already handled: the feature tests, a review, and Jordan's forms question.", "note": "Handled", "targets": ["slack-addressed"] }
+      ]
+    },
+    {
+      "id": "mail", "type": "mail", "name": "Mail", "title": "Two emails to act on", "status": "needs", "count": 2,
+      "data": {
+        "rows": [
+          { "id": "token", "account": "work", "from": "GitLab", "subject": "Your personal access token expires soon", "snippet": "The GitLab Workflow token expires on 21 Oct.", "when": "Oct 15", "action": "Renew", "url": "https://mail.google.com/" },
+          { "id": "trip", "account": "personal", "from": "TravelCo", "subject": "Trip instructions: Lisbon, Oct 21", "snippet": "Check-in opens 48 hours before departure.", "when": "Oct 15", "action": "Read", "url": "https://mail.google.com/" },
+          { "id": "bootcamp", "account": "work", "from": "HR team", "subject": "Optional bootcamp in November", "snippet": "Optional, sent to everyone.", "when": "Oct 15", "action": "Optional", "url": "https://mail.google.com/" }
+        ],
+        "notifications": [
+          { "source": "GitLab", "count": 9 }, { "source": "Google", "count": 6 }, { "source": "KanbanFlow", "count": 3 }, { "source": "Other", "count": 4 }
+        ]
+      },
+      "beats": [
+        { "say": "Renew the GitLab token, and read the Lisbon check-in steps.", "note": "Act on", "targets": ["mail-token", "mail-trip"] },
+        { "say": "The bootcamp invite is optional.", "note": "Optional", "targets": ["mail-bootcamp"] }
+      ]
+    },
+    {
+      "id": "triage", "type": "triage", "name": "Obsidian triage", "title": "Three captures to file", "status": "fyi", "count": 3,
+      "data": {
+        "vault": "ObsidianMP",
+        "projects": ["mpx", "orca", "prejemesi", "skills", "videoLab"],
+        "headings": ["#AI", "#todo", "#quick", "#tooling", "#work"],
+        "groups": [
+          { "id": "daily", "note": "Daily/2026-10-15", "url": "obsidian://open?vault=ObsidianMP&file=Daily%2F2026-10-15", "items": [
+            { "id": "t1", "text": "Morning brief should move KF tickets", "project": "mpx", "heading": "#tooling", "priority": "high" },
+            { "id": "t2", "text": "Buy a birthday present for Sam", "project": "", "heading": "#todo", "priority": "highest" }
+          ] },
+          { "id": "ideas", "note": "Ideas", "url": "obsidian://open?vault=ObsidianMP&file=Ideas", "items": [
+            { "id": "t3", "text": "True crime videos with realistic animations", "project": "videoLab", "heading": "#AI", "priority": "low" }
+          ] }
+        ]
+      },
+      "beats": [
+        { "say": "From yesterday's note: KF moves for the brief, and Sam's present, which is due tomorrow.", "note": "Daily note", "targets": ["task-t1", "task-t2"] },
+        { "say": "One idea: true crime animations, parked as low priority.", "note": "Ideas", "targets": ["task-t3"] }
+      ]
+    },
+    {
+      "id": "retro", "type": "retro", "name": "Retro", "title": "Two fixes worth a session", "status": "fyi", "count": 2,
+      "data": {
+        "items": [
+          {
+            "id": "substitution", "title": "Arithmetic blocked as command substitution", "harness": "claude", "account": "personal", "cost": "about 40 blocked calls in 15 sessions",
+            "evidence": { "kind": "terminal", "lines": [
+              { "role": "tool", "text": "Bash(end=$((SECONDS+2700)); until [ -f done ]; do sleep 5; done)" },
+              { "role": "error", "text": "PreToolUse:Bash hook error: Blocked dangerous command: opaque command or process substitution cannot be inspected." },
+              { "role": "assistant", "text": "I'll write a scratchpad script instead." }
+            ], "session": { "label": "3589dbf6", "url": "file:///C:/Users/me/session.jsonl" } },
+            "fix": { "file": "mpx · src/safeguard/shell.ts", "diff": "- if (/\\$\\(/.test(command)) return true;\n+ if (/\\$\\((?!\\()/.test(command)) return true;" },
+            "session": { "harness": "claude", "account": "personal", "project": "mpx", "prompt": "Treat $(( )) as arithmetic in hasOpaqueCommandExpansion and add regression tests." }
+          },
+          {
+            "id": "commit", "title": "git add and commit chained in one call", "harness": "pi", "account": "work", "cost": "9 blocked commits",
+            "evidence": { "kind": "terminal", "lines": [
+              { "role": "tool", "text": "bash: git add -A && git commit -m \"fix: toast stacking\"" },
+              { "role": "error", "text": "Finish staging/index mutations in a separate completed tool call before git commit" }
+            ], "session": { "label": "8c38ddae", "url": "file:///C:/Users/me/session2.jsonl" } },
+            "fix": { "file": "mpx · content/skills/commit/SKILL.md", "diff": "+ Stage in one tool call, inspect git diff --cached, then commit in a separate call." },
+            "session": { "harness": "claude", "account": "personal", "project": "mpx", "prompt": "Tell the commit skill to stage and commit in separate calls." }
+          }
+        ]
+      },
+      "beats": [
+        { "say": "The shell hook blocks plain arithmetic as if it were command substitution; about forty calls this week.", "note": "Arithmetic blocked", "targets": ["retro-substitution"] },
+        { "say": "Commits also fail when staging shares the call; a one-line skill fix would stop it.", "note": "Split commits", "targets": ["retro-commit"] },
+        { "say": "Approve either fix and I will start a session for it.", "note": "Start sessions", "targets": ["retro-sessions"] }
+      ]
+    },
+    {
+      "id": "instructions", "type": "instructions", "name": "Instructions", "title": "Three changes, one unbuilt", "status": "fyi", "count": 3,
+      "data": {
+        "changes": [
+          { "id": "c1", "scope": "mpx output style", "summary": "Everything that needs you moves to one final HITL section.", "opinion": "Looks final. Answers are easier to scan; nothing to do.", "verdict": "final", "state": { "committed": true, "pushed": true, "built": true }, "url": "https://github.com/MartinoPolo/mpx/commit/d7584c2" },
+          { "id": "c2", "scope": "mpx morning-brief", "summary": "New skill, plus launcher fixes for slash prompts.", "opinion": "Still moving. Not committed, and dist is a day old.", "verdict": "attention", "state": { "committed": false, "pushed": false, "built": false }, "url": "https://github.com/MartinoPolo/mpx" },
+          { "id": "c3", "scope": "videoLab AGENTS.md", "summary": "Reality first: build scenes only from trusted sources.", "opinion": "Good rule; watch that it does not block quick drafts.", "verdict": "watch", "state": { "committed": true, "pushed": false }, "url": "https://github.com/MartinoPolo/videoLab" }
+        ]
+      },
+      "beats": [
+        { "say": "The HITL output style looks final; nothing to do.", "note": "Output style", "targets": ["change-c1"] },
+        { "say": "The morning brief work is not committed and the build is stale.", "note": "Not committed", "targets": ["change-c2"] },
+        { "say": "videoLab now insists on trusted sources; fine, but it may slow drafts.", "note": "videoLab", "targets": ["change-c3"] }
+      ]
+    },
+    {
+      "id": "news", "type": "news", "name": "AI news", "title": "Three picks", "status": "fyi", "count": 3,
+      "data": {
+        "items": [
+          { "id": "n1", "app": "googlegemini", "source": "Google", "title": "Gemini 3 Flash gets native audio output", "summary": "Cheaper speech for apps like this brief.", "date": "Oct 15", "url": "https://blog.google/" },
+          { "id": "n2", "app": "ycombinator", "source": "Hacker News", "title": "Show HN: local-first agent sandboxes", "summary": "412 points; containers per task, no daemon.", "date": "Oct 15", "url": "https://news.ycombinator.com/" },
+          { "id": "n3", "app": "claude", "source": "Claude Code", "title": "Claude Code 2.1.301", "summary": "Idle compaction now configurable per project.", "date": "Oct 15", "url": "https://github.com/anthropics/claude-code/releases" }
+        ]
+      },
+      "beats": [
+        { "say": "Gemini Flash now speaks natively, which could voice this brief cheaply.", "note": "Gemini audio", "targets": ["news-n1"] },
+        { "say": "On Hacker News, local-first agent sandboxes; and a small Claude Code release.", "note": "HN, Claude Code", "targets": ["news-n2", "news-n3"] }
+      ]
+    },
+    {
+      "id": "actions", "type": "actions", "name": "Action points", "title": "Four action points", "status": "needs", "count": 4,
+      "data": {
+        "items": [
+          { "id": "action-1", "text": "Review !321", "app": "gitlab", "url": "https://example.com/mr/321", "chapter": "slack", "handoff": "you" },
+          { "id": "action-2", "text": "Merge !318 and move T-102", "app": "gitlab", "url": "https://example.com/mr/318", "chapter": "work", "handoff": "agent" },
+          { "id": "action-3", "text": "Renew the GitLab token", "app": "gmail", "url": "https://mail.google.com/", "chapter": "mail", "handoff": "you" },
+          { "id": "action-4", "text": "Start the hook fix session", "app": "claude", "chapter": "retro", "handoff": "agent" }
+        ]
+      },
+      "beats": [
+        { "say": "Four action points. I can merge and start the fix session; the review and the token are yours.", "note": "Summary", "targets": ["action-1", "action-2", "action-3", "action-4"] }
+      ]
+    }
+  ]
+}</script>
+<script>
+const brief = JSON.parse(document.getElementById('brief-data').textContent);
+const chapters = brief.chapters;
+const byId = (id) => document.getElementById(id);
+const stage = byId('stage');
+
+/* Rendering helpers: every value from the brief is escaped and every link scheme is checked. */
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
+const LINK_SCHEMES = ['http:', 'https:', 'obsidian:', 'file:', 'slack:', 'mailto:', 'orca:'];
+function safeUrl(url) {
+	const text = String(url ?? '').trim();
+	if (!text || text.startsWith('//')) return '';
+	const scheme = text.match(/^([a-z][a-z0-9+.-]*):/i);
+	return scheme && LINK_SCHEMES.includes(`${scheme[1].toLowerCase()}:`) ? text : '';
+}
+const targetAttribute = (name) => `data-target="${escapeHtml(name)}"`;
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const monthName = MONTHS[Number(brief.date.slice(5, 7)) - 1];
+const toMinutes = (time) => { const [hours, minutes] = String(time).split(':').map(Number); return hours * 60 + (minutes || 0); };
+const capitalize = (text) => String(text).charAt(0).toUpperCase() + String(text).slice(1);
+
+const BRANDS = {
+	googlecalendar: { label: 'Google Calendar', color: 'var(--google-calendar)', path: 'M18.316 5.684H24v12.632h-5.684V5.684zM5.684 24h12.632v-5.684H5.684V24zM18.316 5.684V0H1.895A1.894 1.894 0 0 0 0 1.895v16.421h5.684V5.684h12.632zm-7.207 6.25v-.065c.272-.144.5-.349.687-.617s.279-.595.279-.982c0-.379-.099-.72-.3-1.025a2.05 2.05 0 0 0-.832-.714 2.703 2.703 0 0 0-1.197-.257c-.6 0-1.094.156-1.481.467-.386.311-.65.671-.793 1.078l1.085.452c.086-.249.224-.461.413-.633.189-.172.445-.257.767-.257.33 0 .602.088.816.264a.86.86 0 0 1 .322.703c0 .33-.12.589-.36.778-.24.19-.535.284-.886.284h-.567v1.085h.633c.407 0 .748.109 1.02.327.272.218.407.499.407.843 0 .336-.129.614-.387.832s-.565.327-.924.327c-.351 0-.651-.103-.897-.311-.248-.208-.422-.502-.521-.881l-1.096.452c.178.616.505 1.082.977 1.401.472.319.984.478 1.538.477a2.84 2.84 0 0 0 1.293-.291c.382-.193.684-.458.902-.794.218-.336.327-.72.327-1.149 0-.429-.115-.797-.344-1.105a2.067 2.067 0 0 0-.881-.689zm2.093-1.931l.602.913L15 10.045v5.744h1.187V8.446h-.827l-2.158 1.557zM22.105 0h-3.289v5.184H24V1.895A1.894 1.894 0 0 0 22.105 0zm-3.289 23.5l4.684-4.684h-4.684V23.5zM0 22.105C0 23.152.848 24 1.895 24h3.289v-5.184H0v3.289z' },
+	gmail: { label: 'Gmail', color: 'var(--gmail)', path: 'M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.273H1.636A1.636 1.636 0 0 1 0 19.366V5.457c0-2.023 2.309-3.178 3.927-1.964L5.455 4.64 12 9.548l6.545-4.91 1.528-1.145C21.69 2.28 24 3.434 24 5.457z' },
+	slack: { label: 'Slack', color: 'var(--slack)', path: 'M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z' },
+	obsidian: { label: 'Obsidian', color: 'var(--obsidian)', path: 'M19.355 18.538a68.967 68.959 0 0 0 1.858-2.954.81.81 0 0 0-.062-.9c-.516-.685-1.504-2.075-2.042-3.362-.553-1.321-.636-3.375-.64-4.377a1.707 1.707 0 0 0-.358-1.05l-3.198-4.064a3.744 3.744 0 0 1-.076.543c-.106.503-.307 1.004-.536 1.5-.134.29-.29.6-.446.914l-.31.626c-.516 1.068-.997 2.227-1.132 3.59-.124 1.26.046 2.73.815 4.481.128.011.257.025.386.044a6.363 6.363 0 0 1 3.326 1.505c.916.79 1.744 1.922 2.415 3.5zM8.199 22.569c.073.012.146.02.22.02.78.024 2.095.092 3.16.29.87.16 2.593.64 4.01 1.055 1.083.316 2.198-.548 2.355-1.664.114-.814.33-1.735.725-2.58l-.01.005c-.67-1.87-1.522-3.078-2.416-3.849a5.295 5.295 0 0 0-2.778-1.257c-1.54-.216-2.952.19-3.84.45.532 2.218.368 4.829-1.425 7.531zM5.533 9.938c-.023.1-.056.197-.098.29L2.82 16.059a1.602 1.602 0 0 0 .313 1.772l4.116 4.24c2.103-3.101 1.796-6.02.836-8.3-.728-1.73-1.832-3.081-2.55-3.831zM9.32 14.01c.615-.183 1.606-.465 2.745-.534-.683-1.725-.848-3.233-.716-4.577.154-1.552.7-2.847 1.235-3.95.113-.235.223-.454.328-.664.149-.297.288-.577.419-.86.217-.47.379-.885.46-1.27.08-.38.08-.72-.014-1.043-.095-.325-.297-.675-.68-1.06a1.6 1.6 0 0 0-1.475.36l-4.95 4.452a1.602 1.602 0 0 0-.513.952l-.427 2.83c.672.59 2.328 2.316 3.335 4.711.09.21.175.43.253.653z' },
+	gitlab: { label: 'GitLab', color: 'var(--gitlab)', path: 'm23.6004 9.5927-.0337-.0862L20.3.9814a.851.851 0 0 0-.3362-.405.8748.8748 0 0 0-.9997.0539.8748.8748 0 0 0-.29.4399l-2.2055 6.748H7.5375l-2.2057-6.748a.8573.8573 0 0 0-.29-.4412.8748.8748 0 0 0-.9997-.0537.8585.8585 0 0 0-.3362.4049L.4332 9.5015l-.0325.0862a6.0657 6.0657 0 0 0 2.0119 7.0105l.0113.0087.03.0213 4.976 3.7264 2.462 1.8633 1.4995 1.1321a1.0085 1.0085 0 0 0 1.2197 0l1.4995-1.1321 2.4619-1.8633 5.006-3.7489.0125-.01a6.0682 6.0682 0 0 0 2.0094-7.003z' },
+	github: { label: 'GitHub', color: 'var(--github)', path: 'M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12' },
+	claude: { label: 'Claude Code', color: 'var(--claude)', path: 'm4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z' },
+	googlegemini: { label: 'Google Gemini', color: 'var(--gemini)', path: 'M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81' },
+	ycombinator: { label: 'Hacker News', color: 'var(--hacker-news)', path: 'M0 24V0h24v24H0zM6.951 5.896l4.112 7.708v5.064h1.583v-4.972l4.148-7.799h-1.749l-2.457 4.875c-.372.745-.688 1.434-.688 1.434s-.297-.708-.651-1.434L8.831 5.896h-1.88z' },
+	terminal: { label: 'Terminal', color: 'var(--terminal)', path: 'M8.165 6V3h7.665v3H8.165zm-.5-3H1c-.55 0-1 .45-1 1v2h7.665V3zM23 3h-6.67v3H24V4c0-.55-.45-1-1-1zM0 6.5h24V20c0 .55-.45 1-1 1H1c-.55 0-1-.45-1-1V6.5zM11.5 18c0 .3.2.5.5.5h8c.3 0 .5-.2.5-.5v-1.5c0-.3-.2-.5-.5-.5h-8c-.3 0-.5.2-.5.5V18zm-5.2-4.55l-3.1 3.1c-.25.25-.25.6 0 .8l.9.9c.25.25.6.25.8 0l4.4-4.4a.52.52 0 0 0 0-.8l-4.4-4.4c-.2-.2-.6-.2-.8 0l-.9.9c-.25.2-.25.55 0 .8l3.1 3.1z' },
+};
+const APP_BRAND = { orca: 'terminal', pi: 'terminal', windowsterminal: 'terminal' };
+const brandFor = (app) => BRANDS[APP_BRAND[app] ?? app] ? (APP_BRAND[app] ?? app) : 'terminal';
+function brand(app, size = 18, color) {
+	const entry = BRANDS[brandFor(app)];
+	return `<svg class="brand-mark" width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="fill:${color ?? entry.color}"><path d="${entry.path}"/></svg>`;
+}
+const brandLabel = (app) => app === 'pi' ? 'Pi' : app === 'orca' ? 'Orca' : BRANDS[brandFor(app)].label;
+
+const UI_PATHS = {
+	play: '<path d="M7.5 4.8v14.4L19.2 12z" fill="currentColor"/>',
+	pause: '<rect x="6.5" y="5" width="3.6" height="14" rx="1" fill="currentColor" stroke="none"/><rect x="13.9" y="5" width="3.6" height="14" rx="1" fill="currentColor" stroke="none"/>',
+	chapterPrevious: '<path d="M5 5v14M12.5 6l-6 6 6 6M19 6l-6 6 6 6"/>',
+	beatPrevious: '<path d="M15 6l-6 6 6 6"/>',
+	beatNext: '<path d="M9 6l6 6-6 6"/>',
+	chapterNext: '<path d="M5 6l6 6-6 6M11.5 6l6 6-6 6M19 5v14"/>',
+	speed: '<path d="M4.2 17.5a8.5 8.5 0 1 1 15.6 0"/><path d="M12 13.5l4.2-4.2"/>',
+	volume: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>',
+	volumeMute: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/>',
+	external: '<path d="M14 4h6v6M20 4l-8.5 8.5"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+	arrowRight: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+	check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+	x: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
+	warning: '<path d="M12 3.8L2.8 19.8h18.4z"/><path d="M12 10v4.2M12 17.2v.01"/>',
+	chevronRight: '<path d="M9 6l6 6-6 6"/>',
+	thumbUp: '<path d="M7 10.5v9.5H4v-9.5zM7 10.5l4-6.5a2 2 0 0 1 3.2 2.1L13.2 10h5.3a2 2 0 0 1 2 2.4l-1.3 6A2 2 0 0 1 17.2 20H7"/>',
+	thumbDown: '<g transform="rotate(180 12 12)"><path d="M7 10.5v9.5H4v-9.5zM7 10.5l4-6.5a2 2 0 0 1 3.2 2.1L13.2 10h5.3a2 2 0 0 1 2 2.4l-1.3 6A2 2 0 0 1 17.2 20H7"/></g>',
+	clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+	pin: '<path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/>',
+	merge: '<circle cx="6" cy="5.5" r="2"/><circle cx="6" cy="18.5" r="2"/><circle cx="18" cy="18.5" r="2"/><path d="M6 7.5v9M18 16.5V9a2 2 0 0 0-2-2h-5M13 4.5L10.5 7 13 9.5"/>',
+	pipelineSuccess: '<circle cx="12" cy="12" r="8.5"/><path d="M8.2 12.3l2.6 2.6 5-5.3"/>',
+	pipelineFailed: '<circle cx="12" cy="12" r="8.5"/><path d="M9.2 9.2l5.6 5.6M14.8 9.2l-5.6 5.6"/>',
+	pipelineRunning: '<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor"/>',
+	ticket: '<path d="M4 7a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3a2 2 0 0 0 0 4v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a2 2 0 0 0 0-4z"/><path d="M14.5 6.5v11" stroke-dasharray="2 2.5"/>',
+	session: '<rect x="3" y="4.5" width="18" height="15" rx="2"/><path d="M7 10l3 2.5L7 15M12.5 15H17"/>',
+	fileDiff: '<path d="M6 3.5h8l4 4v13H6z"/><path d="M12 9v5M9.5 11.5h5M9.5 17h5"/>',
+	arrowUp: '<path d="M12 19V5M6 11l6-6 6 6"/>',
+	reply: '<path d="M4 5h16v11H9l-5 4z"/>',
+	sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5V5M12 19v2.5M4.6 4.6l1.8 1.8M17.6 17.6l1.8 1.8M2.5 12H5M19 12h2.5M4.6 19.4l1.8-1.8M17.6 6.4l1.8-1.8"/>',
+	moon: '<path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z"/>',
+	file: '<path d="M6 3.5h8l4 4v13H6z"/><path d="M14 3.5v4h4M9 12h6M9 16h6"/>',
+	news: '<rect x="3.5" y="5" width="13" height="14" rx="1"/><path d="M16.5 9h3.5v8.5a1.5 1.5 0 0 1-3 0M7 9h6M7 12.5h6M7 16h4"/>',
+	checklist: '<path d="M4 6.5l1.5 1.5L8.5 5M4 12.5l1.5 1.5 3-3M4 18.5l1.5 1.5 3-3M11.5 7h8.5M11.5 13h8.5M11.5 19h8.5"/>',
+	download: '<path d="M12 4v11M7 10.5l5 5 5-5M5 19.5h14"/>',
+	person: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/>',
+	agent: '<rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4.5V8M9.5 12.5v1.5M14.5 12.5v1.5"/>',
+	dot: '<circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>',
+};
+const ui = (name, size = 18) => `<svg class="ui-icon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${UI_PATHS[name]}</svg>`;
+
+function iconLink(url, label, icon, className = '') {
+	const href = safeUrl(url);
+	if (!href) return `<span class="icon-link ${className}" role="img" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">${icon}</span>`;
+	return `<a class="icon-link ${className}" href="${escapeHtml(href)}" target="_blank" rel="noopener" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">${icon}</a>`;
+}
+function gotoButton(chapterId) {
+	const chapter = chapters.find((candidate) => candidate.id === chapterId);
+	if (!chapter) return '';
+	const label = `Go to ${chapter.name}`;
+	return `<button class="icon-button" type="button" data-goto="${escapeHtml(chapterId)}" data-key="goto-${escapeHtml(chapterId)}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">${ui('arrowRight')}</button>`;
+}
+function nativeWindow({ app, theme, title, context = '', actions = '', body, iconColor, label }) {
+	return `<section class="window theme-${theme}" aria-label="${escapeHtml(label ?? title)}">
+		<header class="window-bar">${brand(app, 17, iconColor)}<span>${escapeHtml(title)}</span>${context ? `<span class="window-context">${escapeHtml(context)}</span>` : ''}<span class="window-actions">${actions}</span></header>
+		<div class="window-body">${body}</div>
+	</section>`;
+}
+const AVATAR_COLORS = ['#1264a3', '#0b6e4f', '#9b2c64', '#5b3e96', '#8a4b08', '#2c5d7c'];
+const avatarColor = (name) => AVATAR_COLORS[[...String(name)].reduce((sum, character) => sum + character.charCodeAt(0), 0) % AVATAR_COLORS.length];
+const initials = (name) => String(name).split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0].toUpperCase()).join('');
+
+/* Choices are collected in memory and saved as one file for the apply session. */
+const chapterOf = (type) => chapters.find((chapter) => chapter.type === type);
+const choices = { news: {}, triage: {}, retro: { approved: [], confirmed: false }, actions: {}, autoHandled: {} };
+for (const group of chapterOf('triage')?.data.groups ?? []) for (const item of group.items) choices.triage[item.id] = { project: item.project ?? '', heading: item.heading ?? '', priority: item.priority ?? '' };
+for (const item of chapterOf('actions')?.data.items ?? []) choices.actions[item.id] = { handoff: item.handoff ?? 'you', done: false };
+for (const item of chapterOf('work')?.data.autoHandled ?? []) choices.autoHandled[item.id] = true;
+function exportedChoices() {
+	const triageGroups = chapterOf('triage')?.data.groups ?? [];
+	const retroItems = chapterOf('retro')?.data.items ?? [];
+	return {
+		date: brief.date,
+		exported: new Date().toISOString(),
+		news: (chapterOf('news')?.data.items ?? []).filter((item) => choices.news[item.id]).map((item) => ({ id: item.id, title: item.title, url: item.url, vote: choices.news[item.id] })),
+		triage: triageGroups.flatMap((group) => group.items.map((item) => ({ id: item.id, note: group.note, text: item.text, ...choices.triage[item.id] }))),
+		retro: { confirmed: choices.retro.confirmed, sessions: retroItems.filter((item) => choices.retro.approved.includes(item.id)).map((item) => ({ id: item.id, title: item.title, fix: item.fix, ...item.session })) },
+		actions: (chapterOf('actions')?.data.items ?? []).map((item) => ({ id: item.id, text: item.text, ...choices.actions[item.id] })),
+		autoHandled: (chapterOf('work')?.data.autoHandled ?? []).map((item) => ({ id: item.id, text: item.text, proposal: item.proposal, approved: choices.autoHandled[item.id] })),
+	};
+}
+function choiceSummary() {
+	const exported = exportedChoices();
+	const agentCount = exported.actions.filter((item) => item.handoff === 'agent').length;
+	const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
+	return [plural(exported.news.length, 'news vote'), plural(exported.triage.length, 'triage item'), plural(exported.retro.sessions.length, 'fix session'), `${agentCount} for the agent`].join(' · ');
+}
+function downloadChoices() {
+	const blob = new Blob([JSON.stringify(exportedChoices(), null, 2)], { type: 'application/json' });
+	const anchor = document.createElement('a');
+	anchor.href = URL.createObjectURL(blob);
+	anchor.download = 'choices.json';
+	document.body.append(anchor);
+	anchor.click();
+	anchor.remove();
+	setTimeout(() => URL.revokeObjectURL(anchor.href), 1000);
+}
+
+/* Chapter renderers, keyed by chapter type. */
+const RENDERERS = {
+	overview(data) {
+		return `<div class="overview">
+			<div class="date-note">
+				<span class="date-weekday">${escapeHtml(data.weekday)}</span>
+				<span class="date-day">${escapeHtml(data.dayLabel)}</span>
+				<span class="date-window mono">${escapeHtml(brief.window.label)}</span>
+			</div>
+			<ol class="needs">${(data.needs ?? []).map((need) => `
+				<li class="need" ${targetAttribute(need.id)}>
+					${brand(need.app, 24)}
+					<span class="need-text"><strong>${escapeHtml(need.text)}</strong><span class="muted">${escapeHtml(need.detail)}</span></span>
+					<span class="row-actions">${iconLink(need.url, `Open in ${brandLabel(need.app)}`, ui('external'))}${gotoButton(need.chapter)}</span>
+				</li>`).join('')}</ol>
+		</div>`;
+	},
+
+	calendar(data, chapter) {
+		const HOUR = 33;
+		const calendars = new Map(data.calendars.map((calendar) => [calendar.id, calendar]));
+		const days = data.days;
+		const focusDay = days.find((day) => day.focus) ?? days[0];
+		const timed = data.events.filter((event) => !event.allDay && event.start && event.end);
+		const nowMinutes = brief.now.slice(0, 10) === brief.date ? toMinutes(brief.now.slice(11, 16)) : undefined;
+		const firstHour = Math.max(0, Math.min(...timed.map((event) => Math.floor(toMinutes(event.start) / 60)), ...(nowMinutes === undefined ? [] : [Math.floor(nowMinutes / 60)])) - 1);
+		const lastHour = Math.min(24, Math.max(...timed.map((event) => Math.ceil(toMinutes(event.end) / 60))));
+		const height = (lastHour - firstHour) * HOUR;
+		const colorOf = (event) => calendars.get(event.calendarId)?.color ?? 'var(--google-calendar)';
+		const titleOf = (event) => event.busyOnly ? 'Busy' : event.title;
+		const dayOf = (event) => days.find((day) => day.id === event.day);
+
+		const eventBlock = (event) => {
+			const duration = toMinutes(event.end) - toMinutes(event.start);
+			const top = ((toMinutes(event.start) / 60) - firstHour) * HOUR;
+			const blockHeight = Math.max(22, (duration / 60) * HOUR - 2);
+			const short = duration <= 60;
+			const calendar = calendars.get(event.calendarId);
+			const label = `${titleOf(event)}, ${event.start} to ${event.end}, ${calendar?.name ?? ''} calendar`;
+			return `<button type="button" class="gcal-event ${short ? 'is-short' : ''} ${chapter.selected === event.id ? 'is-selected' : ''}" ${targetAttribute(`event-${event.id}`)}
+				data-event="${escapeHtml(event.id)}" data-key="event-${escapeHtml(event.id)}" aria-pressed="${chapter.selected === event.id}" aria-label="${escapeHtml(label)}"
+				style="--event:${escapeHtml(colorOf(event))};top:${top}px;height:${blockHeight}px">
+				<span class="event-title">${escapeHtml(titleOf(event))}${short ? ',' : ''}</span><span class="event-time mono">${short ? escapeHtml(event.start) : `${escapeHtml(event.start)}–${escapeHtml(event.end)}`}</span>
+			</button>`;
+		};
+		const hours = [];
+		for (let hour = firstHour + 1; hour < lastHour; hour++) hours.push(`<span class="gcal-hour mono" style="top:${(hour - firstHour) * HOUR}px">${String(hour).padStart(2, '0')}:00</span>`);
+
+		const selected = data.events.find((event) => event.id === chapter.selected);
+		const selectedCalendar = selected && calendars.get(selected.calendarId);
+		const selectedDay = selected && dayOf(selected);
+		const detail = selected ? `
+			<div class="gcal-detail" ${targetAttribute('event-detail')} role="region" aria-label="Event details" style="--event:${escapeHtml(colorOf(selected))}">
+				<div class="gcal-detail-head"><span class="swatch"></span><h3>${escapeHtml(titleOf(selected))}</h3>
+					${iconLink(selected.url, 'Open in Google Calendar', ui('external'))}
+					<button class="icon-button" type="button" data-close-detail data-key="close-detail" aria-label="Close event details" title="Close event details">${ui('x', 16)}</button>
+				</div>
+				<p class="gcal-fact">${ui('clock', 16)}<span>${escapeHtml(selectedDay ? `${selectedDay.label} ${selectedDay.date} ${monthName}` : '')}${selected.allDay ? ', all day' : `, <span class="mono">${escapeHtml(selected.start)}–${escapeHtml(selected.end)}</span>`}</span></p>
+				${selected.place ? `<p class="gcal-fact">${ui('pin', 16)}<span>${escapeHtml(selected.place)}</span></p>` : ''}
+				${(selected.notes ?? []).map((note) => `<p class="gcal-fact gcal-note">${ui('clock', 16)}<span>${escapeHtml(note)}</span></p>`).join('')}
+				<p class="gcal-fact muted"><span class="swatch" style="margin-top:0"></span>${escapeHtml(selectedCalendar?.name ?? '')}</p>
+			</div>` : '';
+		const legend = `<div class="gcal-legend"><span class="gcal-legend-title">My calendars</span><ul class="gcal-legend">${data.calendars.map((calendar) => `
+			<li><span class="swatch" style="--event:${escapeHtml(calendar.color)}"></span>${escapeHtml(calendar.name)}${calendar.busyOnly ? ' <span class="muted">(busy only)</span>' : ''}</li>`).join('')}</ul></div>`;
+
+		const body = `<div class="gcal">
+			<div class="gcal-main" style="--days:${days.length};--hour:${HOUR}px">
+				<div class="gcal-row">
+					<span class="gcal-zone mono">GMT+02</span>
+					${days.map((day) => `<div class="gcal-dayhead ${day.id === focusDay.id ? 'is-focus' : ''}"><span class="gcal-weekday">${escapeHtml(day.label)}</span><span class="gcal-date">${escapeHtml(day.date)}</span></div>`).join('')}
+				</div>
+				<div class="gcal-row gcal-allday">
+					<span></span>
+					${days.map((day) => `<div class="gcal-allday-cell">${data.events.filter((event) => event.allDay && event.day === day.id).map((event) => `
+						<button type="button" class="gcal-chip" ${targetAttribute(`event-${event.id}`)} data-event="${escapeHtml(event.id)}" data-key="event-${escapeHtml(event.id)}" style="--event:${escapeHtml(colorOf(event))}" aria-label="${escapeHtml(`${event.title}, all day`)}">${escapeHtml(event.title)}</button>`).join('')}</div>`).join('')}
+				</div>
+				<div class="gcal-row gcal-grid" style="height:${height}px">
+					<div class="gcal-hours">${hours.join('')}</div>
+					${days.map((day) => `<div class="gcal-day" aria-label="${escapeHtml(`${day.label} ${day.date}`)}">
+						${timed.filter((event) => event.day === day.id).map(eventBlock).join('')}
+						${day.id === focusDay.id && nowMinutes !== undefined ? `<span class="gcal-now" style="top:${(nowMinutes / 60 - firstHour) * HOUR}px" title="Now, ${escapeHtml(brief.now.slice(11, 16))}"></span>` : ''}
+					</div>`).join('')}
+				</div>
+			</div>
+			<aside class="gcal-side">${detail}${legend}</aside>
+		</div>`;
+		const context = days.map((day) => `${day.label} ${day.date}`).join(', ') + ` ${monthName}`;
+		return nativeWindow({ app: 'googlecalendar', theme: 'gcal', title: 'Google Calendar', context, body });
+	},
+
+	work(data, chapter) {
+		const scopes = [...new Set(data.projects.map((project) => project.scope))];
+		if (!scopes.includes(chapter.scope)) chapter.scope = chapter.beats.find((beat) => beat.scope)?.scope ?? scopes[0];
+		const projects = data.projects.filter((project) => project.scope === chapter.scope);
+		const appOf = (scope) => data.projects.find((project) => project.scope === scope)?.app ?? 'gitlab';
+		const app = appOf(chapter.scope);
+		const openCount = (scope) => data.projects.filter((project) => project.scope === scope).flatMap((project) => project.cards).filter((card) => card.state !== 'merged').length;
+		const tabs = `<div class="scope-tabs" role="group" aria-label="Scope">${scopes.map((scope) => `
+			<button type="button" class="scope-tab" data-scope="${escapeHtml(scope)}" data-key="scope-${escapeHtml(scope)}" aria-pressed="${scope === chapter.scope}" title="${escapeHtml(`${capitalize(scope)} projects`)}">
+				${brand(appOf(scope), 15)}${escapeHtml(capitalize(scope))}<span class="scope-count mono">${openCount(scope)}</span></button>`).join('')}</div>`;
+		const isGithub = app === 'github';
+		const pipelineIcon = { success: 'pipelineSuccess', failed: 'pipelineFailed', running: 'pipelineRunning' };
+		const card = (item, project) => {
+			const links = [];
+			if (item.state !== 'merged' || item.url) links.push(iconLink(item.url, `Open ${item.ref} ${project.app === 'github' ? 'pull request' : 'merge request'}`, ui('merge')));
+			if (item.pipeline) links.push(iconLink(item.pipeline.url, `Pipeline ${item.pipeline.status}${item.pipeline.job ? ` in ${item.pipeline.job}` : ''}`, ui(pipelineIcon[item.pipeline.status] ?? 'pipelineRunning'), `pipeline-${escapeHtml(item.pipeline.status)}`));
+			if (item.ticket) {
+				const wrong = item.ticket.expected && item.ticket.expected !== item.ticket.column;
+				const label = `KanbanFlow ${item.ticket.ref} is in ${item.ticket.column}${wrong ? `, should be ${item.ticket.expected}` : ''}`;
+				const href = safeUrl(item.ticket.url);
+				links.push(`<a class="ticket-chip ${wrong ? 'is-wrong' : ''}" ${href ? `href="${escapeHtml(href)}" target="_blank" rel="noopener"` : ''} aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">${ui('ticket', 16)}<span class="mono">${escapeHtml(item.ticket.ref)}</span>${wrong ? ui('warning', 14) : ''}</a>`);
+			}
+			if (item.session) links.push(iconLink(item.session.url, `Open live session in ${item.session.label}`, ui('session')));
+			if (item.local) {
+				const label = `${item.local.uncommitted} uncommitted files, ${item.local.unpushed} unpushed commit${item.local.unpushed === 1 ? '' : 's'}`;
+				links.push(`<span class="local-chip" role="img" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">${ui('fileDiff', 15)}<span class="mono">${escapeHtml(item.local.uncommitted)}</span>${ui('arrowUp', 15)}<span class="mono">${escapeHtml(item.local.unpushed)}</span></span>`);
+			}
+			return `<article class="mr-card state-${escapeHtml(item.state)} ${item.state === 'merged' ? 'is-merged' : ''}" ${targetAttribute(`card-${item.id}`)}>
+				<div class="mr-top"><span class="mr-ref mono">${escapeHtml(item.ref)}</span><span class="mr-state">${escapeHtml(data.states[item.state] ?? item.state)}</span></div>
+				<p class="mr-title">${escapeHtml(item.title)}</p>
+				<div class="mr-links">${links.join('')}</div>
+			</article>`;
+		};
+		const repos = projects.map((project) => `<section class="repo" aria-label="${escapeHtml(project.name)}">
+			<header class="repo-head">${brand(project.app, 16)}<span class="mono">${escapeHtml(project.name)}</span>${iconLink(project.url, `Open ${project.name} on ${brandLabel(project.app)}`, ui('external', 16))}</header>
+			<div class="mr-grid">${project.cards.map((item) => card(item, project)).join('')}</div>
+		</section>`).join('');
+		const autoHandled = (data.autoHandled ?? []).map((item) => `<div class="auto-line">
+			${ui('check', 16)}<span class="auto-text"><b>${escapeHtml(item.text)}</b> <span class="muted">${escapeHtml(item.proposal)}</span></span>
+			<button type="button" class="switch" role="switch" data-auto="${escapeHtml(item.id)}" data-key="auto-${escapeHtml(item.id)}" aria-checked="${choices.autoHandled[item.id]}" aria-label="${escapeHtml(`Allow: ${item.proposal}`)}" title="${escapeHtml(`Allow: ${item.proposal}`)}"></button>
+		</div>`).join('');
+		const quiet = data.quiet?.length ? `<p class="quiet-line">Quiet: <span class="mono">${data.quiet.map(escapeHtml).join(', ')}</span></p>` : '';
+		return nativeWindow({ app, theme: isGithub ? 'github' : 'gitlab', title: brandLabel(app), context: isGithub ? 'Pull requests' : 'Merge requests', actions: tabs, body: repos + autoHandled + quiet });
+	},
+
+	overnight(data) {
+		const body = `<ol class="runs">${data.runs.map((run) => {
+			const outcome = run.outcome === 'ok' ? 'Succeeded' : `Failed${run.detail ? `: ${run.detail}` : ''}`;
+			return `<li class="run run-${escapeHtml(run.outcome)}" ${targetAttribute(run.id)}>
+				<span class="run-outcome" role="img" aria-label="${escapeHtml(outcome)}" title="${escapeHtml(outcome)}">${ui(run.outcome === 'ok' ? 'check' : 'x', 16)}</span>
+				${brand(run.app, 20)}
+				<span class="run-title">${escapeHtml(run.title)}</span>
+				<span class="run-when mono" title="Started">${escapeHtml(run.when)}</span>
+				<span class="run-duration mono" title="Duration">${escapeHtml(run.duration)}</span>
+				${iconLink(run.url, `Open ${run.title} output`, ui('external'))}
+			</li>`; }).join('')}</ol>`;
+		return nativeWindow({ app: 'terminal', theme: 'runs', title: 'Run log', context: 'overnight', body });
+	},
+
+	slack(data, chapter) {
+		const mentionize = (text) => escapeHtml(text).replace(/(^|\s)(@[\w.-]+)/g, '$1<span class="mention">$2</span>');
+		const message = (item, kind) => `<article class="slack-message ${kind}" ${kind === 'is-handled' ? '' : targetAttribute(`message-${item.id}`)}>
+			<span class="slack-avatar" style="background:${avatarColor(item.author)}" aria-hidden="true">${escapeHtml(initials(item.author))}</span>
+			<div>
+				<div class="slack-meta"><strong>${escapeHtml(item.author)}</strong><span class="slack-time mono">${escapeHtml(item.when)}</span><span class="slack-channel">${escapeHtml(item.channel)}</span></div>
+				<p class="slack-text">${mentionize(item.text)}</p>
+				${item.replies ? `<span class="slack-replies">${ui('reply', 14)}${escapeHtml(item.replies)} replies</span>` : ''}
+			</div>
+			${iconLink(item.url, `Open ${item.channel} message in Slack`, ui('external'))}
+		</article>`;
+		const addressed = data.addressed ?? [];
+		const body = `
+			<div class="slack-section"><h3 class="slack-heading">Waiting on you</h3>${data.unaddressed.map((item) => message(item, 'is-waiting')).join('')}</div>
+			<div class="slack-section"><h3 class="slack-heading">Worth knowing</h3>${data.worthKnowing.map((item) => message(item, '')).join('')}</div>
+			<div class="slack-handled" ${targetAttribute('slack-addressed')}>
+				<p class="slack-summary">${ui('check', 16)}<span>${escapeHtml(data.addressedSummary)}</span></p>
+				${addressed.length ? `<details class="slack-disclosure" ${chapter.slackOpen ? 'open' : ''}>
+					<summary data-key="slack-disclosure">${ui('chevronRight', 14)}${addressed.length} handled threads</summary>
+					<div class="slack-scroll">${addressed.map((item) => message(item, 'is-handled')).join('')}</div>
+				</details>` : ''}
+			</div>
+			${data.skipped ? `<p class="quiet-line">${escapeHtml(data.skipped)} more messages skipped</p>` : ''}`;
+		const since = String(brief.window.label).split('→')[0].trim();
+		return nativeWindow({ app: 'slack', theme: 'slack', title: 'Slack', context: `since ${since}`, body, iconColor: '#ffffff' });
+	},
+
+	mail(data) {
+		const rows = data.rows.map((row) => `<li class="gmail-row" ${targetAttribute(`mail-${row.id}`)}>
+			<span class="chip account-chip account-${escapeHtml(row.account)}">${escapeHtml(capitalize(row.account))}</span>
+			<span class="gmail-from">${escapeHtml(row.from)}</span>
+			<span class="gmail-subject"><strong>${escapeHtml(row.subject)}</strong><span class="gmail-snippet">${escapeHtml(row.snippet)}</span></span>
+			<span class="chip action-word action-${escapeHtml(String(row.action).toLowerCase())}">${escapeHtml(row.action)}</span>
+			<span class="gmail-date mono">${escapeHtml(row.when)}</span>
+			${iconLink(row.url, `Open "${row.subject}" in Gmail`, ui('external'))}
+		</li>`).join('');
+		const notifications = data.notifications?.length ? `<p class="gmail-foot"><span>Notifications</span>${data.notifications.map((item) => `<span>${escapeHtml(item.source)} <b class="mono">${escapeHtml(item.count)}</b></span>`).join('')}</p>` : '';
+		return nativeWindow({ app: 'gmail', theme: 'gmail', title: 'Gmail', context: 'Inbox', body: `<ul class="gmail-list">${rows}</ul>${notifications}` });
+	},
+
+	triage(data) {
+		const PRIORITIES = ['highest', 'high', 'medium', 'normal', 'low', 'lowest'];
+		const select = (item, field, values, labelFor, text) => {
+			const value = choices.triage[item.id][field];
+			const label = `${text} for: ${item.text}`;
+			return `<select class="obs-select ${field === 'heading' ? 'is-tag' : ''}" data-triage="${escapeHtml(item.id)}" data-field="${field}" data-key="triage-${escapeHtml(item.id)}-${field}" aria-label="${escapeHtml(label)}" title="${escapeHtml(text)}">
+				${values.map((option) => `<option value="${escapeHtml(option)}" ${option === value ? 'selected' : ''}>${escapeHtml(labelFor(option))}</option>`).join('')}</select>`;
+		};
+		const body = data.groups.map((group) => `<section class="obs-group" aria-label="${escapeHtml(group.note)}">
+			<header class="obs-note"><h3>${escapeHtml(group.note.split('/').pop())}</h3><span class="obs-path mono">${escapeHtml(group.note)}</span>
+				<span class="window-actions">${iconLink(group.url, `Open ${group.note} in Obsidian`, ui('external', 16))}</span></header>
+			<ul>${group.items.map((item) => `<li class="obs-task" ${targetAttribute(`task-${item.id}`)}>
+				<span class="obs-checkbox" aria-hidden="true"></span>
+				<span class="obs-text">${escapeHtml(item.text)}</span>
+				<span class="obs-fields">
+					${select(item, 'project', ['', ...data.projects], (option) => option || 'No project', 'Project')}
+					${select(item, 'heading', data.headings, (option) => option, 'Heading')}
+					${select(item, 'priority', PRIORITIES, capitalize, 'Priority')}
+				</span>
+			</li>`).join('')}</ul>
+		</section>`).join('');
+		return nativeWindow({ app: 'obsidian', theme: 'obsidian', title: 'Obsidian', context: data.vault, body, iconColor: 'var(--obsidian-accent)' });
+	},
+
+	retro(data) {
+		const harnessName = (harness) => harness === 'claude' ? 'Claude Code' : capitalize(harness);
+		const diffLines = (text) => String(text).split('\n').map((line) => `<span class="${line.startsWith('+') ? 'plus' : line.startsWith('-') ? 'minus' : ''}">${escapeHtml(line)}</span>`).join('');
+		const lineMark = (role, harness) => role === 'error' ? ui('warning', 13) : role === 'tool' ? (harness === 'claude' ? '●' : '$') : '●';
+		const items = data.items.map((item) => {
+			const evidence = item.evidence;
+			const terminal = nativeWindow({
+				app: item.harness === 'claude' ? 'claude' : 'terminal', theme: 'terminal', title: harnessName(item.harness), label: `${harnessName(item.harness)} transcript`,
+				context: `session ${evidence.session?.label ?? ''}`, iconColor: item.harness === 'claude' ? undefined : 'var(--dark-text)',
+				actions: iconLink(evidence.session?.url, 'Open session transcript', ui('external', 16)),
+				body: `<ol class="term-lines">${evidence.lines.map((line) => `<li class="term-line term-${escapeHtml(line.role)}"><span class="term-mark" aria-hidden="true">${lineMark(line.role, item.harness)}</span><span>${line.role === 'error' ? '<span class="visually-hidden">Error: </span>' : ''}${escapeHtml(line.text)}</span></li>`).join('')}</ol>`,
+			});
+			return `<article class="retro-item" ${targetAttribute(`retro-${item.id}`)}>
+				<header class="retro-head"><h3>${escapeHtml(item.title)}</h3><span class="retro-cost">${escapeHtml(item.cost)}</span></header>
+				<div class="retro-evidence">${terminal}
+					<section class="diff-card" aria-label="Proposed fix"><header class="diff-file mono">${ui('fileDiff', 15)}${escapeHtml(item.fix.file)}</header><pre class="diff">${diffLines(item.fix.diff)}</pre></section>
+				</div>
+			</article>`;
+		}).join('');
+		const approved = choices.retro.approved;
+		const sessionRows = data.items.map((item) => {
+			const isApproved = approved.includes(item.id);
+			const label = `Approve fix session: ${item.title}`;
+			return `<li class="session-row ${isApproved ? 'is-approved' : ''}">
+				<button type="button" class="switch" role="switch" data-retro="${escapeHtml(item.id)}" data-key="retro-${escapeHtml(item.id)}" aria-checked="${isApproved}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}"></button>
+				<span class="session-harness">${brand(item.session.harness, 16)}<span class="mono">${escapeHtml(item.session.harness)} · ${escapeHtml(item.session.account)} · ${escapeHtml(item.session.project)}</span></span>
+				<span class="session-prompt mono" title="${escapeHtml(item.session.prompt)}">${escapeHtml(item.session.prompt)}</span>
+			</li>`;
+		}).join('');
+		const count = approved.length;
+		const buttonText = choices.retro.confirmed && count ? `${ui('check', 18)} ${count} session${count === 1 ? '' : 's'} confirmed` : count ? `Start ${count} session${count === 1 ? '' : 's'}` : 'Start sessions';
+		return `<div class="retro-items">${items}</div>
+			<section class="sessions paper" ${targetAttribute('retro-sessions')} aria-labelledby="sessions-title">
+				<h3 id="sessions-title">Fix sessions</h3>
+				<ul>${sessionRows}</ul>
+				<div class="sessions-foot">
+					<span class="muted">${choices.retro.confirmed && count ? 'Saved with your choices' : 'Approve a fix, then confirm once'}</span>
+					<button type="button" class="text-button ${choices.retro.confirmed && count ? 'is-confirmed' : ''}" data-confirm-retro data-key="confirm-retro" ${count ? '' : 'disabled'}>${buttonText}</button>
+				</div>
+			</section>`;
+	},
+
+	instructions(data) {
+		const VERDICTS = { final: 'Final', watch: 'Watch', attention: 'Needs attention' };
+		const rows = data.changes.map((change) => `<li class="change verdict-${escapeHtml(change.verdict)}" ${targetAttribute(`change-${change.id}`)}>
+			<div>
+				<div class="change-top"><span class="change-scope mono">${escapeHtml(change.scope)}</span><span class="verdict-word">${escapeHtml(VERDICTS[change.verdict] ?? change.verdict)}</span></div>
+				<p class="change-summary">${escapeHtml(change.summary)}</p>
+				<p class="change-opinion">${escapeHtml(change.opinion)}</p>
+			</div>
+			<div class="change-state">${['committed', 'pushed', 'built'].filter((key) => key in change.state).map((key) => {
+				const label = change.state[key] ? capitalize(key) : `Not ${key}`;
+				return `<span class="state-chip ${change.state[key] ? 'is-yes' : 'is-no'}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${ui(change.state[key] ? 'check' : 'x', 14)}${escapeHtml(key)}</span>`;
+			}).join('')}</div>
+			${iconLink(change.url, `Open ${change.scope} change`, ui('external'))}
+		</li>`).join('');
+		return nativeWindow({ app: 'github', theme: 'github', title: 'Instruction changes', context: 'since yesterday', body: `<ol class="changes">${rows}</ol>` });
+	},
+
+	news(data) {
+		return `<ul class="news-list paper">${data.items.map((item) => {
+			const vote = choices.news[item.id];
+			return `<li class="news-item" ${targetAttribute(`news-${item.id}`)}>
+				<span class="news-source">${brand(item.app, 24)}</span>
+				<div>
+					<div class="news-meta"><span>${escapeHtml(item.source)}</span><span class="mono">${escapeHtml(item.date)}</span></div>
+					<p class="news-title">${escapeHtml(item.title)}</p>
+					<p class="news-summary">${escapeHtml(item.summary)}</p>
+				</div>
+				<div class="vote" role="group" aria-label="${escapeHtml(`Vote on ${item.title}`)}">
+					<button type="button" class="icon-button vote-up" data-news="${escapeHtml(item.id)}" data-vote="up" data-key="vote-${escapeHtml(item.id)}-up" aria-pressed="${vote === 'up'}" aria-label="More like this" title="More like this">${ui('thumbUp')}</button>
+					<button type="button" class="icon-button vote-down" data-news="${escapeHtml(item.id)}" data-vote="down" data-key="vote-${escapeHtml(item.id)}-down" aria-pressed="${vote === 'down'}" aria-label="Less like this" title="Less like this">${ui('thumbDown')}</button>
+				</div>
+				${iconLink(item.url, `Open on ${item.source}`, ui('external'))}
+			</li>`; }).join('')}</ul>`;
+	},
+
+	actions(data, chapter) {
+		const rows = data.items.map((item) => {
+			const choice = choices.actions[item.id];
+			const source = item.url ? iconLink(item.url, `Open in ${brandLabel(item.app)}`, brand(item.app, 20))
+				: `<button class="icon-button" type="button" data-goto="${escapeHtml(item.chapter)}" data-key="source-${escapeHtml(item.id)}" aria-label="${escapeHtml(`Go to ${chapterOf(item.chapter)?.name ?? item.chapter}`)}" title="${escapeHtml(`Go to ${chapterOf(item.chapter)?.name ?? item.chapter}`)}">${brand(item.app, 20)}</button>`;
+			const option = (value, icon, text) => `<button type="button" data-handoff="${escapeHtml(item.id)}" data-value="${value}" data-key="handoff-${escapeHtml(item.id)}-${value}" aria-pressed="${choice.handoff === value}" title="${escapeHtml(text)}">${ui(icon, 15)}${value === 'you' ? 'You' : 'Agent'}</button>`;
+			return `<li class="todo-item ${choice.done ? 'is-done' : ''}" ${targetAttribute(item.id)}>
+				<span class="check-box"><input type="checkbox" id="done-${escapeHtml(item.id)}" data-done="${escapeHtml(item.id)}" data-key="done-${escapeHtml(item.id)}" ${choice.done ? 'checked' : ''}><span>${ui('check', 16)}</span></span>
+				<label class="todo-text" for="done-${escapeHtml(item.id)}">${escapeHtml(item.text)}</label>
+				${source}
+				<div class="handoff" role="group" aria-label="${escapeHtml(`Who does it: ${item.text}`)}">${option('you', 'person', 'You do it')}${option('agent', 'agent', 'The agent does it')}</div>
+			</li>`;
+		}).join('');
+		return `<section class="todo paper" aria-label="Action points">
+			<ul class="todo-list">${rows}</ul>
+			<footer class="save-row">
+				<span class="choice-summary mono" id="choice-summary">${escapeHtml(choiceSummary())}</span>
+				<button type="button" class="text-button" data-save data-key="save">${chapter.saved ? ui('check', 18) : ui('download', 18)} ${chapter.saved ? 'Saved choices.json' : 'Save choices'}</button>
+			</footer>
+		</section>`;
+	},
+};
+
+function renderQuiet(chapter) {
+	return `<div class="quiet-slide paper">${ui('check', 32)}<div><p class="chapter-title" style="font-size:20px">${escapeHtml(chapter.title)}</p><p class="muted">Nothing new since yesterday.</p></div></div>`;
+}
+
+/* Player: one timeline for the brief; a beat lasts its estimated speech time, quiet chapters hold briefly. */
+const SPEEDS = [1, 1.25, 1.5, 2];
+const WORDS_PER_SECOND = 2.6;
+const QUIET_HOLD_SECONDS = 2;
+const voiceAvailable = 'speechSynthesis' in window;
+const state = { chapter: 0, beat: 0, elapsed: 0, playing: false, finished: false, speedIndex: 0, muted: !voiceAvailable, speaking: false };
+const speed = () => SPEEDS[state.speedIndex];
+const isQuiet = (chapter) => chapter.status === 'quiet';
+const beatsOf = (chapter) => chapter.beats?.length ? chapter.beats : [{ say: chapter.title, note: chapter.name, targets: [] }];
+const beatSeconds = (chapter, beat) => isQuiet(chapter) ? QUIET_HOLD_SECONDS : beat.say.trim().split(/\s+/).length / (WORDS_PER_SECOND * speed()) + 0.6 / speed();
+const chapterSeconds = (chapter) => beatsOf(chapter).reduce((total, beat) => total + beatSeconds(chapter, beat), 0);
+const currentChapter = () => chapters[state.chapter];
+const currentBeat = () => beatsOf(currentChapter())[state.beat];
+const COLUMN_WIDTHS = { calendar: (chapter) => 760 + Math.max(0, chapter.data.days.length - 2) * 180, work: () => 900, retro: () => 980 };
+const formatTime = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
+
+const CHAPTER_ICONS = { overview: ['ui', 'sun'], calendar: ['brand', 'googlecalendar'], work: ['brand', 'gitlab'], overnight: ['ui', 'moon'], slack: ['brand', 'slack'], mail: ['brand', 'gmail'], triage: ['brand', 'obsidian'], retro: ['brand', 'terminal'], instructions: ['ui', 'file'], news: ['ui', 'news'], actions: ['ui', 'checklist'] };
+function chapterIcon(chapter, size) {
+	const [kind, name] = CHAPTER_ICONS[chapter.type] ?? ['ui', 'file'];
+	return kind === 'brand' ? brand(name, size) : ui(name, size);
+}
+const sourceWarnings = (chapter) => (brief.sources ?? []).filter((source) => source.status !== 'ok' && source.chapters?.includes(chapter.id)).map((source) => `${source.name} ${source.status}. ${source.reason ?? ''}`.trim());
+
+function preservingFocus(render) {
+	const key = document.activeElement?.dataset?.key;
+	render();
+	if (key) document.querySelector(`[data-key="${CSS.escape(key)}"]`)?.focus({ preventScroll: true });
+}
+
+function renderOutline() {
+	preservingFocus(() => {
+		byId('chapter-list').innerHTML = chapters.map((chapter, index) => {
+			const current = index === state.chapter;
+			const warnings = sourceWarnings(chapter);
+			const marker = isQuiet(chapter) ? `<span class="marker marker-quiet" title="Quiet">${ui('check', 14)}</span>`
+				: chapter.count ? `<span class="marker marker-${escapeHtml(chapter.status)}" title="${escapeHtml(chapter.status === 'needs' ? `${chapter.count} need you` : `${chapter.count} items`)}">${escapeHtml(chapter.count)}</span>` : '';
+			const warning = warnings.length ? `<span class="source-warning" role="img" aria-label="${escapeHtml(`Source warning: ${warnings.join(' ')}`)}" title="${escapeHtml(warnings.join('\n'))}">${ui('warning', 15)}</span>` : '';
+			const beats = current ? `<ol class="beat-list">${beatsOf(chapter).map((beat, beatIndex) => {
+				const status = beatIndex === state.beat ? 'is-current' : beatIndex < state.beat ? 'is-done' : '';
+				const icon = beatIndex === state.beat ? ui('play', 12) : beatIndex < state.beat ? ui('check', 12) : ui('dot', 12);
+				return `<li><button type="button" class="beat-row ${status}" data-beat="${beatIndex}" data-key="beat-${index}-${beatIndex}" ${beatIndex === state.beat ? 'aria-current="step"' : ''} title="${escapeHtml(beat.say)}">${icon}${escapeHtml(beat.note)}</button></li>`;
+			}).join('')}</ol>` : '';
+			return `<li class="chapter-item ${current ? 'is-current' : ''} ${isQuiet(chapter) ? 'is-quiet' : ''}">
+				<button type="button" class="chapter-row" data-chapter="${index}" data-key="chapter-${index}" ${current ? 'aria-current="true"' : ''} aria-label="${escapeHtml(`${chapter.name}: ${chapter.title}`)}" title="${escapeHtml(`${chapter.name}: ${chapter.title}`)}">
+					<span class="chapter-icon">${chapterIcon(chapter, 20)}</span><span class="chapter-name">${escapeHtml(chapter.name)}</span>${warning}${marker}
+				</button>${beats}</li>`;
+		}).join('');
+	});
+	document.querySelector('.chapter-item.is-current')?.scrollIntoView({ block: 'nearest' });
+}
+
+function renderStage() {
+	const chapter = currentChapter();
+	const widthFor = COLUMN_WIDTHS[chapter.type];
+	byId('main').style.setProperty('--column-width', `${widthFor ? widthFor(chapter) : 760}px`);
+	byId('chapter-icon').innerHTML = chapterIcon(chapter, 30);
+	byId('kicker').innerHTML = `<span class="mono">${state.chapter + 1}/${chapters.length}</span><span>${escapeHtml(chapter.name)}</span>`;
+	byId('chapter-title').textContent = chapter.title;
+	preservingFocus(() => { stage.innerHTML = isQuiet(chapter) ? renderQuiet(chapter) : RENDERERS[chapter.type](chapter.data ?? {}, chapter); });
+	highlight();
+}
+
+function highlight() {
+	const beat = currentBeat();
+	const names = [...(beat.targets ?? []), ...(beat.select ? ['event-detail'] : [])];
+	stage.querySelectorAll('.is-target, .is-path').forEach((element) => element.classList.remove('is-target', 'is-path'));
+	let first;
+	for (const name of names) stage.querySelectorAll(`[data-target="${CSS.escape(name)}"]`).forEach((element) => {
+		element.classList.add('is-target');
+		first ??= element;
+		// Opacity multiplies down the tree, so containers of a target must never dim.
+		for (let ancestor = element.parentElement; ancestor && ancestor !== stage; ancestor = ancestor.parentElement) ancestor.classList.add('is-path');
+	});
+	stage.classList.toggle('is-highlighting', Boolean(first));
+	const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+	first?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: reduceMotion ? 'auto' : 'smooth' });
+}
+
+function setChapter(index, beatIndex = 0) {
+	state.chapter = index;
+	state.finished = false;
+	stage.scrollTop = 0;
+	setBeat(beatIndex, true);
+}
+function setBeat(index, chapterChanged = false) {
+	const chapter = currentChapter();
+	state.beat = index;
+	state.elapsed = 0;
+	const beat = currentBeat();
+	const needsRender = chapterChanged || (beat.select && beat.select !== chapter.selected) || (beat.scope && beat.scope !== chapter.scope);
+	if (beat.select) chapter.selected = beat.select;
+	if (beat.scope) chapter.scope = beat.scope;
+	if (needsRender) renderStage(); else highlight();
+	byId('caption-text').textContent = beat.say;
+	byId('caption-count').textContent = `${index + 1}/${beatsOf(chapter).length}`;
+	renderOutline();
+	renderTransport();
+	speak();
+}
+function goTo(chapterIndex, beatIndex) {
+	state.finished = false;
+	if (chapterIndex !== state.chapter) setChapter(chapterIndex, beatIndex); else setBeat(beatIndex);
+}
+function stepBeat(direction) {
+	const next = state.beat + direction;
+	if (next >= 0 && next < beatsOf(currentChapter()).length) return goTo(state.chapter, next);
+	const nextChapter = state.chapter + direction;
+	if (nextChapter < 0 || nextChapter >= chapters.length) return;
+	goTo(nextChapter, direction < 0 ? beatsOf(chapters[nextChapter]).length - 1 : 0);
+}
+function jumpChapter(direction) {
+	const nextChapter = Math.min(chapters.length - 1, Math.max(0, state.chapter + direction));
+	goTo(nextChapter, 0);
+}
+function advance() {
+	if (state.beat < beatsOf(currentChapter()).length - 1) return setBeat(state.beat + 1);
+	if (state.chapter < chapters.length - 1) return setChapter(state.chapter + 1);
+	state.playing = false;
+	state.finished = true;
+	state.elapsed = beatSeconds(currentChapter(), currentBeat());
+	renderTransport();
+}
+function togglePlay() {
+	if (state.playing) return pause();
+	if (state.finished) setChapter(0);
+	state.playing = true;
+	speak();
+	renderTransport();
+}
+function pause() {
+	if (!state.playing) return;
+	state.playing = false;
+	stopVoice();
+	renderTransport();
+}
+function stopVoice() {
+	if (voiceAvailable) window.speechSynthesis.cancel();
+	state.speaking = false;
+}
+function speak() {
+	stopVoice();
+	if (state.muted || !state.playing || !voiceAvailable) return;
+	const utterance = new SpeechSynthesisUtterance(currentBeat().say);
+	utterance.rate = speed();
+	const voices = window.speechSynthesis.getVoices().filter((voice) => voice.lang.startsWith('en'));
+	utterance.voice = voices.find((voice) => /natural|online/i.test(voice.name)) ?? voices[0] ?? null;
+	utterance.onend = utterance.onerror = () => { state.speaking = false; };
+	state.speaking = true;
+	window.speechSynthesis.speak(utterance);
+}
+
+function buildProgress() {
+	byId('progress').innerHTML = chapters.map((chapter, index) => {
+		const beats = beatsOf(chapter);
+		const total = chapterSeconds(chapter);
+		let elapsed = 0;
+		const ticks = beats.slice(0, -1).map((beat) => { elapsed += beatSeconds(chapter, beat); return `<span class="tick" style="left:${(elapsed / total) * 100}%"></span>`; }).join('');
+		return `<button type="button" class="segment ${isQuiet(chapter) ? 'is-quiet' : ''}" data-segment="${index}" style="flex-grow:${total}" aria-label="${escapeHtml(`Play from ${chapter.name}`)}" title="${escapeHtml(chapter.name)}"><span class="segment-fill"></span>${ticks}</button>`;
+	}).join('');
+}
+function paintProgress() {
+	const chapter = currentChapter();
+	const beats = beatsOf(chapter);
+	const beatElapsed = Math.min(state.elapsed, beatSeconds(chapter, currentBeat()));
+	const chapterElapsed = beats.slice(0, state.beat).reduce((total, beat) => total + beatSeconds(chapter, beat), 0) + beatElapsed;
+	const chapterTotal = chapterSeconds(chapter);
+	byId('progress').querySelectorAll('.segment').forEach((element, index) => {
+		element.classList.toggle('is-current', index === state.chapter);
+		element.firstElementChild.style.transform = `scaleX(${index < state.chapter ? 1 : index === state.chapter ? chapterElapsed / chapterTotal : 0})`;
+	});
+	const before = chapters.slice(0, state.chapter).reduce((total, candidate) => total + chapterSeconds(candidate), 0);
+	const total = chapters.reduce((sum, candidate) => sum + chapterSeconds(candidate), 0);
+	byId('time').textContent = `${formatTime(before + chapterElapsed)} / ${formatTime(total)}`;
+}
+function setIconButton(id, icon, label, extra = '') {
+	const button = byId(id);
+	button.innerHTML = icon + extra;
+	button.setAttribute('aria-label', label);
+	button.title = label;
+}
+function renderTransport() {
+	const atStart = state.chapter === 0 && state.beat === 0;
+	const atEnd = state.chapter === chapters.length - 1 && state.beat === beatsOf(currentChapter()).length - 1;
+	setIconButton('chapter-previous', ui('chapterPrevious', 20), 'Previous chapter (Shift+Left)');
+	setIconButton('beat-previous', ui('beatPrevious', 20), 'Previous point (Left)');
+	setIconButton('beat-next', ui('beatNext', 20), 'Next point (Right)');
+	setIconButton('chapter-next', ui('chapterNext', 20), 'Next chapter (Shift+Right)');
+	setIconButton('play', ui(state.playing ? 'pause' : 'play', 22), state.playing ? 'Pause brief (Space)' : state.finished ? 'Replay brief (Space)' : 'Play brief (Space)');
+	byId('chapter-previous').disabled = state.chapter === 0;
+	byId('beat-previous').disabled = atStart;
+	byId('beat-next').disabled = atEnd;
+	byId('chapter-next').disabled = state.chapter === chapters.length - 1;
+	setIconButton('speed', ui('speed', 18), `Speed ${speed()}×, change speed`, `<span class="speed-value">${speed()}×</span>`);
+	setIconButton('mute', ui(state.muted ? 'volumeMute' : 'volume', 20), !voiceAvailable ? 'Voice not available in this browser' : state.muted ? 'Unmute voice' : 'Mute voice');
+	byId('mute').disabled = !voiceAvailable;
+	byId('mute').setAttribute('aria-pressed', String(state.muted));
+}
+
+let lastFrame = 0;
+function frame(now) {
+	const delta = lastFrame ? Math.min(0.25, (now - lastFrame) / 1000) : 0;
+	lastFrame = now;
+	if (state.playing) {
+		const duration = beatSeconds(currentChapter(), currentBeat());
+		state.elapsed += delta;
+		// The browser voice can run longer than the estimate; wait for it, but never indefinitely.
+		if (state.elapsed >= duration && !(state.speaking && state.elapsed < duration * 2.5)) advance();
+	}
+	paintProgress();
+	requestAnimationFrame(frame);
+}
+
+/* Shell controls keep playback running; acting on the content pauses it. */
+byId('play').addEventListener('click', togglePlay);
+byId('beat-previous').addEventListener('click', () => stepBeat(-1));
+byId('beat-next').addEventListener('click', () => stepBeat(1));
+byId('chapter-previous').addEventListener('click', () => jumpChapter(-1));
+byId('chapter-next').addEventListener('click', () => jumpChapter(1));
+byId('speed').addEventListener('click', () => {
+	state.speedIndex = (state.speedIndex + 1) % SPEEDS.length;
+	buildProgress();
+	renderTransport();
+	speak();
+});
+byId('mute').addEventListener('click', () => { state.muted = !state.muted; renderTransport(); speak(); });
+byId('progress').addEventListener('click', (event) => {
+	const segment = event.target.closest('[data-segment]');
+	if (!segment) return;
+	const chapterIndex = Number(segment.dataset.segment);
+	const chapter = chapters[chapterIndex];
+	const rect = segment.getBoundingClientRect();
+	const fraction = event.detail === 0 ? 0 : Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+	const position = fraction * chapterSeconds(chapter);
+	let elapsed = 0;
+	let beatIndex = 0;
+	beatsOf(chapter).forEach((beat, index) => { if (elapsed <= position) beatIndex = index; elapsed += beatSeconds(chapter, beat); });
+	goTo(chapterIndex, beatIndex);
+});
+byId('chapter-list').addEventListener('click', (event) => {
+	const beatButton = event.target.closest('[data-beat]');
+	if (beatButton) return goTo(state.chapter, Number(beatButton.dataset.beat));
+	const chapterButton = event.target.closest('[data-chapter]');
+	if (chapterButton) goTo(Number(chapterButton.dataset.chapter), 0);
+});
+
+stage.addEventListener('click', (event) => {
+	const control = event.target.closest('a, button, input, select, label, summary');
+	if (!control) return;
+	pause();
+	const chapter = currentChapter();
+	const data = control.dataset;
+	if ('goto' in data) {
+		const index = chapters.findIndex((candidate) => candidate.id === data.goto);
+		if (index >= 0) goTo(index, 0);
+		return;
+	}
+	if ('event' in data) { chapter.selected = data.event; return renderStage(); }
+	if ('closeDetail' in data) { chapter.selected = null; return renderStage(); }
+	if ('scope' in data) { chapter.scope = data.scope; return renderStage(); }
+	if ('news' in data) { choices.news[data.news] = choices.news[data.news] === data.vote ? undefined : data.vote; return renderStage(); }
+	if ('retro' in data) {
+		const approved = new Set(choices.retro.approved);
+		if (approved.has(data.retro)) approved.delete(data.retro); else approved.add(data.retro);
+		choices.retro = { approved: [...approved], confirmed: false };
+		return renderStage();
+	}
+	if ('confirmRetro' in data) { choices.retro.confirmed = true; return renderStage(); }
+	if ('auto' in data) { choices.autoHandled[data.auto] = !choices.autoHandled[data.auto]; return renderStage(); }
+	if ('handoff' in data) { choices.actions[data.handoff].handoff = data.value; chapter.saved = false; return renderStage(); }
+	if ('save' in data) {
+		downloadChoices();
+		chapter.saved = true;
+		renderStage();
+		setTimeout(() => { chapter.saved = false; if (currentChapter() === chapter) renderStage(); }, 2500);
+	}
+});
+stage.addEventListener('change', (event) => {
+	const field = event.target;
+	if (field.dataset.triage) choices.triage[field.dataset.triage][field.dataset.field] = field.value;
+	if (field.dataset.done) {
+		choices.actions[field.dataset.done].done = field.checked;
+		field.closest('.todo-item')?.classList.toggle('is-done', field.checked);
+		const summary = byId('choice-summary');
+		if (summary) summary.textContent = choiceSummary();
+	}
+});
+stage.addEventListener('toggle', (event) => {
+	if (event.target.matches?.('.slack-disclosure')) currentChapter().slackOpen = event.target.open;
+}, true);
+document.addEventListener('keydown', (event) => {
+	if (event.target.closest?.('input, select, textarea') || event.altKey || event.ctrlKey || event.metaKey) return;
+	if (event.key === ' ') {
+		if (event.target.closest?.('button, a, summary')) return;
+		event.preventDefault();
+		togglePlay();
+	} else if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+		event.preventDefault();
+		const direction = event.key === 'ArrowRight' ? 1 : -1;
+		if (event.shiftKey) jumpChapter(direction); else stepBeat(direction);
+	}
+});
+
+const overview = chapterOf('overview')?.data;
+byId('outline-weekday').textContent = overview?.weekday ?? brief.date;
+byId('outline-weekday-short').textContent = `${(overview?.weekday ?? '').slice(0, 3)} ${brief.date.slice(8, 10)}`;
+byId('outline-day').textContent = overview?.dayLabel ?? '';
+byId('outline-window').textContent = brief.window.label;
+document.title = `Morning brief, ${overview?.weekday ?? ''} ${overview?.dayLabel ?? brief.date}`;
+buildProgress();
+setChapter(0);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

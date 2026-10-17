@@ -1,0 +1,58 @@
+/* Morning brief tokens, derived from prejemesi "Sky Notebook" (C:/_MP_projects/prejemesi/src/app.css). */
+@import url('https://fonts.googleapis.com/css2?family=DynaPuff:wght@400..700&family=Geist:wght@400..700&family=Geist+Mono:wght@400..600&display=swap');
+
+:root {
+	color-scheme: light;
+	--brand: #1e9be9;
+	--brand-deep: #1265a8;
+	--brand-bright: #55b9f3;
+	--ink: #16385c;
+	--ink-soft: color-mix(in srgb, var(--ink) 70%, white);
+	--paper: #ffffff;
+	--desk: color-mix(in srgb, var(--brand) 10%, white);
+	--sticky: #ffc93c;
+	--on-sticky: #16385c;
+	--fail: #e4574c;
+	--done: #14a56f;
+	--warn: #efa00b;
+
+	/* State fills: information lives in backgrounds; text on them stays ink. */
+	--fill-ready: color-mix(in srgb, var(--done) 22%, white);
+	--fill-review: color-mix(in srgb, var(--brand) 18%, white);
+	--fill-draft: color-mix(in srgb, var(--ink) 8%, white);
+	--fill-failing: color-mix(in srgb, var(--fail) 20%, white);
+	--fill-progress: color-mix(in srgb, var(--warn) 22%, white);
+	--fill-merged: color-mix(in srgb, var(--done) 10%, white);
+
+	--font-head: 'DynaPuff', 'Comic Sans MS', sans-serif;
+	--font-body: 'Geist', system-ui, sans-serif;
+	--font-mono: 'Geist Mono', ui-monospace, Consolas, monospace;
+
+	--space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px;
+	--space-6: 24px; --space-8: 32px; --space-10: 40px; --space-12: 48px;
+
+	--radius-panel: 16px;
+	--radius-button: 7px;
+	--radius-badge: 12px;
+	--border-width: 2.5px;
+	--shadow-compact: 1px 1px 0 var(--ink);
+	--shadow-ordinary: 3px 3px 0 var(--ink);
+	--shadow-lifted: 6px 6px 0 var(--ink);
+
+	--duration-fast: 100ms;
+	--duration-normal: 200ms;
+	--duration-slow: 300ms;
+	--ease-standard: cubic-bezier(0.2, 0.7, 0.3, 1);
+	--ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+	--reading-width: 960px;
+
+	/* Native app colours for chapter chrome. */
+	--google-calendar: #1a73e8;
+	--gmail: #ea4335;
+	--slack: #4a154b;
+	--obsidian: #7c3aed;
+	--gitlab: #fc6d26;
+	--github: #24292f;
+	--terminal: #1e1e1e;
+}

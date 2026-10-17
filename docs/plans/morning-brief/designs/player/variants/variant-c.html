@@ -1,0 +1,1370 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Morning brief, Friday 16 October</title>
+<link rel="stylesheet" href="../../tokens.css">
+<style>
+/* Variant C: one centred reading column, a slim outline spine on the left, subtitles under the sheet. */
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+	background-color: var(--desk);
+	background-image: radial-gradient(color-mix(in srgb, var(--ink) 13%, transparent) 1.5px, transparent 1.6px);
+	background-size: 24px 24px;
+	color: var(--ink);
+	font: 400 16px/1.45 var(--font-body);
+	overflow: hidden;
+}
+button, select, input { font: inherit; color: inherit; }
+button { cursor: pointer; background: none; border: 0; padding: 0; }
+a { color: var(--brand-deep); }
+:focus-visible { outline: 3px solid var(--brand-deep); outline-offset: 2px; border-radius: var(--radius-button); }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+svg { flex: none; display: block; }
+
+/* Layout: the column is centred on the whole desk; the rail floats over the left margin. */
+.app { --rail-width: 248px; --transport-space: 96px; height: 100vh; position: relative; }
+.column {
+	width: min(var(--reading-width), 100vw - 2 * (var(--rail-width) + var(--space-6)));
+	margin-inline: auto;
+	height: 100vh;
+	display: flex; flex-direction: column;
+	padding-top: var(--space-5);
+}
+.variant-tag {
+	position: fixed; top: var(--space-3); right: var(--space-4); z-index: 30; margin: 0; max-width: 270px; line-height: 1.4;
+	font: 500 12px var(--font-mono); color: var(--ink-soft);
+	background: color-mix(in srgb, var(--paper) 85%, transparent);
+	border: 1px dashed color-mix(in srgb, var(--ink) 35%, transparent);
+	border-radius: var(--radius-button); padding: 3px 8px;
+}
+
+/* Outline rail: a dashed spine of brand icons; only the current chapter unfolds. */
+.rail { position: fixed; top: 0; left: 0; bottom: 0; width: var(--rail-width); padding: var(--space-5) var(--space-3) var(--space-4) var(--space-4); display: flex; flex-direction: column; gap: var(--space-4); z-index: 10; }
+.rail-date { padding-left: var(--space-1); }
+.rail-date .date { font: 600 22px/1.1 var(--font-head); }
+.rail-date .window { font: 400 13px var(--font-mono); color: var(--ink-soft); margin-top: 2px; }
+.outline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; position: relative; overflow-y: auto; min-height: 0; padding: 2px 4px 4px 2px; }
+.outline::before { content: ''; position: absolute; left: 23px; top: 10px; bottom: 10px; border-left: 2px dashed color-mix(in srgb, var(--ink) 22%, transparent); }
+.outline-item { position: relative; }
+.outline-chapter { display: flex; align-items: center; gap: var(--space-2); width: 100%; text-align: left; border-radius: 12px; padding: 0; }
+.outline-icon { position: relative; width: 42px; height: 42px; display: grid; place-items: center; background: var(--paper); border-radius: 12px; border: 1.5px solid color-mix(in srgb, var(--ink) 18%, transparent); transition: transform var(--duration-normal) var(--ease-spring), box-shadow var(--duration-normal) var(--ease-spring); }
+.outline-chapter:hover .outline-icon { transform: translateY(-2px); box-shadow: var(--shadow-compact); }
+.outline-item.current .outline-icon { border: var(--border-width) solid var(--ink); box-shadow: var(--shadow-compact); }
+.outline-item.done .outline-icon { background: color-mix(in srgb, var(--paper) 70%, transparent); }
+.count { position: absolute; right: -6px; bottom: -5px; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 10px; font: 600 12px/17px var(--font-mono); text-align: center; background: var(--paper); border: 1.5px solid color-mix(in srgb, var(--ink) 30%, transparent); }
+.count.needs { background: var(--sticky); color: var(--on-sticky); border-color: var(--ink); }
+.warn-dot { position: absolute; left: -4px; top: -4px; width: 12px; height: 12px; border-radius: 50%; background: var(--warn); border: 2px solid var(--ink); }
+.outline-name { display: none; font-weight: 650; font-size: 15px; }
+.outline-item.current .outline-name { display: block; }
+.outline-panel { display: none; }
+.outline-item.current .outline-panel { display: block; margin: var(--space-2) 0 var(--space-1) 50px; }
+.outline-warning { display: flex; gap: 6px; align-items: flex-start; font-size: 13px; color: var(--ink); background: var(--fill-progress); border-radius: var(--radius-button); padding: 4px 8px; margin-bottom: 6px; }
+.outline-warning svg { margin-top: 2px; }
+.outline-beats { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.outline-beat { display: flex; gap: 8px; align-items: center; width: 100%; text-align: left; padding: 4px 8px; border-radius: var(--radius-button); font-size: 14px; color: var(--ink-soft); }
+.outline-beat::before { content: ''; width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid currentColor; flex: none; }
+.outline-beat:hover { background: color-mix(in srgb, var(--paper) 70%, transparent); color: var(--ink); }
+.outline-beat.done { color: var(--ink); }
+.outline-beat.done::before { background: currentColor; }
+.outline-beat.current { color: var(--ink); background: var(--paper); font-weight: 600; box-shadow: inset 0 0 0 1.5px var(--ink); }
+.outline-beat.current::before { background: var(--sticky); border-color: var(--ink); }
+
+/* The sheet: the only inked surface besides highlighted items and the transport. */
+.sheet { position: relative; flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column; background: var(--paper); border: var(--border-width) solid var(--ink); border-radius: var(--radius-panel); box-shadow: var(--shadow-lifted); overflow: hidden; }
+.sheet-band { flex: none; height: 10px; background: var(--chapter-color, var(--brand)); border-bottom: var(--border-width) solid var(--ink); }
+.sheet-head { flex: none; display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4) var(--space-6) var(--space-2); }
+.sheet-head .kicker { font-size: 14px; font-weight: 600; color: var(--ink-soft); }
+.sheet-head h1 { margin: 0; font: 600 26px/1.15 var(--font-head); text-wrap: balance; }
+.sheet-head .position { margin-left: auto; font: 500 13px var(--font-mono); color: var(--ink-soft); align-self: flex-start; padding-top: 4px; }
+.sheet-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--space-3) var(--space-6) var(--space-6); }
+
+/* Caption sits under the sheet like a subtitle. */
+.caption { flex: none; display: flex; justify-content: center; margin-top: var(--space-4); min-height: 72px; }
+.caption p { margin: 0; max-width: 680px; text-align: center; font-size: 20px; line-height: 1.4; font-weight: 500; text-wrap: balance; background: color-mix(in srgb, var(--paper) 88%, transparent); border-radius: 12px; padding: 6px 16px; align-self: flex-start; }
+.spacer { flex: none; height: var(--transport-space); }
+
+/* Highlight: an ink ring plus lift on what is being said; everything else stays readable at 0.75. */
+[data-target] { transition: opacity var(--duration-slow) var(--ease-standard), transform var(--duration-normal) var(--ease-spring), box-shadow var(--duration-normal) var(--ease-spring); }
+.highlighting [data-target]:not(.is-target, .on-path) { opacity: 0.75; }
+.is-target { outline: var(--border-width) solid var(--ink); outline-offset: 2px; transform: translateY(-2px); box-shadow: var(--shadow-ordinary); position: relative; z-index: 2; }
+.calendar-event.is-target { z-index: 4; }
+
+/* Shared small parts. */
+.icon-link { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: var(--radius-button); color: var(--ink); transition: transform var(--duration-normal) var(--ease-spring), background var(--duration-fast); flex: none; }
+a.icon-link:hover, button.icon-link:hover { background: color-mix(in srgb, var(--ink) 9%, transparent); transform: translateY(-2px); }
+.icon-link.static { cursor: default; }
+.chip { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; padding: 1px 8px; border-radius: var(--radius-badge); background: var(--paper); white-space: nowrap; }
+.group-title { margin: 0 0 var(--space-2); font-size: 14px; font-weight: 650; color: var(--ink-soft); }
+.muted-line { margin: var(--space-3) 0 0; font-size: 14px; color: var(--ink-soft); }
+.row-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.text-button { display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: var(--radius-button); border: var(--border-width) solid var(--ink); background: var(--sticky); color: var(--on-sticky); font-weight: 650; box-shadow: var(--shadow-ordinary); transition: transform var(--duration-normal) var(--ease-spring), box-shadow var(--duration-normal) var(--ease-spring); }
+.text-button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: var(--shadow-lifted); }
+.text-button:active:not(:disabled) { transform: translateY(1px); box-shadow: var(--shadow-compact); }
+.text-button:disabled { background: var(--fill-draft); box-shadow: none; cursor: not-allowed; color: var(--ink-soft); border-color: var(--ink-soft); }
+.text-button.done { background: var(--fill-ready); }
+.segmented { display: inline-flex; padding: 3px; gap: 3px; border-radius: 10px; background: var(--fill-draft); }
+.segmented button { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: var(--radius-button); font-size: 14px; font-weight: 600; color: var(--ink-soft); transition: background var(--duration-fast); }
+.segmented button:hover { color: var(--ink); background: color-mix(in srgb, var(--paper) 60%, transparent); }
+.segmented button[aria-pressed="true"] { background: var(--paper); color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--ink); }
+.switch { position: relative; display: inline-flex; flex: none; width: 40px; height: 24px; }
+.switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.switch span { width: 100%; height: 100%; border-radius: 12px; background: var(--fill-draft); border: 2px solid var(--ink-soft); transition: background var(--duration-fast); }
+.switch span::after { content: ''; position: absolute; top: 4px; left: 4px; width: 16px; height: 16px; border-radius: 50%; background: var(--ink-soft); transition: transform var(--duration-normal) var(--ease-spring); }
+.switch input:checked + span { background: var(--fill-ready); border-color: var(--ink); }
+.switch input:checked + span::after { transform: translateX(16px); background: var(--ink); }
+.switch input:focus-visible + span { outline: 3px solid var(--brand-deep); outline-offset: 2px; }
+select.small-select { appearance: none; font-size: 14px; padding: 3px 26px 3px 8px; border-radius: var(--radius-button); border: 1.5px solid color-mix(in srgb, var(--ink) 30%, transparent); background: var(--paper) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316385c' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 6px center / 14px; cursor: pointer; }
+select.small-select:hover { border-color: var(--ink); }
+
+/* Overview. */
+.overview-hero { display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; margin: var(--space-2) 0 var(--space-5); }
+.overview-hero .weekday { font: 600 44px/1 var(--font-head); }
+.overview-hero .day-label { font: 500 26px/1 var(--font-head); color: var(--ink-soft); }
+.overview-hero .greeting { width: 100%; font-size: 18px; margin-top: var(--space-2); }
+.need { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: var(--space-3); align-items: center; padding: 10px 12px 10px 16px; border-radius: 12px; background: var(--fill-review); }
+.need .need-text { font-size: 17px; font-weight: 650; }
+.need .need-detail { font-size: 15px; color: var(--ink); }
+.need .need-actions { display: flex; gap: 2px; }
+
+/* Calendar: Google Calendar day columns with solid tinted blocks. */
+.calendar-layout { display: flex; justify-content: center; gap: var(--space-5); align-items: flex-start; }
+.calendar-grid { --hour-height: 32px; --gutter: 50px; --day-width: 178px; }
+.calendar-days, .calendar-all-day, .calendar-body { display: grid; grid-template-columns: var(--gutter) repeat(var(--day-count), var(--day-width)); column-gap: 6px; }
+.calendar-day-head { display: flex; flex-direction: column; align-items: center; gap: 2px; padding-bottom: 6px; }
+.calendar-day-head .weekday { font-size: 13px; font-weight: 650; letter-spacing: 0.04em; color: var(--ink-soft); }
+.calendar-day-head .date { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; font: 600 22px var(--font-head); }
+.calendar-day-head.focus .weekday { color: var(--google-calendar); }
+.calendar-day-head.focus .date { background: var(--google-calendar); color: #ffffff; }
+.calendar-all-day { padding-bottom: 6px; border-bottom: 1.5px solid color-mix(in srgb, var(--ink) 18%, transparent); min-height: 8px; }
+.calendar-all-day .label { font: 400 12px var(--font-mono); color: var(--ink-soft); align-self: center; }
+.all-day-cell { display: flex; flex-direction: column; gap: 3px; }
+.all-day-chip { text-align: left; font-size: 14px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background: color-mix(in srgb, var(--event-color) 45%, white); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.calendar-body { position: relative; padding-top: 8px; }
+.hour-labels { position: relative; }
+.hour-label { position: absolute; right: 6px; transform: translateY(-50%); font: 400 13px var(--font-mono); color: var(--ink-soft); }
+.day-track { position: relative; border-left: 1.5px solid color-mix(in srgb, var(--ink) 14%, transparent); }
+.day-track .hour-line { position: absolute; left: 0; right: 0; border-top: 1px solid color-mix(in srgb, var(--ink) 11%, transparent); }
+.calendar-event { position: absolute; display: flex; flex-direction: column; justify-content: flex-start; text-align: left; overflow: hidden; padding: 3px 8px; border-radius: 7px; background: color-mix(in srgb, var(--event-color) 58%, white); color: var(--ink); font-size: 15px; line-height: 1.25; border: 1.5px solid var(--paper); }
+.calendar-event:hover { filter: saturate(1.15) brightness(0.97); }
+.calendar-event.busy { background: color-mix(in srgb, var(--event-color) 34%, white); }
+.calendar-event.selected { border-color: var(--ink); }
+.calendar-event .event-title { font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.calendar-event .event-time { font: 400 13px var(--font-mono); }
+.calendar-event.short { flex-direction: row; align-items: center; gap: 6px; padding-block: 0; }
+.now-line { position: absolute; left: -6px; right: 0; border-top: 2px solid var(--fail); z-index: 3; }
+.now-line::before { content: ''; position: absolute; left: -1px; top: -7px; width: 12px; height: 12px; border-radius: 50%; background: var(--fail); }
+.event-card { width: 230px; flex: none; border-radius: 12px; padding: var(--space-4); background: color-mix(in srgb, var(--event-color, var(--google-calendar)) 16%, white); display: flex; flex-direction: column; gap: 6px; margin-top: 52px; }
+.event-card .event-card-head { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 650; }
+.event-card .swatch { width: 12px; height: 12px; border-radius: 4px; background: var(--event-color); border: 1.5px solid var(--ink); }
+.event-card h2 { margin: 0; font-size: 19px; line-height: 1.25; }
+.event-card .meta { font: 400 14px var(--font-mono); }
+.event-card .note { font-size: 15px; font-weight: 600; background: var(--fill-progress); border-radius: 6px; padding: 3px 8px; }
+.event-card .event-card-actions { display: flex; gap: 2px; margin-left: auto; }
+.legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.legend li { display: flex; align-items: center; gap: 8px; }
+
+/* Work in flight: merge request rows with the state as the row fill. */
+.work-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-3); }
+.project + .project { margin-top: var(--space-4); }
+.project-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-weight: 650; }
+.merge-request { display: grid; grid-template-columns: 58px minmax(0, 1fr) auto; gap: var(--space-3); align-items: center; padding: 6px 6px 6px 14px; border-radius: 12px; background: var(--state-fill); }
+.merge-request .ref { font: 600 15px var(--font-mono); }
+.merge-request .title { font-weight: 600; font-size: 16px; }
+.merge-request .state { font-size: 14px; }
+.merge-request .links { display: flex; gap: 0; align-items: center; }
+.merge-request .local { display: inline-flex; gap: 10px; margin-left: 8px; font: 500 13px var(--font-mono); vertical-align: 1px; }
+.merge-request .local span { display: inline-flex; gap: 3px; align-items: center; }
+.icon-link.warn { background: var(--fill-progress); box-shadow: inset 0 0 0 1.5px var(--ink); }
+.merged-line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; padding: 4px 14px; border-radius: 10px; background: var(--fill-merged); font-size: 14px; }
+.merged-line a { font: 600 14px var(--font-mono); color: var(--ink); }
+.quiet-toggle { display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-4); font-size: 15px; }
+
+/* Overnight runs. */
+.run { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto auto 34px; gap: var(--space-3); align-items: center; padding: 8px 6px 8px 14px; border-radius: 12px; background: var(--fill-merged); }
+.run.fail { background: var(--fill-failing); }
+.run .title { font-weight: 650; }
+.run .detail { font-size: 14px; }
+.run .mono { font-size: 14px; }
+
+/* Slack. */
+.slack-section + .slack-section { margin-top: var(--space-4); }
+.slack-message { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: var(--space-3); padding: 8px 6px 8px 10px; border-radius: 10px; }
+.slack-message.waiting { background: var(--fill-progress); }
+.avatar { width: 38px; height: 38px; border-radius: 8px; display: grid; place-items: center; color: #ffffff; font-weight: 700; font-size: 16px; }
+.slack-message .who { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.slack-message .name { font-weight: 750; }
+.slack-message .meta { font: 400 13px var(--font-mono); color: var(--ink-soft); }
+.slack-message .text { font-size: 16px; }
+.mention { background: color-mix(in srgb, var(--sticky) 55%, white); border-radius: 4px; padding: 0 3px; font-weight: 600; }
+.slack-message .side { display: flex; align-items: center; gap: 2px; font: 500 13px var(--font-mono); color: var(--ink-soft); }
+.handled { border-radius: 12px; background: var(--fill-merged); padding: 10px 14px; }
+.handled p { margin: 0; font-size: 15px; }
+.handled details { margin-top: 6px; }
+.handled summary { cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 650; border-radius: var(--radius-button); list-style: none; }
+.handled summary::-webkit-details-marker { display: none; }
+.handled summary svg { transition: transform var(--duration-normal) var(--ease-spring); }
+.handled details[open] summary svg { transform: rotate(90deg); }
+.handled-list { list-style: none; margin: 6px 0 0; padding: 0 4px 0 0; max-height: 116px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.handled-list li { display: grid; grid-template-columns: 70px minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 14px; background: var(--paper); border-radius: 8px; padding: 2px 4px 2px 10px; }
+
+/* Gmail rows. */
+.gmail { border-radius: 12px; overflow: visible; background: var(--paper); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ink) 14%, transparent); }
+.mail-row { display: grid; grid-template-columns: 80px minmax(0, 1fr) auto 34px; gap: var(--space-3); align-items: center; padding: 9px 6px 9px 14px; border-radius: 12px; background: var(--paper); }
+.mail-row + .mail-row { box-shadow: 0 -1px 0 color-mix(in srgb, var(--ink) 12%, transparent); }
+.mail-row.unread { background: color-mix(in srgb, var(--gmail) 5%, white); }
+.mail-row .from-line { display: flex; gap: 8px; align-items: baseline; }
+.mail-row .from { font-size: 16px; }
+.mail-row.unread .from, .mail-row.unread .subject { font-weight: 700; }
+.mail-row .subject-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 15px; }
+.mail-row .snippet { color: var(--ink-soft); }
+.mail-row .date { font: 500 13px var(--font-mono); margin-left: auto; }
+.account-chip.work { background: var(--fill-review); }
+.account-chip.personal { background: var(--fill-ready); }
+.action-chip { background: var(--fill-draft); }
+.action-chip.renew { background: var(--fill-progress); }
+.action-chip.read { background: var(--fill-review); }
+.notifications { display: flex; gap: var(--space-3); flex-wrap: wrap; align-items: center; }
+.notifications span.count-pair { font: 500 14px var(--font-mono); }
+
+/* Obsidian triage grouped by source note. */
+.note-group + .note-group { margin-top: var(--space-4); }
+.note-head { display: flex; align-items: center; gap: 8px; padding: 2px 4px 2px 12px; border-radius: 10px; background: color-mix(in srgb, var(--obsidian) 12%, white); font: 600 14px var(--font-mono); margin-bottom: 6px; }
+.note-head .icon-link { margin-left: auto; width: 30px; height: 30px; }
+.capture { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: var(--space-3); align-items: center; padding: 6px 8px 6px 12px; border-radius: 10px; }
+.capture .box { width: 16px; height: 16px; border: 2px solid var(--obsidian); border-radius: 4px; }
+.capture .text { font-size: 16px; }
+.capture .selects { display: flex; gap: 6px; }
+
+/* Retro: evidence as a terminal, fix as a diff, sessions confirmed at the bottom. */
+.retro-item { border-radius: 12px; background: var(--fill-draft); }
+.retro-item + .retro-item { margin-top: var(--space-2); }
+.retro-head { display: flex; align-items: center; gap: var(--space-2); padding: 4px 6px 4px 10px; }
+.retro-toggle { display: flex; align-items: center; gap: var(--space-2); flex: 1; min-width: 0; text-align: left; padding: 4px; border-radius: var(--radius-button); }
+.retro-toggle svg.chevron { transition: transform var(--duration-normal) var(--ease-spring); }
+.retro-toggle[aria-expanded="true"] svg.chevron { transform: rotate(90deg); }
+.retro-toggle .title { font-weight: 650; }
+.retro-toggle .cost { font: 400 13px var(--font-mono); color: var(--ink-soft); white-space: nowrap; margin-left: auto; }
+.retro-body { padding: 0 12px 12px; display: grid; gap: 8px; }
+.retro-body[hidden] { display: none; }
+.terminal { background: var(--terminal); color: #e8e8e8; border-radius: 10px; padding: 8px 12px; font: 400 13px/1.55 var(--font-mono); }
+.terminal-bar { display: flex; gap: 8px; align-items: center; color: #b4bcc6; font-size: 12px; margin-bottom: 4px; }
+.terminal-line { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 4px; }
+.terminal-line .mark { color: #7ec699; }
+.terminal-line.error { background: color-mix(in srgb, var(--warn) 22%, var(--terminal)); color: #ffd98a; border-radius: 5px; padding: 1px 4px; margin: 2px -4px; }
+.terminal-line.error .mark { color: #ffd98a; padding-top: 3px; }
+.terminal-line.assistant { color: #c9d4de; }
+.terminal-line.assistant .mark { color: #d97757; }
+.diff { background: var(--paper); border-radius: 10px; padding: 6px 10px; font: 400 13px/1.55 var(--font-mono); }
+.diff .file { font-size: 12px; color: var(--ink-soft); margin-bottom: 2px; }
+.diff .line { white-space: pre-wrap; padding: 0 6px; border-radius: 4px; }
+.diff .line.plus { background: var(--fill-ready); }
+.diff .line.minus { background: var(--fill-failing); }
+.sessions { margin-top: var(--space-4); padding: 12px 14px; border-radius: 12px; background: var(--fill-review); }
+.sessions h2 { margin: 0 0 6px; font-size: 15px; }
+.session-row { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: var(--space-3); align-items: center; padding: 6px 8px; border-radius: 10px; }
+.session-row.approved { background: var(--fill-ready); }
+.session-row .line-one { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-weight: 600; font-size: 15px; }
+.session-row .prompt { font: 400 13px var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sessions-confirm { display: flex; justify-content: flex-end; align-items: center; gap: var(--space-3); margin-top: 8px; font-size: 14px; }
+
+/* Instructions. */
+.change { display: grid; grid-template-columns: minmax(0, 1fr) auto 34px; gap: var(--space-3); align-items: center; padding: 10px 6px 10px 14px; border-radius: 12px; }
+.change.final { background: var(--fill-ready); }
+.change.watch { background: var(--fill-progress); }
+.change.attention { background: var(--fill-failing); }
+.change .scope-line { display: flex; gap: 8px; align-items: center; }
+.change .scope { font: 600 14px var(--font-mono); }
+.change .summary { font-size: 15px; font-weight: 600; }
+.change .opinion { font-size: 15px; }
+.state-chips { display: flex; flex-direction: column; gap: 3px; align-items: stretch; }
+.state-chips .chip { justify-content: flex-start; }
+.state-chips .chip.no { background: color-mix(in srgb, var(--paper) 55%, transparent); box-shadow: inset 0 0 0 1.5px var(--ink); }
+
+/* AI news. */
+.news-item { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: var(--space-3); align-items: center; padding: 10px 6px 10px 14px; border-radius: 12px; background: var(--fill-draft); }
+.news-item .title { font-weight: 650; font-size: 16px; }
+.news-item .summary { font-size: 15px; }
+.news-item .meta { font: 400 13px var(--font-mono); color: var(--ink-soft); }
+.news-item .side { display: flex; align-items: center; gap: 2px; }
+.vote[aria-pressed="true"].up { background: var(--fill-ready); box-shadow: inset 0 0 0 1.5px var(--ink); }
+.vote[aria-pressed="true"].down { background: var(--fill-failing); box-shadow: inset 0 0 0 1.5px var(--ink); }
+
+/* Action points. */
+.action { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto auto; gap: var(--space-3); align-items: center; padding: 8px 8px 8px 14px; border-radius: 12px; background: var(--fill-review); }
+.action.is-done { background: var(--fill-merged); }
+.action.is-done .text { text-decoration: line-through; text-decoration-thickness: 2px; }
+.action .text { font-size: 17px; font-weight: 600; }
+.checkbox { appearance: none; width: 22px; height: 22px; margin: 0; border: 2px solid var(--ink); border-radius: 6px; background: var(--paper); display: grid; place-items: center; cursor: pointer; }
+.checkbox:checked { background: var(--done) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / 16px no-repeat; }
+.save-area { display: flex; justify-content: flex-end; align-items: center; gap: var(--space-4); margin-top: var(--space-6); }
+.save-area .summary { font-size: 14px; color: var(--ink-soft); text-align: right; }
+
+/* Quiet chapter. */
+.quiet-slide { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); padding: var(--space-10) 0; text-align: center; }
+.quiet-slide p { margin: 0; font: 600 22px var(--font-head); }
+
+/* Transport: a floating pill at the bottom centre. */
+.transport { position: fixed; left: 50%; bottom: var(--space-5); transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: 4px; padding: 6px 10px 6px 8px; border-radius: 999px; background: var(--paper); border: var(--border-width) solid var(--ink); box-shadow: var(--shadow-ordinary); width: min(var(--reading-width), calc(100vw - 24px)); }
+.control { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; color: var(--ink); transition: transform var(--duration-normal) var(--ease-spring), background var(--duration-fast); }
+.control:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 9%, transparent); transform: translateY(-2px); }
+.control:active:not(:disabled) { transform: translateY(1px); }
+.control:disabled { opacity: 0.4; cursor: default; }
+.control.play { width: 46px; height: 46px; background: var(--sticky); border: var(--border-width) solid var(--ink); box-shadow: var(--shadow-compact); }
+.control.play:hover { background: var(--sticky); box-shadow: var(--shadow-ordinary); }
+.control.speed { width: auto; border-radius: 18px; padding: 0 8px; grid-auto-flow: column; gap: 3px; font: 600 13px var(--font-mono); }
+.control[aria-pressed="true"].mute { background: var(--fill-progress); }
+.progress { flex: 1; min-width: 120px; display: flex; gap: 3px; align-items: center; height: 24px; margin: 0 8px; }
+.segment { position: relative; height: 8px; border-radius: 4px; background: var(--fill-draft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 22%, transparent); cursor: pointer; min-width: 8px; transition: height var(--duration-fast); }
+.segment.current { height: 12px; box-shadow: inset 0 0 0 1.5px var(--ink); }
+.segment.quiet { background: var(--fill-merged); }
+.progress:hover .segment { height: 12px; }
+.segment-fill { position: absolute; inset: 0; border-radius: inherit; background: var(--brand); transform-origin: 0 50%; transform: scaleX(0); }
+.tick { position: absolute; top: 1px; bottom: 1px; width: 2px; margin-left: -1px; background: var(--paper); border-radius: 1px; pointer-events: none; }
+.time { font: 500 13px var(--font-mono); color: var(--ink-soft); white-space: nowrap; min-width: 82px; text-align: right; }
+
+/* Below 1280 the rail folds to icons only. */
+@media (max-width: 1279px) {
+	.app { --rail-width: 74px; }
+	.rail-date .window, .outline-item.current .outline-name, .outline-item.current .outline-panel { display: none; }
+	.rail-date .date { font-size: 16px; text-align: center; }
+	.outline::before { left: 23px; }
+	.variant-angle { display: none; }
+}
+/* Below 760 the rail becomes a top strip and the page scrolls. */
+@media (max-width: 759px) {
+	body { overflow: auto; }
+	.app { --rail-width: 0px; height: auto; }
+	.rail { position: sticky; top: 0; width: auto; flex-direction: row; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); background: color-mix(in srgb, var(--desk) 92%, white); border-bottom: 1.5px solid color-mix(in srgb, var(--ink) 18%, transparent); }
+	.rail-date .date { font-size: 15px; white-space: nowrap; }
+	.outline { flex-direction: row; overflow-x: auto; overflow-y: hidden; padding: 6px 6px 8px 4px; }
+	.outline::before { display: none; }
+	.column { width: auto; height: auto; padding: var(--space-3) var(--space-3) 0; }
+	.sheet { flex: none; }
+	.sheet-body, .sheet-head { padding-inline: var(--space-4); }
+	.variant-tag { position: static; display: block; margin: var(--space-2) auto 0; width: fit-content; max-width: none; }
+	.variant-angle { display: inline; }
+	.variant-angle br { display: none; }
+	.variant-angle::before { content: ' · '; }
+	.transport { flex-wrap: wrap; justify-content: center; border-radius: 22px; bottom: var(--space-2); }
+	.progress { order: 10; flex-basis: 100%; margin: 2px 4px 0; }
+	.calendar-layout { flex-direction: column; align-items: center; }
+	.calendar-grid { --day-width: minmax(0, 1fr); --gutter: 42px; width: 100%; }
+	.event-card { width: 100%; margin-top: 0; }
+	.app { --transport-space: 150px; }
+	.capture, .change, .news-item { grid-template-columns: minmax(0, 1fr) auto; }
+	.merge-request { grid-template-columns: auto minmax(0, 1fr); }
+	.merge-request .links { grid-column: 2; }
+	.action { grid-template-columns: 26px minmax(0, 1fr) auto; }
+	.action .segmented { grid-column: 2 / -1; justify-self: start; }
+	.mail-row { grid-template-columns: minmax(0, 1fr) auto auto; }
+	.capture .box, .news-item > svg, .run > svg:first-child { display: none; }
+	.capture .selects { grid-column: 1 / -1; flex-wrap: wrap; }
+	.mail-row .account-chip { display: none; }
+	.run { grid-template-columns: minmax(0, 1fr) auto 34px; }
+	.run .duration { display: none; }
+	.state-chips { flex-direction: row; grid-column: 1 / -1; grid-row: 2; }
+	.time { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+	*, *::before, *::after { transition: none !important; }
+	.is-target { transform: none; }
+}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+	<p class="variant-tag" title="Variant C, focus column, watch-through first">Variant C<span class="variant-angle"><br>Focus column, watch-through first</span></p>
+	<aside class="rail" aria-label="Brief outline">
+		<div class="rail-date"><div class="date" id="rail-date"></div><div class="window" id="rail-window"></div></div>
+		<nav aria-label="Chapters"><ol class="outline" id="outline"></ol></nav>
+	</aside>
+	<main class="column">
+		<article class="sheet" id="sheet" aria-labelledby="chapter-title">
+			<div class="sheet-band" aria-hidden="true"></div>
+			<header class="sheet-head">
+				<span id="chapter-icon"></span>
+				<div><div class="kicker" id="chapter-kicker"></div><h1 id="chapter-title"></h1></div>
+				<span class="position" id="chapter-position"></span>
+			</header>
+			<div class="sheet-body" id="stage"></div>
+		</article>
+		<div class="caption"><p id="caption" aria-live="polite"></p></div>
+		<div class="spacer" aria-hidden="true"></div>
+	</main>
+	<div class="transport" role="group" aria-label="Playback">
+		<button class="control" id="chapter-previous" type="button" aria-label="Previous chapter" title="Previous chapter (Shift+Left)"></button>
+		<button class="control" id="beat-previous" type="button" aria-label="Previous point" title="Previous point (Left)"></button>
+		<button class="control play" id="play" type="button"></button>
+		<button class="control" id="beat-next" type="button" aria-label="Next point" title="Next point (Right)"></button>
+		<button class="control" id="chapter-next" type="button" aria-label="Next chapter" title="Next chapter (Shift+Right)"></button>
+		<div class="progress" id="progress" aria-label="Brief progress by chapter"></div>
+		<span class="time" id="time" aria-hidden="true"></span>
+		<button class="control speed" id="speed" type="button"></button>
+		<button class="control mute" id="mute" type="button"></button>
+	</div>
+</div>
+<script type="application/json" id="brief-data">{
+  "date": "2026-10-16",
+  "window": { "since": "2026-10-15T06:05:00+02:00", "until": "2026-10-16T06:00:00+02:00", "label": "Thu 15 Oct 06:05 → Fri 16 Oct 06:00" },
+  "now": "2026-10-16T06:00:00+02:00",
+  "sources": [
+    { "name": "Personal Google", "status": "ok", "chapters": ["calendar", "mail"] },
+    { "name": "Work Slack and mail", "status": "ok", "chapters": ["slack", "mail"] },
+    { "name": "Work calendar", "status": "skipped", "reason": "Connector not approved yet; busy blocks only", "chapters": ["calendar"] },
+    { "name": "Gerrit", "status": "unavailable", "reason": "SSH key not loaded", "chapters": ["work"] },
+    { "name": "OpenAI news", "status": "unavailable", "reason": "HTTP 403", "chapters": ["news"] }
+  ],
+  "chapters": [
+    {
+      "id": "overview", "type": "overview", "name": "Good morning", "title": "Four things need you", "status": "needs", "count": 4,
+      "data": {
+        "greeting": "Good morning",
+        "weekday": "Friday", "dayLabel": "16 October",
+        "needs": [
+          { "id": "need-1", "text": "Review !321", "detail": "Alex asked twice", "app": "gitlab", "url": "https://example.com/mr/321", "chapter": "slack" },
+          { "id": "need-2", "text": "Merge !318", "detail": "Approved and green", "app": "gitlab", "url": "https://example.com/mr/318", "chapter": "work" },
+          { "id": "need-3", "text": "Renew the GitLab token", "detail": "Expires Wednesday", "app": "gmail", "url": "https://mail.google.com/", "chapter": "mail" },
+          { "id": "need-4", "text": "Dentist at 16:00", "detail": "Leave by 15:30", "app": "googlecalendar", "url": "https://calendar.google.com/", "chapter": "calendar" }
+        ]
+      },
+      "beats": [
+        { "say": "Good morning. Four things need you today.", "note": "Today", "targets": ["need-1", "need-2", "need-3", "need-4"] },
+        { "say": "Alex is waiting on your review of three twenty one, and three eighteen is ready to merge.", "note": "Reviews", "targets": ["need-1", "need-2"] },
+        { "say": "Your GitLab token expires on Wednesday, and the dentist is at four.", "note": "Token, dentist", "targets": ["need-3", "need-4"] }
+      ]
+    },
+    {
+      "id": "calendar", "type": "calendar", "name": "Calendar", "title": "Standup, then the dentist", "status": "fyi", "count": 5,
+      "data": {
+        "calendars": [
+          { "id": "personal", "name": "Personal", "account": "personal", "color": "#039be5" },
+          { "id": "family", "name": "Family", "account": "personal", "color": "#33b679" },
+          { "id": "work", "name": "Work", "account": "work", "color": "#7986cb", "busyOnly": true }
+        ],
+        "days": [
+          { "id": "today", "label": "Fri", "date": "16", "focus": true },
+          { "id": "tomorrow", "label": "Sat", "date": "17" }
+        ],
+        "events": [
+          { "id": "standup", "calendarId": "work", "day": "today", "start": "09:30", "end": "09:45", "busyOnly": true },
+          { "id": "planning", "calendarId": "work", "day": "today", "start": "13:00", "end": "14:00", "busyOnly": true },
+          { "id": "dentist", "calendarId": "personal", "day": "today", "start": "16:00", "end": "17:00", "title": "Dentist", "place": "Downtown", "notes": ["Leave by 15:30"], "url": "https://calendar.google.com/" },
+          { "id": "pickup", "calendarId": "family", "day": "today", "start": "17:30", "end": "18:00", "title": "Kindergarten pickup", "url": "https://calendar.google.com/" },
+          { "id": "nameday", "calendarId": "family", "day": "today", "allDay": true, "title": "Name day: Havel" },
+          { "id": "run", "calendarId": "personal", "day": "tomorrow", "start": "08:00", "end": "09:00", "title": "Park run", "url": "https://calendar.google.com/" },
+          { "id": "market", "calendarId": "family", "day": "tomorrow", "start": "10:00", "end": "12:00", "title": "Farmers market", "url": "https://calendar.google.com/" },
+          { "id": "birthday", "calendarId": "family", "day": "tomorrow", "start": "15:00", "end": "19:00", "title": "Birthday party at Sam's", "place": "Oak Park", "url": "https://calendar.google.com/" }
+        ]
+      },
+      "beats": [
+        { "say": "Standup at half past nine, planning at one.", "note": "Work blocks", "targets": ["event-standup", "event-planning"] },
+        { "say": "The dentist is at four; leave by half past three.", "note": "Dentist", "targets": ["event-dentist"], "select": "dentist" },
+        { "say": "Tomorrow is family day: park run, the market, and Sam's party in Oak Park.", "note": "Tomorrow", "targets": ["event-run", "event-market", "event-birthday"] }
+      ]
+    },
+    {
+      "id": "work", "type": "work", "name": "Work in flight", "title": "One merge ready, one review waiting", "status": "needs", "count": 2,
+      "data": {
+        "states": {
+          "ready": "Approved and green", "review": "Waiting for review", "draft": "Draft", "failing": "Pipeline failing",
+          "progress": "In progress", "local": "Local only", "merged": "Merged", "stale": "Ticket column is wrong"
+        },
+        "projects": [
+          {
+            "id": "ui-components", "scope": "work", "name": "ui-components", "app": "gitlab", "url": "https://example.com/ysc",
+            "cards": [
+              { "id": "mr-318", "ref": "!318", "title": "Payment forms opt out of Enter submit", "state": "ready", "url": "https://example.com/mr/318", "pipeline": { "status": "success", "url": "https://example.com/pipelines/318" }, "ticket": { "ref": "T-102", "column": "In review", "expected": "Approved", "url": "https://kanbanflow.com/" }, "session": { "label": "Orca", "url": "orca://" } },
+              { "id": "mr-321", "ref": "!321", "title": "Date picker keyboard support", "state": "review", "author": "Alex", "url": "https://example.com/mr/321", "pipeline": { "status": "success", "url": "https://example.com/pipelines/321" } },
+              { "id": "mr-320", "ref": "!320", "title": "Toast stacking", "state": "failing", "url": "https://example.com/mr/320", "pipeline": { "status": "failed", "url": "https://example.com/pipelines/320", "job": "lint" } },
+              { "id": "mr-316", "ref": "!316", "title": "Select clears on reset", "state": "merged", "url": "https://example.com/mr/316" },
+              { "id": "mr-317", "ref": "!317", "title": "CI split into lint and test", "state": "merged", "url": "https://example.com/mr/317" }
+            ]
+          },
+          {
+            "id": "mpx", "scope": "personal", "name": "mpx", "app": "github", "url": "https://github.com/MartinoPolo/mpx",
+            "cards": [
+              { "id": "mpx-brief", "ref": "main", "title": "Morning brief skill", "state": "progress", "url": "https://github.com/MartinoPolo/mpx", "local": { "uncommitted": 9, "unpushed": 1 } }
+            ]
+          },
+          {
+            "id": "prejemesi", "scope": "personal", "name": "prejemesi", "app": "github", "url": "https://github.com/MartinoPolo/prejemesi",
+            "cards": [
+              { "id": "pr-488", "ref": "#488", "title": "Agent access part 2: API", "state": "draft", "url": "https://github.com/MartinoPolo/prejemesi/pull/488", "pipeline": { "status": "running", "url": "https://github.com/MartinoPolo/prejemesi/actions" } },
+              { "id": "pr-487", "ref": "#487", "title": "Permanent wishlists", "state": "merged", "url": "https://github.com/MartinoPolo/prejemesi/pull/487" }
+            ]
+          }
+        ],
+        "autoHandled": [
+          { "id": "tidy", "text": "11 old checkouts with local changes", "proposal": "Stash and list them in the weekly review" }
+        ],
+        "quiet": ["kamosh", "orca", "flowguard-api"]
+      },
+      "beats": [
+        { "say": "Three eighteen is approved and green; merge it, and I will move T-102 to Approved.", "note": "Ready to merge", "targets": ["card-mr-318"], "scope": "work" },
+        { "say": "Alex's date picker waits for your review.", "note": "Review waiting", "targets": ["card-mr-321"], "scope": "work" },
+        { "say": "Toast stacking fails in lint.", "note": "Lint failing", "targets": ["card-mr-320"], "scope": "work" },
+        { "say": "On the personal side, mpx has the brief skill uncommitted and prejemesi has a draft running checks.", "note": "Personal", "targets": ["card-mpx-brief", "card-pr-488"], "scope": "personal" }
+      ]
+    },
+    {
+      "id": "overnight", "type": "overnight", "name": "Overnight runs", "title": "The 06:00 brief ran", "status": "fyi", "count": 2,
+      "data": {
+        "runs": [
+          { "id": "run-morning", "outcome": "ok", "app": "orca", "title": "Morning brief", "when": "06:00", "duration": "9 min", "url": "file:///C:/AI_DUMP/morning-brief/2026-10-16/" },
+          { "id": "run-afk", "outcome": "fail", "app": "claude", "title": "AFK: videoLab render", "when": "02:14", "duration": "41 min", "detail": "Render timed out at scene 7", "url": "file:///C:/AI_DUMP/afk/" }
+        ]
+      },
+      "beats": [
+        { "say": "The overnight render failed at scene seven; the brief itself ran fine.", "note": "Render failed", "targets": ["run-afk"] }
+      ]
+    },
+    {
+      "id": "slack", "type": "slack", "name": "Slack", "title": "One request waits on you", "status": "needs", "count": 1,
+      "data": {
+        "unaddressed": [
+          { "id": "s1", "channel": "#team-ui", "author": "Alex", "when": "16:40", "text": "@you could you look at !321 before Monday? Keyboard nav is the part I am unsure about.", "replies": 0, "url": "https://example.slack.com/archives/C1/p1" }
+        ],
+        "worthKnowing": [
+          { "id": "s2", "channel": "#admins", "author": "Chris", "when": "15:05", "text": "Load balancer drops ACKs between the balancer and router; we are watching it.", "replies": 6, "url": "https://example.slack.com/archives/C2/p2" },
+          { "id": "s3", "channel": "#ai", "author": "Kim", "when": "11:20", "text": "Code review working group kicks off Tuesday, sign-up in the thread.", "replies": 14, "url": "https://example.slack.com/archives/C3/p3" }
+        ],
+        "addressedSummary": "Yesterday you fixed the failing feature tests, finished a review ask, and answered the forms question.",
+        "addressed": [
+          { "id": "s4", "channel": "#team-ui", "author": "Robin", "when": "13:16", "text": "Feature tests fail on the filter Apply button", "url": "https://example.slack.com/archives/C1/p4" },
+          { "id": "s5", "channel": "#team-ui", "author": "Taylor", "when": "14:02", "text": "Review please: !317", "url": "https://example.slack.com/archives/C1/p5" },
+          { "id": "s6", "channel": "DM", "author": "Jordan", "when": "17:45", "text": "Are the payment forms still submitting on Enter?", "url": "https://example.slack.com/archives/D1/p6" }
+        ],
+        "skipped": 35
+      },
+      "beats": [
+        { "say": "Alex wants your review of three twenty one before Monday.", "note": "Waiting on you", "targets": ["message-s1"] },
+        { "say": "Worth knowing: admins are still chasing a load balancer issue, and the AI code review group starts Tuesday.", "note": "Worth knowing", "targets": ["message-s2", "message-s3"] },
+        { "say": "Everything else you already handled: the feature tests, a review, and Jordan's forms question.", "note": "Handled", "targets": ["slack-addressed"] }
+      ]
+    },
+    {
+      "id": "mail", "type": "mail", "name": "Mail", "title": "Two emails to act on", "status": "needs", "count": 2,
+      "data": {
+        "rows": [
+          { "id": "token", "account": "work", "from": "GitLab", "subject": "Your personal access token expires soon", "snippet": "The GitLab Workflow token expires on 21 Oct.", "when": "Oct 15", "action": "Renew", "url": "https://mail.google.com/" },
+          { "id": "trip", "account": "personal", "from": "TravelCo", "subject": "Trip instructions: Lisbon, Oct 21", "snippet": "Check-in opens 48 hours before departure.", "when": "Oct 15", "action": "Read", "url": "https://mail.google.com/" },
+          { "id": "bootcamp", "account": "work", "from": "HR team", "subject": "Optional bootcamp in November", "snippet": "Optional, sent to everyone.", "when": "Oct 15", "action": "Optional", "url": "https://mail.google.com/" }
+        ],
+        "notifications": [
+          { "source": "GitLab", "count": 9 }, { "source": "Google", "count": 6 }, { "source": "KanbanFlow", "count": 3 }, { "source": "Other", "count": 4 }
+        ]
+      },
+      "beats": [
+        { "say": "Renew the GitLab token, and read the Lisbon check-in steps.", "note": "Act on", "targets": ["mail-token", "mail-trip"] },
+        { "say": "The bootcamp invite is optional.", "note": "Optional", "targets": ["mail-bootcamp"] }
+      ]
+    },
+    {
+      "id": "triage", "type": "triage", "name": "Obsidian triage", "title": "Three captures to file", "status": "fyi", "count": 3,
+      "data": {
+        "vault": "ObsidianMP",
+        "projects": ["mpx", "orca", "prejemesi", "skills", "videoLab"],
+        "headings": ["#AI", "#todo", "#quick", "#tooling", "#work"],
+        "groups": [
+          { "id": "daily", "note": "Daily/2026-10-15", "url": "obsidian://open?vault=ObsidianMP&file=Daily%2F2026-10-15", "items": [
+            { "id": "t1", "text": "Morning brief should move KF tickets", "project": "mpx", "heading": "#tooling", "priority": "high" },
+            { "id": "t2", "text": "Buy a birthday present for Sam", "project": "", "heading": "#todo", "priority": "highest" }
+          ] },
+          { "id": "ideas", "note": "Ideas", "url": "obsidian://open?vault=ObsidianMP&file=Ideas", "items": [
+            { "id": "t3", "text": "True crime videos with realistic animations", "project": "videoLab", "heading": "#AI", "priority": "low" }
+          ] }
+        ]
+      },
+      "beats": [
+        { "say": "From yesterday's note: KF moves for the brief, and Sam's present, which is due tomorrow.", "note": "Daily note", "targets": ["task-t1", "task-t2"] },
+        { "say": "One idea: true crime animations, parked as low priority.", "note": "Ideas", "targets": ["task-t3"] }
+      ]
+    },
+    {
+      "id": "retro", "type": "retro", "name": "Retro", "title": "Two fixes worth a session", "status": "fyi", "count": 2,
+      "data": {
+        "items": [
+          {
+            "id": "substitution", "title": "Arithmetic blocked as command substitution", "harness": "claude", "account": "personal", "cost": "about 40 blocked calls in 15 sessions",
+            "evidence": { "kind": "terminal", "lines": [
+              { "role": "tool", "text": "Bash(end=$((SECONDS+2700)); until [ -f done ]; do sleep 5; done)" },
+              { "role": "error", "text": "PreToolUse:Bash hook error: Blocked dangerous command: opaque command or process substitution cannot be inspected." },
+              { "role": "assistant", "text": "I'll write a scratchpad script instead." }
+            ], "session": { "label": "3589dbf6", "url": "file:///C:/Users/me/session.jsonl" } },
+            "fix": { "file": "mpx · src/safeguard/shell.ts", "diff": "- if (/\\$\\(/.test(command)) return true;\n+ if (/\\$\\((?!\\()/.test(command)) return true;" },
+            "session": { "harness": "claude", "account": "personal", "project": "mpx", "prompt": "Treat $(( )) as arithmetic in hasOpaqueCommandExpansion and add regression tests." }
+          },
+          {
+            "id": "commit", "title": "git add and commit chained in one call", "harness": "pi", "account": "work", "cost": "9 blocked commits",
+            "evidence": { "kind": "terminal", "lines": [
+              { "role": "tool", "text": "bash: git add -A && git commit -m \"fix: toast stacking\"" },
+              { "role": "error", "text": "Finish staging/index mutations in a separate completed tool call before git commit" }
+            ], "session": { "label": "8c38ddae", "url": "file:///C:/Users/me/session2.jsonl" } },
+            "fix": { "file": "mpx · content/skills/commit/SKILL.md", "diff": "+ Stage in one tool call, inspect git diff --cached, then commit in a separate call." },
+            "session": { "harness": "claude", "account": "personal", "project": "mpx", "prompt": "Tell the commit skill to stage and commit in separate calls." }
+          }
+        ]
+      },
+      "beats": [
+        { "say": "The shell hook blocks plain arithmetic as if it were command substitution; about forty calls this week.", "note": "Arithmetic blocked", "targets": ["retro-substitution"] },
+        { "say": "Commits also fail when staging shares the call; a one-line skill fix would stop it.", "note": "Split commits", "targets": ["retro-commit"] },
+        { "say": "Approve either fix and I will start a session for it.", "note": "Start sessions", "targets": ["retro-sessions"] }
+      ]
+    },
+    {
+      "id": "instructions", "type": "instructions", "name": "Instructions", "title": "Three changes, one unbuilt", "status": "fyi", "count": 3,
+      "data": {
+        "changes": [
+          { "id": "c1", "scope": "mpx output style", "summary": "Everything that needs you moves to one final HITL section.", "opinion": "Looks final. Answers are easier to scan; nothing to do.", "verdict": "final", "state": { "committed": true, "pushed": true, "built": true }, "url": "https://github.com/MartinoPolo/mpx/commit/d7584c2" },
+          { "id": "c2", "scope": "mpx morning-brief", "summary": "New skill, plus launcher fixes for slash prompts.", "opinion": "Still moving. Not committed, and dist is a day old.", "verdict": "attention", "state": { "committed": false, "pushed": false, "built": false }, "url": "https://github.com/MartinoPolo/mpx" },
+          { "id": "c3", "scope": "videoLab AGENTS.md", "summary": "Reality first: build scenes only from trusted sources.", "opinion": "Good rule; watch that it does not block quick drafts.", "verdict": "watch", "state": { "committed": true, "pushed": false }, "url": "https://github.com/MartinoPolo/videoLab" }
+        ]
+      },
+      "beats": [
+        { "say": "The HITL output style looks final; nothing to do.", "note": "Output style", "targets": ["change-c1"] },
+        { "say": "The morning brief work is not committed and the build is stale.", "note": "Not committed", "targets": ["change-c2"] },
+        { "say": "videoLab now insists on trusted sources; fine, but it may slow drafts.", "note": "videoLab", "targets": ["change-c3"] }
+      ]
+    },
+    {
+      "id": "news", "type": "news", "name": "AI news", "title": "Three picks", "status": "fyi", "count": 3,
+      "data": {
+        "items": [
+          { "id": "n1", "app": "googlegemini", "source": "Google", "title": "Gemini 3 Flash gets native audio output", "summary": "Cheaper speech for apps like this brief.", "date": "Oct 15", "url": "https://blog.google/" },
+          { "id": "n2", "app": "ycombinator", "source": "Hacker News", "title": "Show HN: local-first agent sandboxes", "summary": "412 points; containers per task, no daemon.", "date": "Oct 15", "url": "https://news.ycombinator.com/" },
+          { "id": "n3", "app": "claude", "source": "Claude Code", "title": "Claude Code 2.1.301", "summary": "Idle compaction now configurable per project.", "date": "Oct 15", "url": "https://github.com/anthropics/claude-code/releases" }
+        ]
+      },
+      "beats": [
+        { "say": "Gemini Flash now speaks natively, which could voice this brief cheaply.", "note": "Gemini audio", "targets": ["news-n1"] },
+        { "say": "On Hacker News, local-first agent sandboxes; and a small Claude Code release.", "note": "HN, Claude Code", "targets": ["news-n2", "news-n3"] }
+      ]
+    },
+    {
+      "id": "actions", "type": "actions", "name": "Action points", "title": "Four action points", "status": "needs", "count": 4,
+      "data": {
+        "items": [
+          { "id": "action-1", "text": "Review !321", "app": "gitlab", "url": "https://example.com/mr/321", "chapter": "slack", "handoff": "you" },
+          { "id": "action-2", "text": "Merge !318 and move T-102", "app": "gitlab", "url": "https://example.com/mr/318", "chapter": "work", "handoff": "agent" },
+          { "id": "action-3", "text": "Renew the GitLab token", "app": "gmail", "url": "https://mail.google.com/", "chapter": "mail", "handoff": "you" },
+          { "id": "action-4", "text": "Start the hook fix session", "app": "claude", "chapter": "retro", "handoff": "agent" }
+        ]
+      },
+      "beats": [
+        { "say": "Four action points. I can merge and start the fix session; the review and the token are yours.", "note": "Summary", "targets": ["action-1", "action-2", "action-3", "action-4"] }
+      ]
+    }
+  ]
+}</script>
+<script>
+const brief = JSON.parse(document.getElementById('brief-data').textContent);
+const byId = (id) => document.getElementById(id);
+const stage = byId('stage');
+
+/* Escaping and link safety: every value from the brief goes through these. */
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
+const LINK_SCHEMES = ['http:', 'https:', 'obsidian:', 'file:', 'slack:', 'mailto:', 'orca:'];
+function safeUrl(url) {
+	const text = String(url ?? '').trim();
+	if (!text || text.startsWith('//')) return '';
+	const scheme = text.match(/^([a-z][a-z0-9+.-]*):/i);
+	return !scheme || LINK_SCHEMES.includes(`${scheme[1].toLowerCase()}:`) ? text : '';
+}
+const target = (id) => `data-target="${escapeHtml(id)}"`;
+
+/* Brand icons are simple-icons paths; UI icons share one 2px stroke style. */
+const BRAND_ICONS = {
+	claude: { color: '#D97757', path: 'm4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z' },
+	gitlab: { color: '#FC6D26', path: 'm23.6004 9.5927-.0337-.0862L20.3.9814a.851.851 0 0 0-.3362-.405.8748.8748 0 0 0-.9997.0539.8748.8748 0 0 0-.29.4399l-2.2055 6.748H7.5375l-2.2057-6.748a.8573.8573 0 0 0-.29-.4412.8748.8748 0 0 0-.9997-.0537.8585.8585 0 0 0-.3362.4049L.4332 9.5015l-.0325.0862a6.0657 6.0657 0 0 0 2.0119 7.0105l.0113.0087.03.0213 4.976 3.7264 2.462 1.8633 1.4995 1.1321a1.0085 1.0085 0 0 0 1.2197 0l1.4995-1.1321 2.4619-1.8633 5.006-3.7489.0125-.01a6.0682 6.0682 0 0 0 2.0094-7.003z' },
+	github: { color: '#24292F', path: 'M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12' },
+	gmail: { color: '#EA4335', path: 'M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.273H1.636A1.636 1.636 0 0 1 0 19.366V5.457c0-2.023 2.309-3.178 3.927-1.964L5.455 4.64 12 9.548l6.545-4.91 1.528-1.145C21.69 2.28 24 3.434 24 5.457z' },
+	googlecalendar: { color: '#1A73E8', path: 'M18.316 5.684H24v12.632h-5.684V5.684zM5.684 24h12.632v-5.684H5.684V24zM18.316 5.684V0H1.895A1.894 1.894 0 0 0 0 1.895v16.421h5.684V5.684h12.632zm-7.207 6.25v-.065c.272-.144.5-.349.687-.617s.279-.595.279-.982c0-.379-.099-.72-.3-1.025a2.05 2.05 0 0 0-.832-.714 2.703 2.703 0 0 0-1.197-.257c-.6 0-1.094.156-1.481.467-.386.311-.65.671-.793 1.078l1.085.452c.086-.249.224-.461.413-.633.189-.172.445-.257.767-.257.33 0 .602.088.816.264a.86.86 0 0 1 .322.703c0 .33-.12.589-.36.778-.24.19-.535.284-.886.284h-.567v1.085h.633c.407 0 .748.109 1.02.327.272.218.407.499.407.843 0 .336-.129.614-.387.832s-.565.327-.924.327c-.351 0-.651-.103-.897-.311-.248-.208-.422-.502-.521-.881l-1.096.452c.178.616.505 1.082.977 1.401.472.319.984.478 1.538.477a2.84 2.84 0 0 0 1.293-.291c.382-.193.684-.458.902-.794.218-.336.327-.72.327-1.149 0-.429-.115-.797-.344-1.105a2.067 2.067 0 0 0-.881-.689zm2.093-1.931l.602.913L15 10.045v5.744h1.187V8.446h-.827l-2.158 1.557zM22.105 0h-3.289v5.184H24V1.895A1.894 1.894 0 0 0 22.105 0zm-3.289 23.5l4.684-4.684h-4.684V23.5zM0 22.105C0 23.152.848 24 1.895 24h3.289v-5.184H0v3.289z' },
+	googlegemini: { color: '#8E75B2', path: 'M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81' },
+	ycombinator: { color: '#F0652F', path: 'M0 24V0h24v24H0zM6.951 5.896l4.112 7.708v5.064h1.583v-4.972l4.148-7.799h-1.749l-2.457 4.875c-.372.745-.688 1.434-.688 1.434s-.297-.708-.651-1.434L8.831 5.896h-1.88z' },
+	obsidian: { color: '#7C3AED', path: 'M19.355 18.538a68.967 68.959 0 0 0 1.858-2.954.81.81 0 0 0-.062-.9c-.516-.685-1.504-2.075-2.042-3.362-.553-1.321-.636-3.375-.64-4.377a1.707 1.707 0 0 0-.358-1.05l-3.198-4.064a3.744 3.744 0 0 1-.076.543c-.106.503-.307 1.004-.536 1.5-.134.29-.29.6-.446.914l-.31.626c-.516 1.068-.997 2.227-1.132 3.59-.124 1.26.046 2.73.815 4.481.128.011.257.025.386.044a6.363 6.363 0 0 1 3.326 1.505c.916.79 1.744 1.922 2.415 3.5zM8.199 22.569c.073.012.146.02.22.02.78.024 2.095.092 3.16.29.87.16 2.593.64 4.01 1.055 1.083.316 2.198-.548 2.355-1.664.114-.814.33-1.735.725-2.58l-.01.005c-.67-1.87-1.522-3.078-2.416-3.849a5.295 5.295 0 0 0-2.778-1.257c-1.54-.216-2.952.19-3.84.45.532 2.218.368 4.829-1.425 7.531zM5.533 9.938c-.023.1-.056.197-.098.29L2.82 16.059a1.602 1.602 0 0 0 .313 1.772l4.116 4.24c2.103-3.101 1.796-6.02.836-8.3-.728-1.73-1.832-3.081-2.55-3.831zM9.32 14.01c.615-.183 1.606-.465 2.745-.534-.683-1.725-.848-3.233-.716-4.577.154-1.552.7-2.847 1.235-3.95.113-.235.223-.454.328-.664.149-.297.288-.577.419-.86.217-.47.379-.885.46-1.27.08-.38.08-.72-.014-1.043-.095-.325-.297-.675-.68-1.06a1.6 1.6 0 0 0-1.475.36l-4.95 4.452a1.602 1.602 0 0 0-.513.952l-.427 2.83c.672.59 2.328 2.316 3.335 4.711.09.21.175.43.253.653z' },
+	slack: { color: '#4A154B', path: 'M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z' },
+};
+const UI_ICONS = {
+	play: '<path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/>',
+	pause: '<path d="M8.5 5.5v13M15.5 5.5v13" stroke-width="3"/>',
+	beatPrevious: '<path d="M15 6l-6 6 6 6"/>',
+	beatNext: '<path d="M9 6l6 6-6 6"/>',
+	chapterPrevious: '<path d="M5 5.5v13M19 6l-6 6 6 6M13 6l-6 6 6 6"/>',
+	chapterNext: '<path d="M19 5.5v13M5 6l6 6-6 6M11 6l6 6-6 6"/>',
+	speed: '<path d="M4.6 17.5a8.5 8.5 0 1 1 14.8 0"/><path d="M12 14l4-4.5"/>',
+	volume: '<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M15.5 9.2a4 4 0 0 1 0 5.6M18.3 6.5a7.8 7.8 0 0 1 0 11"/>',
+	muted: '<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/>',
+	external: '<path d="M14 4h6v6M20 4l-8.5 8.5M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+	goto: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+	check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+	cross: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
+	warning: '<path d="M12 3.8L2.8 19.5h18.4z"/><path d="M12 10v4.2M12 17v.1"/>',
+	chevron: '<path d="M9 6l6 6-6 6"/>',
+	sunrise: '<path d="M3 19h18M7 19a5 5 0 0 1 10 0M12 4v5M4.6 11.6l1.6 1.6M19.4 11.6l-1.6 1.6M9.5 6.5L12 4l2.5 2.5"/>',
+	moon: '<path d="M19.5 14.5A8 8 0 1 1 9.5 4.5a6.4 6.4 0 0 0 10 10z"/>',
+	news: '<path d="M4 5h12.5v14H6a2 2 0 0 1-2-2z"/><path d="M16.5 9H20v8a2 2 0 0 1-2 2M7.5 9h5.5M7.5 12.5h5.5M7.5 16h3.5"/>',
+	checklist: '<path d="M4 6.5l1.6 1.6L8.5 5M11.5 7H20M4 12.5l1.6 1.6 2.9-3.1M11.5 13H20M11.5 19H20"/><path d="M5.5 18.5h1.5v1.5H5.5z"/>',
+	pipelineSuccess: '<circle cx="12" cy="12" r="8.5"/><path d="M8.4 12.3l2.5 2.5 4.8-5"/>',
+	pipelineFailed: '<circle cx="12" cy="12" r="8.5"/><path d="M9.3 9.3l5.4 5.4M14.7 9.3l-5.4 5.4"/>',
+	pipelineRunning: '<circle cx="12" cy="12" r="8.5" stroke-dasharray="4 2.6"/><path d="M12 7.8V12l2.8 1.8"/>',
+	ticket: '<path d="M3.5 7.5h17V10a2 2 0 0 0 0 4v2.5h-17V14a2 2 0 0 0 0-4z"/><path d="M14.5 8v1.5M14.5 11.25v1.5M14.5 14.5V16"/>',
+	terminal: '<path d="M3.5 5h17v14h-17z"/><path d="M7 9.5l3 2.5-3 2.5M12.5 15h4.5"/>',
+	thumbUp: '<path d="M7.5 11v9h-3v-9zM7.5 11l3.8-6.6a1.9 1.9 0 0 1 3.4 1.6l-1 4h5a2 2 0 0 1 2 2.4l-1.2 5.8a2 2 0 0 1-2 1.8H7.5"/>',
+	thumbDown: '<g transform="rotate(180 12 12)"><path d="M7.5 11v9h-3v-9zM7.5 11l3.8-6.6a1.9 1.9 0 0 1 3.4 1.6l-1 4h5a2 2 0 0 1 2 2.4l-1.2 5.8a2 2 0 0 1-2 1.8H7.5"/></g>',
+	note: '<path d="M6 3.5h8l4 4v13H6z"/><path d="M14 3.5v4h4"/>',
+	pencil: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
+	arrowUp: '<path d="M12 19V5M6.5 10.5L12 5l5.5 5.5"/>',
+	download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
+	thread: '<path d="M4.5 5.5h15v10h-8l-4.5 3.5v-3.5H4.5z"/>',
+};
+function icon(name, size = 20, label = '') {
+	const labelled = label ? `role="img" aria-label="${escapeHtml(label)}"` : 'aria-hidden="true"';
+	const brand = BRAND_ICONS[name];
+	if (brand) return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="${brand.color}" ${labelled}><path d="${brand.path}"/></svg>`;
+	return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${labelled}>${UI_ICONS[name] ?? ''}</svg>`;
+}
+const APP_NAMES = { gitlab: 'GitLab', github: 'GitHub', gmail: 'Gmail', googlecalendar: 'Google Calendar', claude: 'Claude', obsidian: 'Obsidian', slack: 'Slack', googlegemini: 'Google Gemini', ycombinator: 'Hacker News', orca: 'Orca', pi: 'Pi' };
+const appIcon = (app, size = 20) => icon(BRAND_ICONS[app] ? app : 'terminal', size);
+function iconLink(url, label, iconName = 'external', className = '') {
+	const href = safeUrl(url);
+	if (!href) return '';
+	return `<a class="icon-link ${className}" href="${escapeHtml(href)}" target="_blank" rel="noopener" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">${typeof iconName === 'string' && !iconName.startsWith('<') ? icon(iconName, 20) : iconName}</a>`;
+}
+
+/* Chapter look: brand icon in the outline and sheet header, brand colour in the sheet band. */
+const CHAPTER_LOOK = {
+	overview: { icon: 'sunrise', color: 'var(--sticky)' },
+	calendar: { icon: 'googlecalendar', color: 'var(--google-calendar)' },
+	work: { icon: 'gitlab', color: 'var(--gitlab)' },
+	overnight: { icon: 'moon', color: 'var(--brand-deep)' },
+	slack: { icon: 'slack', color: 'var(--slack)' },
+	mail: { icon: 'gmail', color: 'var(--gmail)' },
+	triage: { icon: 'obsidian', color: 'var(--obsidian)' },
+	retro: { icon: 'claude', color: BRAND_ICONS.claude.color },
+	instructions: { icon: 'github', color: 'var(--github)' },
+	news: { icon: 'news', color: 'var(--brand)' },
+	actions: { icon: 'checklist', color: 'var(--done)' },
+};
+const QUIET_HOLD_SECONDS = 2;
+const chapters = brief.chapters.map((chapter) => chapter.status === 'quiet' || !chapter.beats?.length
+	? { ...chapter, beats: [{ say: chapter.title, note: 'Quiet', targets: [], hold: QUIET_HOLD_SECONDS }] }
+	: chapter);
+const chapterOfType = (type) => chapters.find((chapter) => chapter.type === type);
+const sourceProblems = (chapter) => (brief.sources ?? []).filter((source) => source.status !== 'ok' && source.chapters?.includes(chapter.id));
+const problemText = (problems) => problems.map((source) => `${source.name}: ${source.reason ?? source.status}`).join('; ');
+
+/* Choices live in memory and download as choices.json from the action points. */
+const choices = { news: {}, triage: {}, retro: { approved: {}, confirmed: false }, actions: {}, autoHandled: {} };
+for (const group of chapterOfType('triage')?.data?.groups ?? []) for (const item of group.items) choices.triage[item.id] = { project: item.project ?? '', heading: item.heading ?? '', priority: item.priority ?? '' };
+for (const item of chapterOfType('actions')?.data?.items ?? []) choices.actions[item.id] = { done: false, handoff: item.handoff ?? 'you' };
+for (const item of chapterOfType('work')?.data?.autoHandled ?? []) choices.autoHandled[item.id] = true;
+function exportedChoices() {
+	const triageGroups = chapterOfType('triage')?.data?.groups ?? [];
+	const retroItems = chapterOfType('retro')?.data?.items ?? [];
+	return {
+		date: brief.date,
+		exported: new Date().toISOString(),
+		triage: triageGroups.flatMap((group) => group.items.map((item) => ({ id: item.id, note: group.note, text: item.text, ...choices.triage[item.id] }))),
+		retroSessions: {
+			confirmed: choices.retro.confirmed,
+			sessions: retroItems.filter((item) => choices.retro.approved[item.id]).map((item) => ({ id: item.id, title: item.title, ...item.session })),
+		},
+		news: (chapterOfType('news')?.data?.items ?? []).filter((item) => choices.news[item.id]).map((item) => ({ id: item.id, title: item.title, url: item.url, vote: choices.news[item.id] })),
+		actions: (chapterOfType('actions')?.data?.items ?? []).map((item) => ({ id: item.id, text: item.text, ...choices.actions[item.id] })),
+		autoHandled: (chapterOfType('work')?.data?.autoHandled ?? []).map((item) => ({ id: item.id, text: item.text, proposal: item.proposal, enabled: choices.autoHandled[item.id] })),
+	};
+}
+function choiceSummary() {
+	const exported = exportedChoices();
+	const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
+	const agentCount = exported.actions.filter((item) => item.handoff === 'agent').length;
+	return `${plural(exported.news.length, 'news vote')} · ${plural(exported.retroSessions.sessions.length, 'fix session')}${exported.retroSessions.confirmed ? ' confirmed' : ''} · ${plural(agentCount, 'agent handoff')} · ${plural(exported.triage.length, 'capture')} filed`;
+}
+function downloadChoices() {
+	const blob = new Blob([JSON.stringify(exportedChoices(), null, 2)], { type: 'application/json' });
+	const anchor = document.createElement('a');
+	anchor.href = URL.createObjectURL(blob);
+	anchor.download = 'choices.json';
+	document.body.append(anchor);
+	anchor.click();
+	anchor.remove();
+	setTimeout(() => URL.revokeObjectURL(anchor.href), 1000);
+	const button = stage.querySelector('[data-action="save"]');
+	if (button) { button.classList.add('done'); button.innerHTML = `${icon('check', 18)} Saved choices.json`; }
+}
+
+/* Chapter renderers, keyed by chapter type. Each returns markup for the sheet body. */
+const AVATAR_FILLS = ['var(--brand-deep)', 'var(--slack)', 'var(--ink)', 'var(--github)'];
+const avatarFill = (name) => AVATAR_FILLS[[...String(name)].reduce((sum, character) => sum + character.charCodeAt(0), 0) % AVATAR_FILLS.length];
+const minutesOf = (time) => { const [hours, minutes] = String(time ?? '0:0').split(':').map(Number); return hours * 60 + (minutes || 0); };
+const STATE_FILLS = { ready: 'var(--fill-ready)', review: 'var(--fill-review)', draft: 'var(--fill-draft)', failing: 'var(--fill-failing)', progress: 'var(--fill-progress)', local: 'var(--fill-draft)', merged: 'var(--fill-merged)', stale: 'var(--fill-progress)' };
+const PIPELINE_ICONS = { success: ['pipelineSuccess', 'var(--done)', 'passed'], failed: ['pipelineFailed', 'var(--fail)', 'failed'], running: ['pipelineRunning', 'var(--brand-deep)', 'running'] };
+const PRIORITIES = ['highest', 'high', 'medium', 'normal', 'low', 'lowest'];
+
+const RENDERERS = {
+	overview(data) {
+		return `
+			<div class="overview-hero"><span class="weekday">${escapeHtml(data.weekday)}</span><span class="day-label">${escapeHtml(data.dayLabel)}</span><span class="greeting">${escapeHtml(data.greeting)}. Here is what needs you.</span></div>
+			<ol class="row-list">${(data.needs ?? []).map((need) => {
+				const destination = chapters.find((chapter) => chapter.id === need.chapter);
+				return `
+				<li class="need" ${target(need.id)}>
+					${appIcon(need.app, 24)}
+					<div><div class="need-text">${escapeHtml(need.text)}</div><div class="need-detail">${escapeHtml(need.detail)}</div></div>
+					<div class="need-actions">
+						${iconLink(need.url, `Open in ${APP_NAMES[need.app] ?? 'app'}`)}
+						${destination ? `<button class="icon-link" type="button" data-goto="${escapeHtml(destination.id)}" aria-label="Go to ${escapeHtml(destination.name)}" title="Go to ${escapeHtml(destination.name)}">${icon('goto')}</button>` : ''}
+					</div>
+				</li>`; }).join('')}</ol>`;
+	},
+
+	calendar(data, chapter) {
+		const calendars = new Map((data.calendars ?? []).map((calendar) => [calendar.id, calendar]));
+		const colorOf = (event) => calendars.get(event.calendarId)?.color ?? '#039be5';
+		const days = data.days ?? [];
+		const events = data.events ?? [];
+		const timed = events.filter((event) => !event.allDay && event.start && event.end);
+		const nowDate = new Date(brief.now);
+		const nowMatch = String(brief.now ?? '').match(/T(\d\d):(\d\d)/);
+		const nowHours = nowMatch ? Number(nowMatch[1]) + Number(nowMatch[2]) / 60 : undefined;
+		const firstHour = Math.min(7, ...timed.map((event) => Math.floor(minutesOf(event.start) / 60)), ...(nowHours === undefined ? [] : [Math.floor(nowHours)]));
+		const lastHour = Math.max(18, ...timed.map((event) => Math.ceil(minutesOf(event.end) / 60)));
+		const hourHeight = 32;
+		const trackHeight = (lastHour - firstHour) * hourHeight;
+		const hours = Array.from({ length: lastHour - firstHour + 1 }, (_, index) => firstHour + index);
+		const eventTitle = (event) => event.busyOnly ? 'Busy' : event.title;
+
+		const dayColumn = (day) => {
+			const dayEvents = timed.filter((event) => event.day === day.id).sort((left, right) => minutesOf(left.start) - minutesOf(right.start));
+			const laneEnds = [];
+			for (const event of dayEvents) {
+				let lane = laneEnds.findIndex((end) => end <= minutesOf(event.start));
+				if (lane < 0) { lane = laneEnds.length; laneEnds.push(0); }
+				laneEnds[lane] = minutesOf(event.end);
+				event.lane = lane;
+			}
+			const blocks = dayEvents.map((event) => {
+				const overlapping = dayEvents.filter((other) => minutesOf(other.start) < minutesOf(event.end) && minutesOf(other.end) > minutesOf(event.start));
+				const laneCount = Math.max(...overlapping.map((other) => other.lane)) + 1;
+				const top = (minutesOf(event.start) / 60 - firstHour) * hourHeight;
+				const height = Math.max((minutesOf(event.end) - minutesOf(event.start)) / 60 * hourHeight - 2, 24);
+				const width = 100 / laneCount;
+				const short = height < 44;
+				const label = `${eventTitle(event)}, ${event.start} to ${event.end}`;
+				return `<button class="calendar-event ${event.busyOnly ? 'busy' : ''} ${short ? 'short' : ''} ${event.id === chapter.selected ? 'selected' : ''}" type="button" data-event="${escapeHtml(event.id)}" ${target(`event-${event.id}`)}
+					aria-label="${escapeHtml(label)}" aria-pressed="${event.id === chapter.selected}" title="${escapeHtml(label)}"
+					style="--event-color:${escapeHtml(colorOf(event))};top:${top}px;height:${height}px;left:calc(${event.lane * width}% + 3px);width:calc(${width}% - 8px)">
+					<span class="event-title">${escapeHtml(eventTitle(event))}</span><span class="event-time">${escapeHtml(event.start)}${short ? '' : `–${escapeHtml(event.end)}`}</span>
+				</button>`;
+			}).join('');
+			const nowLine = day.focus && nowHours !== undefined && nowHours >= firstHour && nowHours <= lastHour
+				? `<div class="now-line" style="top:${(nowHours - firstHour) * hourHeight}px" role="img" aria-label="Now, ${escapeHtml(nowDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Prague' }))}"></div>` : '';
+			return `<div class="day-track" style="height:${trackHeight}px">${hours.map((hour) => `<div class="hour-line" style="top:${(hour - firstHour) * hourHeight}px"></div>`).join('')}${blocks}${nowLine}</div>`;
+		};
+
+		const selected = events.find((event) => event.id === chapter.selected);
+		const selectedDay = selected ? days.find((day) => day.id === selected.day) : undefined;
+		const detail = selected ? `
+			<aside class="event-card" ${target('event-detail')} style="--event-color:${escapeHtml(colorOf(selected))}" aria-label="Selected event">
+				<div class="event-card-head"><span class="swatch"></span>${escapeHtml(calendars.get(selected.calendarId)?.name ?? '')}
+					<span class="event-card-actions">${iconLink(selected.url, 'Open in Google Calendar')}<button class="icon-link" type="button" data-action="close-event" aria-label="Close event" title="Close event">${icon('cross', 18)}</button></span></div>
+				<h2>${escapeHtml(eventTitle(selected))}</h2>
+				<div class="meta">${escapeHtml(selectedDay ? `${selectedDay.label} ${selectedDay.date}` : '')} · ${selected.allDay ? 'All day' : `${escapeHtml(selected.start)}–${escapeHtml(selected.end)}`}</div>
+				${selected.place ? `<div>${escapeHtml(selected.place)}</div>` : ''}
+				${(selected.notes ?? []).map((note) => `<div class="note">${escapeHtml(note)}</div>`).join('')}
+			</aside>` : `
+			<aside class="event-card" aria-label="Calendars">
+				<ul class="legend">${[...calendars.values()].map((calendar) => `<li><span class="swatch" style="--event-color:${escapeHtml(calendar.color)};width:12px;height:12px;border-radius:4px;background:color-mix(in srgb, ${escapeHtml(calendar.color)} 58%, white);border:1.5px solid var(--ink)"></span>${escapeHtml(calendar.name)}${calendar.busyOnly ? ' <span class="mono" style="color:var(--ink-soft);font-size:13px">busy only</span>' : ''}</li>`).join('')}</ul>
+			</aside>`;
+
+		return `
+			<div class="calendar-layout">
+				<div class="calendar-grid" style="--day-count:${days.length}">
+					<div class="calendar-days"><span></span>${days.map((day) => `<div class="calendar-day-head ${day.focus ? 'focus' : ''}"><span class="weekday">${escapeHtml(day.label)}</span><span class="date">${escapeHtml(day.date)}</span></div>`).join('')}</div>
+					<div class="calendar-all-day"><span class="label">all day</span>${days.map((day) => `<div class="all-day-cell">${events.filter((event) => event.allDay && event.day === day.id).map((event) => `<button class="all-day-chip" type="button" data-event="${escapeHtml(event.id)}" ${target(`event-${event.id}`)} style="--event-color:${escapeHtml(colorOf(event))}" title="${escapeHtml(event.title)}">${escapeHtml(event.title)}</button>`).join('')}</div>`).join('')}</div>
+					<div class="calendar-body">
+						<div class="hour-labels" style="height:${trackHeight}px">${hours.map((hour) => `<span class="hour-label" style="top:${(hour - firstHour) * hourHeight}px">${String(hour).padStart(2, '0')}:00</span>`).join('')}</div>
+						${days.map(dayColumn).join('')}
+					</div>
+				</div>
+				${detail}
+			</div>`;
+	},
+
+	work(data, chapter) {
+		const scopes = [...new Set((data.projects ?? []).map((project) => project.scope))];
+		if (!scopes.includes(chapter.scope)) chapter.scope = scopes.includes('work') ? 'work' : scopes[0];
+		const scopeIcon = { work: 'gitlab', personal: 'github' };
+		const projectCount = (scope) => (data.projects ?? []).filter((project) => project.scope === scope).flatMap((project) => project.cards).filter((card) => card.state !== 'merged').length;
+		const card = (item, project) => {
+			const pipeline = item.pipeline ? PIPELINE_ICONS[item.pipeline.status] : undefined;
+			const ticketWrong = item.ticket && item.ticket.expected && item.ticket.column !== item.ticket.expected;
+			const ticketLabel = item.ticket ? `KanbanFlow ${item.ticket.ref}: ${item.ticket.column}${ticketWrong ? `, should be ${item.ticket.expected}` : ''}` : '';
+			return `
+				<li class="merge-request" ${target(`card-${item.id}`)} style="--state-fill:${STATE_FILLS[item.state] ?? 'var(--fill-draft)'}">
+					<span class="ref">${escapeHtml(item.ref)}</span>
+					<div>
+						<div class="title">${escapeHtml(item.title)}</div>
+						<div class="state">${escapeHtml(data.states?.[item.state] ?? item.state)}${item.author ? ` · ${escapeHtml(item.author)}` : ''}${item.pipeline?.job ? ` · ${escapeHtml(item.pipeline.job)}` : ''}
+							${item.local ? `<span class="local" aria-label="${escapeHtml(`${item.local.uncommitted} uncommitted files, ${item.local.unpushed} unpushed commit`)}"><span title="Uncommitted files">${icon('pencil', 14)}${escapeHtml(item.local.uncommitted)}</span><span title="Unpushed commits">${icon('arrowUp', 14)}${escapeHtml(item.local.unpushed)}</span></span>` : ''}</div>
+					</div>
+					<div class="links">
+						${iconLink(item.url, `Open ${item.ref} in ${APP_NAMES[project.app]}`, project.app)}
+						${pipeline ? iconLink(item.pipeline.url, `Pipeline ${pipeline[2]}`, `<span style="color:${pipeline[1]}">${icon(pipeline[0], 22)}</span>`) : ''}
+						${item.ticket ? iconLink(item.ticket.url, ticketLabel, ticketWrong ? icon('ticket', 20) : 'ticket', ticketWrong ? 'warn' : '') : ''}
+						${item.session ? iconLink(item.session.url, `Open live session in ${item.session.label}`, 'terminal') : ''}
+					</div>
+				</li>`;
+		};
+		const projects = (data.projects ?? []).filter((project) => project.scope === chapter.scope);
+		return `
+			<div class="work-top">
+				<div class="segmented" role="group" aria-label="Scope">${scopes.map((scope) => `<button type="button" data-scope="${escapeHtml(scope)}" aria-pressed="${scope === chapter.scope}">${icon(scopeIcon[scope] ?? 'terminal', 16)}${escapeHtml(scope[0].toUpperCase() + scope.slice(1))} <span class="mono">${projectCount(scope)}</span></button>`).join('')}</div>
+			</div>
+			${projects.map((project) => {
+				const open = project.cards.filter((item) => item.state !== 'merged');
+				const merged = project.cards.filter((item) => item.state === 'merged');
+				return `
+				<section class="project" aria-label="${escapeHtml(project.name)}">
+					<div class="project-head">${icon(project.app, 18)}<span class="mono">${escapeHtml(project.name)}</span>${iconLink(project.url, `Open ${project.name} in ${APP_NAMES[project.app]}`)}</div>
+					<ul class="row-list">${open.map((item) => card(item, project)).join('')}</ul>
+					${merged.length ? `<div class="merged-line">${icon('check', 16)}<span>Merged</span>${merged.map((item) => `<a href="${escapeHtml(safeUrl(item.url))}" target="_blank" rel="noopener" title="${escapeHtml(item.title)}">${escapeHtml(item.ref)}</a>`).join('')}</div>` : ''}
+				</section>`; }).join('')}
+			${(data.autoHandled ?? []).map((item) => `
+				<label class="quiet-toggle" title="${escapeHtml(item.proposal)}">
+					<span class="switch"><input type="checkbox" data-auto="${escapeHtml(item.id)}" ${choices.autoHandled[item.id] ? 'checked' : ''} aria-label="${escapeHtml(`Handle automatically: ${item.text}. ${item.proposal}`)}"><span></span></span>
+					<span>Auto: ${escapeHtml(item.text)}</span>
+				</label>`).join('')}
+			${data.quiet?.length ? `<p class="muted-line">Quiet: ${data.quiet.map(escapeHtml).join(', ')}</p>` : ''}`;
+	},
+
+	overnight(data) {
+		return `<ul class="row-list">${(data.runs ?? []).map((run) => `
+			<li class="run ${run.outcome === 'fail' ? 'fail' : ''}" ${target(run.id)}>
+				<span style="color:${run.outcome === 'fail' ? 'var(--fail)' : 'var(--done)'}">${icon(run.outcome === 'fail' ? 'pipelineFailed' : 'pipelineSuccess', 22, run.outcome === 'fail' ? 'Failed' : 'Succeeded')}</span>
+				<div><div class="title">${escapeHtml(run.title)}</div>${run.detail ? `<div class="detail">${escapeHtml(run.detail)}</div>` : ''}</div>
+				<span class="mono">${escapeHtml(run.when)}</span>
+				<span class="mono duration">${escapeHtml(run.duration)}</span>
+				${iconLink(run.url, `Open ${run.title} output`) || '<span></span>'}
+			</li>`).join('')}</ul>`;
+	},
+
+	slack(data, chapter) {
+		const mentionize = (text) => escapeHtml(text).replace(/(^|\s)(@[\w.\-]+)/g, '$1<span class="mention">$2</span>');
+		const message = (item, waiting) => `
+			<li class="slack-message ${waiting ? 'waiting' : ''}" ${target(`message-${item.id}`)}>
+				<span class="avatar" style="background:${avatarFill(item.author)}" aria-hidden="true">${escapeHtml(item.author[0])}</span>
+				<div><div class="who"><span class="name">${escapeHtml(item.author)}</span><span class="meta">${escapeHtml(item.channel)} · ${escapeHtml(item.when)}</span></div><div class="text">${mentionize(item.text)}</div></div>
+				<div class="side">${item.replies ? `<span title="${escapeHtml(item.replies)} replies">${icon('thread', 16)}</span>${escapeHtml(item.replies)}` : ''}${iconLink(item.url, 'Open in Slack')}</div>
+			</li>`;
+		return `
+			<section class="slack-section"><h2 class="group-title">Waiting on you</h2><ul class="row-list">${(data.unaddressed ?? []).map((item) => message(item, true)).join('')}</ul></section>
+			<section class="slack-section"><h2 class="group-title">Worth knowing</h2><ul class="row-list">${(data.worthKnowing ?? []).map((item) => message(item, false)).join('')}</ul></section>
+			${data.addressedSummary ? `
+			<section class="slack-section handled" ${target('slack-addressed')}>
+				<p>${icon('check', 16).replace('<svg', '<svg style="display:inline;vertical-align:-2px;margin-right:6px"')}${escapeHtml(data.addressedSummary)}</p>
+				${data.addressed?.length ? `<details data-disclosure="slack" ${chapter.disclosureOpen ? 'open' : ''}><summary>${icon('chevron', 16)}${escapeHtml(data.addressed.length)} handled threads</summary>
+					<ul class="handled-list">${data.addressed.map((item) => `<li><span class="mono" style="font-size:13px">${escapeHtml(item.when)}</span><span><strong>${escapeHtml(item.author)}</strong> ${escapeHtml(item.text)}</span>${iconLink(item.url, 'Open in Slack')}</li>`).join('')}</ul></details>` : ''}
+			</section>` : ''}
+			${data.skipped ? `<p class="muted-line">${escapeHtml(data.skipped)} messages skipped as noise</p>` : ''}`;
+	},
+
+	mail(data) {
+		return `
+			<ul class="row-list gmail" style="gap:0">${(data.rows ?? []).map((row) => {
+				const unread = row.action !== 'Optional';
+				return `
+				<li class="mail-row ${unread ? 'unread' : ''}" ${target(`mail-${row.id}`)}>
+					<span class="chip account-chip ${escapeHtml(row.account)}">${escapeHtml(row.account)}</span>
+					<div style="min-width:0">
+						<div class="from-line"><span class="from">${escapeHtml(row.from)}</span><span class="chip action-chip ${escapeHtml(String(row.action).toLowerCase())}">${escapeHtml(row.action)}</span></div>
+						<div class="subject-line" title="${escapeHtml(`${row.subject}: ${row.snippet}`)}"><span class="subject">${escapeHtml(row.subject)}</span> <span class="snippet">– ${escapeHtml(row.snippet)}</span></div>
+					</div>
+					<span class="date">${escapeHtml(row.when)}</span>
+					${iconLink(row.url, 'Open in Gmail')}
+				</li>`; }).join('')}</ul>
+			${data.notifications?.length ? `<p class="muted-line notifications"><span>Notifications</span>${data.notifications.map((item) => `<span class="count-pair">${escapeHtml(item.source)} ${escapeHtml(item.count)}</span>`).join('')}</p>` : ''}`;
+	},
+
+	triage(data) {
+		const options = (values, current, labelFor = (value) => value) => values.map((value) => `<option value="${escapeHtml(value)}" ${value === current ? 'selected' : ''}>${escapeHtml(labelFor(value))}</option>`).join('');
+		return (data.groups ?? []).map((group) => `
+			<section class="note-group" aria-label="${escapeHtml(group.note)}">
+				<div class="note-head">${icon('note', 16)}<span>${escapeHtml(group.note)}</span>${iconLink(group.url, `Open ${group.note} in Obsidian`, 'obsidian')}</div>
+				<ul class="row-list" style="gap:4px">${group.items.map((item) => {
+					const choice = choices.triage[item.id];
+					return `
+					<li class="capture" ${target(`task-${item.id}`)}>
+						<span class="box" aria-hidden="true"></span>
+						<span class="text">${escapeHtml(item.text)}</span>
+						<span class="selects">
+							<select class="small-select" data-triage="${escapeHtml(item.id)}" data-field="project" aria-label="Project for ${escapeHtml(item.text)}" title="Project">${options(['', ...(data.projects ?? [])], choice.project, (value) => value || 'No project')}</select>
+							<select class="small-select" data-triage="${escapeHtml(item.id)}" data-field="heading" aria-label="Heading for ${escapeHtml(item.text)}" title="Heading">${options(data.headings ?? [], choice.heading)}</select>
+							<select class="small-select" data-triage="${escapeHtml(item.id)}" data-field="priority" aria-label="Priority for ${escapeHtml(item.text)}" title="Priority">${options(PRIORITIES, choice.priority)}</select>
+						</span>
+					</li>`; }).join('')}</ul>
+			</section>`).join('');
+	},
+
+	retro(data, chapter) {
+		if (!chapter.openItem) chapter.openItem = data.items?.[0]?.id;
+		const harnessIcon = (harness) => harness === 'claude' ? icon('claude', 18) : icon('terminal', 18);
+		const harnessName = (harness) => harness === 'claude' ? 'Claude Code' : harness === 'pi' ? 'Pi' : harness;
+		const MARKS = { tool: '●', error: icon('warning', 14), assistant: '›' };
+		const approvedCount = (data.items ?? []).filter((item) => choices.retro.approved[item.id]).length;
+		return `
+			${(data.items ?? []).map((item) => {
+				const open = item.id === chapter.openItem;
+				return `
+				<section class="retro-item" ${target(`retro-${item.id}`)}>
+					<div class="retro-head">
+						<button class="retro-toggle" type="button" data-retro-open="${escapeHtml(item.id)}" aria-expanded="${open}" aria-controls="retro-body-${escapeHtml(item.id)}">
+							${icon('chevron', 16).replace('<svg', '<svg class="chevron"')}${harnessIcon(item.harness)}<span class="title">${escapeHtml(item.title)}</span><span class="cost">${escapeHtml(item.cost)}</span>
+						</button>
+						${iconLink(item.evidence?.session?.url, `Open session ${item.evidence?.session?.label ?? ''} transcript`)}
+					</div>
+					<div class="retro-body" id="retro-body-${escapeHtml(item.id)}" ${open ? '' : 'hidden'}>
+						<div class="terminal" role="log" aria-label="Transcript evidence">
+							<div class="terminal-bar">${harnessIcon(item.harness).replace(/fill="[^"]*"/, 'fill="#b4bcc6"')}<span>${escapeHtml(harnessName(item.harness))} · ${escapeHtml(item.account)} · ${escapeHtml(item.evidence?.session?.label ?? '')}</span></div>
+							${(item.evidence?.lines ?? []).map((line) => `<div class="terminal-line ${escapeHtml(line.role)}"><span class="mark" aria-hidden="true">${MARKS[line.role] ?? '·'}</span><span>${line.role === 'error' ? '<span class="visually-hidden">Warning: </span>' : ''}${escapeHtml(line.text)}</span></div>`).join('')}
+						</div>
+						${item.fix ? `<div class="diff" aria-label="Proposed fix"><div class="file">${escapeHtml(item.fix.file)}</div>${String(item.fix.diff).split('\n').map((line) => `<div class="line ${line.startsWith('+') ? 'plus' : line.startsWith('-') ? 'minus' : ''}">${escapeHtml(line)}</div>`).join('')}</div>` : ''}
+					</div>
+				</section>`; }).join('')}
+			<section class="sessions" ${target('retro-sessions')} aria-labelledby="sessions-title">
+				<h2 id="sessions-title">Start fix sessions</h2>
+				${(data.items ?? []).map((item) => {
+					const approved = Boolean(choices.retro.approved[item.id]);
+					return `
+					<div class="session-row ${approved ? 'approved' : ''}">
+						<span class="switch"><input type="checkbox" data-retro-approve="${escapeHtml(item.id)}" ${approved ? 'checked' : ''} aria-label="Approve a fix session for ${escapeHtml(item.title)}"><span></span></span>
+						<div style="min-width:0">
+							<div class="line-one">${escapeHtml(item.title)} <span class="chip">${harnessIcon(item.session.harness).replace(/width="18" height="18"/, 'width="14" height="14"')}${escapeHtml(item.session.harness)} · ${escapeHtml(item.session.account)} · ${escapeHtml(item.session.project)}</span></div>
+							<div class="prompt" title="${escapeHtml(item.session.prompt)}">${escapeHtml(item.session.prompt)}</div>
+						</div>
+					</div>`; }).join('')}
+				<div class="sessions-confirm">
+					${choices.retro.confirmed ? `<span>Saved with your choices at the end</span>` : ''}
+					<button class="text-button ${choices.retro.confirmed ? 'done' : ''}" type="button" data-action="confirm-sessions" ${approvedCount ? '' : 'disabled'}>
+						${choices.retro.confirmed ? `${icon('check', 18)} ${approvedCount} confirmed` : approvedCount ? `Confirm ${approvedCount} session${approvedCount === 1 ? '' : 's'}` : 'Approve a fix first'}
+					</button>
+				</div>
+			</section>`;
+	},
+
+	instructions(data) {
+		const VERDICTS = { final: 'Final', watch: 'Watch', attention: 'Needs attention' };
+		return `<ul class="row-list">${(data.changes ?? []).map((change) => {
+			const states = Object.entries(change.state ?? {}).filter(([key]) => key !== 'built' || /^mpx\b/.test(change.scope));
+			return `
+			<li class="change ${escapeHtml(change.verdict)}" ${target(`change-${change.id}`)}>
+				<div>
+					<div class="scope-line"><span class="scope">${escapeHtml(change.scope)}</span><span class="chip">${escapeHtml(VERDICTS[change.verdict] ?? change.verdict)}</span></div>
+					<div class="summary">${escapeHtml(change.summary)}</div>
+					<div class="opinion">${escapeHtml(change.opinion)}</div>
+				</div>
+				<div class="state-chips">${states.map(([key, value]) => `<span class="chip ${value ? '' : 'no'}" title="${escapeHtml(`${value ? '' : 'Not '}${key}`)}">${icon(value ? 'check' : 'cross', 14, value ? 'yes' : 'no')}${escapeHtml(key)}</span>`).join('')}</div>
+				${iconLink(change.url, `Open ${change.scope} change`, 'github')}
+			</li>`; }).join('')}</ul>`;
+	},
+
+	news(data) {
+		return `<ul class="row-list">${(data.items ?? []).map((item) => `
+			<li class="news-item" ${target(`news-${item.id}`)}>
+				${appIcon(item.app, 24)}
+				<div>
+					<div class="meta">${escapeHtml(item.source)} · ${escapeHtml(item.date)}</div>
+					<div class="title">${escapeHtml(item.title)}</div>
+					<div class="summary">${escapeHtml(item.summary)}</div>
+				</div>
+				<div class="side">
+					${iconLink(item.url, `Open on ${item.source}`)}
+					${['up', 'down'].map((vote) => `<button class="icon-link vote ${vote}" type="button" data-news="${escapeHtml(item.id)}" data-vote="${vote}" aria-pressed="${choices.news[item.id] === vote}" aria-label="${vote === 'up' ? 'More like this' : 'Less like this'}: ${escapeHtml(item.title)}" title="${vote === 'up' ? 'More like this' : 'Less like this'}">${icon(vote === 'up' ? 'thumbUp' : 'thumbDown', 20)}</button>`).join('')}
+				</div>
+			</li>`).join('')}</ul>`;
+	},
+
+	actions(data) {
+		return `
+			<ul class="row-list">${(data.items ?? []).map((item) => {
+				const choice = choices.actions[item.id];
+				const destination = chapters.find((chapter) => chapter.id === item.chapter);
+				return `
+				<li class="action ${choice.done ? 'is-done' : ''}" ${target(item.id)}>
+					<input class="checkbox" type="checkbox" data-action-done="${escapeHtml(item.id)}" ${choice.done ? 'checked' : ''} aria-label="Done: ${escapeHtml(item.text)}">
+					<span class="text">${escapeHtml(item.text)}</span>
+					<span style="display:flex">${iconLink(item.url, `Open in ${APP_NAMES[item.app] ?? 'app'}`, item.app) || (destination ? `<button class="icon-link" type="button" data-goto="${escapeHtml(destination.id)}" aria-label="Go to ${escapeHtml(destination.name)}" title="Go to ${escapeHtml(destination.name)}">${appIcon(item.app)}</button>` : '')}</span>
+					<span class="segmented" role="group" aria-label="Who does it">${['you', 'agent'].map((handoff) => `<button type="button" data-handoff="${escapeHtml(item.id)}" data-value="${handoff}" aria-pressed="${choice.handoff === handoff}">${handoff === 'you' ? 'You' : 'Agent'}</button>`).join('')}</span>
+				</li>`; }).join('')}</ul>
+			<div class="save-area">
+				<span class="summary" id="choice-summary">${escapeHtml(choiceSummary())}</span>
+				<button class="text-button" type="button" data-action="save">${icon('download', 18)} Save choices</button>
+			</div>`;
+	},
+};
+
+function renderBody(chapter) {
+	if (chapter.status === 'quiet') return `<div class="quiet-slide">${icon('check', 40)}<p>${escapeHtml(chapter.title)}</p></div>`;
+	return RENDERERS[chapter.type]?.(chapter.data ?? {}, chapter) ?? '';
+}
+
+/* Player: one play/pause for the brief; a beat lasts its estimated speech time at 2.6 words per second. */
+const SPEEDS = [1, 1.25, 1.5, 2];
+const WORDS_PER_SECOND = 2.6;
+const BEAT_PAUSE_SECONDS = 0.6;
+const state = { chapter: 0, beat: 0, elapsed: 0, playing: false, speedIndex: 0, voice: true, finished: false, speaking: false };
+const speed = () => SPEEDS[state.speedIndex];
+const voiceAvailable = 'speechSynthesis' in window;
+const beatSeconds = (beat) => (beat.hold ?? beat.say.split(/\s+/).length / WORDS_PER_SECOND + BEAT_PAUSE_SECONDS) / speed();
+const chapterSeconds = (chapter) => chapter.beats.reduce((total, beat) => total + beatSeconds(beat), 0);
+const currentChapter = () => chapters[state.chapter];
+const currentBeat = () => currentChapter().beats[state.beat];
+const formatTime = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
+
+function renderStage() {
+	const scrollTop = stage.scrollTop;
+	stage.innerHTML = renderBody(currentChapter());
+	stage.scrollTop = scrollTop;
+	highlight();
+}
+function renderHeader() {
+	const chapter = currentChapter();
+	const look = CHAPTER_LOOK[chapter.type] ?? CHAPTER_LOOK.overview;
+	byId('sheet').style.setProperty('--chapter-color', look.color);
+	byId('chapter-icon').innerHTML = icon(look.icon, 30);
+	byId('chapter-kicker').textContent = chapter.name;
+	byId('chapter-title').textContent = chapter.title;
+	byId('chapter-position').textContent = `${String(state.chapter + 1).padStart(2, '0')} / ${String(chapters.length).padStart(2, '0')}`;
+}
+function renderOutline() {
+	byId('outline').innerHTML = chapters.map((chapter, index) => {
+		const look = CHAPTER_LOOK[chapter.type] ?? CHAPTER_LOOK.overview;
+		const problems = sourceProblems(chapter);
+		const current = index === state.chapter;
+		const marker = chapter.status === 'quiet' ? 'quiet' : `${chapter.count ?? ''} ${chapter.status === 'needs' ? 'need you' : 'to know'}`;
+		const label = `${chapter.name}, ${marker}${problems.length ? `. Source problem: ${problemText(problems)}` : ''}`;
+		return `
+			<li class="outline-item ${current ? 'current' : ''} ${index < state.chapter ? 'done' : ''}">
+				<button class="outline-chapter" type="button" data-goto="${escapeHtml(chapter.id)}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}" ${current ? 'aria-current="step"' : ''}>
+					<span class="outline-icon">${icon(look.icon, 22)}${chapter.count ? `<span class="count ${chapter.status === 'needs' ? 'needs' : ''}">${escapeHtml(chapter.count)}</span>` : ''}${problems.length ? '<span class="warn-dot"></span>' : ''}</span>
+					<span class="outline-name">${escapeHtml(chapter.name)}</span>
+				</button>
+				${current ? `<div class="outline-panel">
+					${problems.map((source) => `<div class="outline-warning" title="${escapeHtml(source.reason ?? source.status)}">${icon('warning', 14)}<span>${escapeHtml(source.name)} ${escapeHtml(source.status)}</span></div>`).join('')}
+					<ol class="outline-beats">${chapter.beats.map((beat, beatIndex) => `<li><button class="outline-beat ${beatIndex === state.beat ? 'current' : beatIndex < state.beat ? 'done' : ''}" type="button" data-beat="${beatIndex}" ${beatIndex === state.beat ? 'aria-current="step"' : ''}>${escapeHtml(beat.note ?? `Point ${beatIndex + 1}`)}</button></li>`).join('')}</ol>
+				</div>` : ''}
+			</li>`;
+	}).join('');
+	byId('outline').querySelector('.current')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
+function highlight() {
+	const beat = currentBeat();
+	const targets = [...(beat.targets ?? []), ...(beat.select ? ['event-detail'] : [])];
+	stage.querySelectorAll('.is-target, .on-path').forEach((element) => element.classList.remove('is-target', 'on-path'));
+	let first;
+	for (const name of targets) stage.querySelectorAll(`[data-target="${CSS.escape(name)}"]`).forEach((element) => {
+		element.classList.add('is-target');
+		first ??= element;
+		// Opacity multiplies down the tree, so containers of a target must not be dimmed.
+		for (let ancestor = element.parentElement; ancestor && ancestor !== stage; ancestor = ancestor.parentElement) ancestor.classList.add('on-path');
+	});
+	stage.classList.toggle('highlighting', Boolean(first));
+	first?.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+}
+function setChapter(index, beatIndex = 0) {
+	state.chapter = index;
+	state.finished = false;
+	renderHeader();
+	stage.innerHTML = renderBody(currentChapter());
+	stage.scrollTop = 0;
+	setBeat(beatIndex);
+}
+function setBeat(index) {
+	state.beat = index;
+	state.elapsed = 0;
+	const chapter = currentChapter();
+	const beat = currentBeat();
+	let changed = false;
+	if (beat.select && beat.select !== chapter.selected) { chapter.selected = beat.select; changed = true; }
+	if (beat.scope && beat.scope !== chapter.scope) { chapter.scope = beat.scope; changed = true; }
+	const retroTarget = chapter.type === 'retro' && (beat.targets ?? []).map((name) => name.replace(/^retro-/, '')).find((id) => chapter.data.items.some((item) => item.id === id));
+	if (retroTarget && retroTarget !== chapter.openItem) { chapter.openItem = retroTarget; changed = true; }
+	if (changed) renderStage(); else highlight();
+	byId('caption').textContent = beat.say;
+	renderOutline();
+	renderTransport();
+	speak();
+}
+function speak() {
+	if (!voiceAvailable) return;
+	window.speechSynthesis.cancel();
+	state.speaking = false;
+	if (!state.voice || !state.playing) return;
+	const utterance = new SpeechSynthesisUtterance(currentBeat().say);
+	utterance.rate = speed();
+	const voices = window.speechSynthesis.getVoices().filter((voice) => voice.lang.startsWith('en'));
+	utterance.voice = voices.find((voice) => /natural|online/i.test(voice.name)) ?? voices[0] ?? null;
+	utterance.onend = utterance.onerror = () => { state.speaking = false; };
+	state.speaking = true;
+	window.speechSynthesis.speak(utterance);
+}
+function advance() {
+	if (state.beat < currentChapter().beats.length - 1) return setBeat(state.beat + 1);
+	if (state.chapter < chapters.length - 1) return setChapter(state.chapter + 1);
+	state.playing = false;
+	state.finished = true;
+	state.elapsed = beatSeconds(currentBeat());
+	renderTransport();
+}
+function togglePlay() {
+	if (state.playing) {
+		state.playing = false;
+		if (voiceAvailable) window.speechSynthesis.cancel();
+		state.speaking = false;
+		return renderTransport();
+	}
+	state.playing = true;
+	if (state.finished) setChapter(0); else speak();
+	renderTransport();
+}
+function stepBeat(direction) {
+	const next = state.beat + direction;
+	if (next >= 0 && next < currentChapter().beats.length) return setBeat(next);
+	const nextChapter = state.chapter + direction;
+	if (nextChapter < 0 || nextChapter >= chapters.length) return;
+	setChapter(nextChapter, direction < 0 ? chapters[nextChapter].beats.length - 1 : 0);
+}
+function stepChapter(direction) {
+	// Going back from inside a chapter restarts it first, like a media player.
+	if (direction < 0 && state.beat > 0) return setChapter(state.chapter);
+	const next = state.chapter + direction;
+	if (next >= 0 && next < chapters.length) setChapter(next);
+}
+function buildProgress() {
+	const totalWeight = chapters.reduce((total, chapter) => total + chapterSeconds(chapter), 0);
+	byId('progress').innerHTML = chapters.map((chapter, index) => {
+		const duration = chapterSeconds(chapter);
+		let running = 0;
+		const ticks = chapter.beats.slice(0, -1).map((beat) => { running += beatSeconds(beat); return `<span class="tick" style="left:${(running / duration) * 100}%"></span>`; }).join('');
+		return `<div class="segment ${chapter.status === 'quiet' ? 'quiet' : ''}" data-segment="${index}" title="${escapeHtml(chapter.name)}" style="flex:${duration / totalWeight} 1 0"><div class="segment-fill"></div>${ticks}</div>`;
+	}).join('');
+}
+function renderTransport() {
+	const play = byId('play');
+	for (const [id, name] of [['chapter-previous', 'chapterPrevious'], ['beat-previous', 'beatPrevious'], ['beat-next', 'beatNext'], ['chapter-next', 'chapterNext']]) byId(id).innerHTML = icon(name, 20);
+	play.innerHTML = icon(state.playing ? 'pause' : 'play', 22);
+	const playLabel = state.playing ? 'Pause' : state.finished ? 'Play again' : 'Play';
+	play.setAttribute('aria-label', playLabel);
+	play.title = `${playLabel} (Space)`;
+	byId('chapter-previous').disabled = state.chapter === 0 && state.beat === 0;
+	byId('beat-previous').disabled = state.chapter === 0 && state.beat === 0;
+	byId('beat-next').disabled = state.chapter === chapters.length - 1 && state.beat === currentChapter().beats.length - 1;
+	byId('chapter-next').disabled = state.chapter === chapters.length - 1;
+	const speedButton = byId('speed');
+	speedButton.innerHTML = `${icon('speed', 18)}<span>${speed()}×</span>`;
+	speedButton.setAttribute('aria-label', `Speed ${speed()} times, change speed`);
+	speedButton.title = `Speed ${speed()}×`;
+	const mute = byId('mute');
+	mute.innerHTML = icon(state.voice ? 'volume' : 'muted', 20);
+	mute.setAttribute('aria-pressed', String(!state.voice));
+	mute.setAttribute('aria-label', 'Mute voice');
+	mute.title = state.voice ? 'Mute voice' : 'Unmute voice';
+}
+function paintProgress() {
+	const chapter = currentChapter();
+	const beatDuration = beatSeconds(currentBeat());
+	const chapterElapsed = chapter.beats.slice(0, state.beat).reduce((total, beat) => total + beatSeconds(beat), 0) + Math.min(state.elapsed, beatDuration);
+	byId('progress').querySelectorAll('.segment').forEach((element, index) => {
+		element.classList.toggle('current', index === state.chapter);
+		const fraction = index < state.chapter ? 1 : index === state.chapter ? chapterElapsed / chapterSeconds(chapter) : 0;
+		element.firstElementChild.style.transform = `scaleX(${fraction})`;
+	});
+	const before = chapters.slice(0, state.chapter).reduce((total, item) => total + chapterSeconds(item), 0);
+	const total = chapters.reduce((sum, item) => sum + chapterSeconds(item), 0);
+	byId('time').textContent = `${formatTime(before + chapterElapsed)} / ${formatTime(total)}`;
+}
+let lastFrame = 0;
+function frame(now) {
+	const delta = lastFrame ? Math.min((now - lastFrame) / 1000, 0.25) : 0;
+	lastFrame = now;
+	if (state.playing) {
+		const duration = beatSeconds(currentBeat());
+		state.elapsed += delta;
+		if (state.speaking) state.elapsed = Math.min(state.elapsed, duration * 0.97);
+		else if (state.elapsed >= duration) advance();
+	}
+	paintProgress();
+	requestAnimationFrame(frame);
+}
+
+/* Interaction. */
+byId('play').addEventListener('click', togglePlay);
+byId('beat-previous').addEventListener('click', () => stepBeat(-1));
+byId('beat-next').addEventListener('click', () => stepBeat(1));
+byId('chapter-previous').addEventListener('click', () => stepChapter(-1));
+byId('chapter-next').addEventListener('click', () => stepChapter(1));
+byId('speed').addEventListener('click', () => { state.speedIndex = (state.speedIndex + 1) % SPEEDS.length; buildProgress(); renderTransport(); speak(); });
+byId('mute').addEventListener('click', () => { state.voice = !state.voice; renderTransport(); speak(); });
+byId('progress').addEventListener('click', (event) => {
+	const segment = event.target.closest('[data-segment]');
+	if (!segment) return;
+	const chapter = chapters[Number(segment.dataset.segment)];
+	const fraction = (event.clientX - segment.getBoundingClientRect().left) / segment.offsetWidth;
+	let running = 0;
+	const beatIndex = chapter.beats.findIndex((beat) => (running += beatSeconds(beat)) / chapterSeconds(chapter) > fraction);
+	setChapter(Number(segment.dataset.segment), Math.max(0, beatIndex));
+});
+byId('outline').addEventListener('click', (event) => {
+	const beatButton = event.target.closest('[data-beat]');
+	if (beatButton) return setBeat(Number(beatButton.dataset.beat));
+	const chapterButton = event.target.closest('[data-goto]');
+	if (chapterButton) setChapter(chapters.findIndex((chapter) => chapter.id === chapterButton.dataset.goto));
+});
+stage.addEventListener('click', (event) => {
+	const chapter = currentChapter();
+	const element = event.target.closest('[data-goto], [data-event], [data-scope], [data-retro-open], [data-news], [data-handoff], [data-action]');
+	if (!element) return;
+	if (element.dataset.goto) return setChapter(chapters.findIndex((item) => item.id === element.dataset.goto));
+	if (element.dataset.event) { chapter.selected = element.dataset.event; return renderStage(); }
+	if (element.dataset.scope) { chapter.scope = element.dataset.scope; return renderStage(); }
+	if (element.dataset.retroOpen) { chapter.openItem = chapter.openItem === element.dataset.retroOpen ? undefined : element.dataset.retroOpen; return renderStage(); }
+	if (element.dataset.news) { choices.news[element.dataset.news] = choices.news[element.dataset.news] === element.dataset.vote ? undefined : element.dataset.vote; return renderStage(); }
+	if (element.dataset.handoff) { choices.actions[element.dataset.handoff].handoff = element.dataset.value; return renderStage(); }
+	if (element.dataset.action === 'close-event') { chapter.selected = undefined; return renderStage(); }
+	if (element.dataset.action === 'confirm-sessions') { choices.retro.confirmed = true; return renderStage(); }
+	if (element.dataset.action === 'save') downloadChoices();
+});
+stage.addEventListener('change', (event) => {
+	const element = event.target;
+	if (element.dataset.triage) choices.triage[element.dataset.triage][element.dataset.field] = element.value;
+	if (element.dataset.auto) choices.autoHandled[element.dataset.auto] = element.checked;
+	if (element.dataset.retroApprove) { choices.retro.approved[element.dataset.retroApprove] = element.checked; choices.retro.confirmed = false; renderStage(); }
+	if (element.dataset.actionDone) { choices.actions[element.dataset.actionDone].done = element.checked; renderStage(); }
+});
+stage.addEventListener('toggle', (event) => { if (event.target.dataset?.disclosure) currentChapter().disclosureOpen = event.target.open; }, true);
+document.addEventListener('keydown', (event) => {
+	if (event.target.closest?.('input, select, textarea') || event.altKey || event.ctrlKey || event.metaKey) return;
+	if (event.key === ' ') {
+		if (event.target.closest?.('button, a, summary')) return;
+		event.preventDefault();
+		togglePlay();
+	} else if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+		event.preventDefault();
+		const direction = event.key === 'ArrowRight' ? 1 : -1;
+		if (event.shiftKey) stepChapter(direction); else stepBeat(direction);
+	}
+});
+
+const briefDate = new Date(`${brief.date}T12:00:00`);
+byId('rail-date').textContent = briefDate.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+byId('rail-window').textContent = brief.window?.label ?? '';
+buildProgress();
+setChapter(0);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

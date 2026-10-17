@@ -1,0 +1,245 @@
+{
+  "date": "2026-10-16",
+  "window": { "since": "2026-10-15T06:05:00+02:00", "until": "2026-10-16T06:00:00+02:00", "label": "Thu 15 Oct 06:05 → Fri 16 Oct 06:00" },
+  "now": "2026-10-16T06:00:00+02:00",
+  "sources": [
+    { "name": "Personal Google", "status": "ok", "chapters": ["calendar", "mail"] },
+    { "name": "Work Slack and mail", "status": "ok", "chapters": ["slack", "mail"] },
+    { "name": "Work calendar", "status": "skipped", "reason": "Connector not approved yet; busy blocks only", "chapters": ["calendar"] },
+    { "name": "Gerrit", "status": "unavailable", "reason": "SSH key not loaded", "chapters": ["work"] },
+    { "name": "OpenAI news", "status": "unavailable", "reason": "HTTP 403", "chapters": ["news"] }
+  ],
+  "chapters": [
+    {
+      "id": "calendar", "type": "calendar", "name": "Calendar", "title": "Standup, then the dentist", "status": "fyi", "count": 5,
+      "data": {
+        "calendars": [
+          { "id": "personal", "name": "Personal", "account": "personal", "color": "#039be5" },
+          { "id": "family", "name": "Family", "account": "personal", "color": "#33b679" },
+          { "id": "work", "name": "Work", "account": "work", "color": "#7986cb", "busyOnly": true }
+        ],
+        "days": [
+          { "id": "2026-10-15", "label": "Thu", "date": "15" },
+          { "id": "today", "label": "Fri", "date": "16", "focus": true },
+          { "id": "tomorrow", "label": "Sat", "date": "17" }
+        ],
+        "events": [
+          { "id": "retro-meeting", "calendarId": "work", "day": "2026-10-15", "start": "14:00", "end": "15:00", "busyOnly": true },
+          { "id": "swim", "calendarId": "family", "day": "2026-10-15", "start": "17:00", "end": "18:00", "title": "Swimming lesson", "url": "https://calendar.google.com/" },
+          { "id": "standup", "calendarId": "work", "day": "today", "start": "09:30", "end": "09:45", "busyOnly": true },
+          { "id": "planning", "calendarId": "work", "day": "today", "start": "13:00", "end": "14:00", "busyOnly": true },
+          { "id": "dentist", "calendarId": "personal", "day": "today", "start": "16:00", "end": "17:00", "title": "Dentist", "place": "Downtown", "notes": ["Leave by 15:30"], "url": "https://calendar.google.com/" },
+          { "id": "pickup", "calendarId": "family", "day": "today", "start": "17:30", "end": "18:00", "title": "Kindergarten pickup", "url": "https://calendar.google.com/" },
+          { "id": "nameday", "calendarId": "family", "day": "today", "allDay": true, "title": "Name day: Havel" },
+          { "id": "run", "calendarId": "personal", "day": "tomorrow", "start": "08:00", "end": "09:00", "title": "Park run", "url": "https://calendar.google.com/" },
+          { "id": "market", "calendarId": "family", "day": "tomorrow", "start": "10:00", "end": "12:00", "title": "Farmers market", "url": "https://calendar.google.com/" },
+          { "id": "birthday", "calendarId": "family", "day": "tomorrow", "start": "15:00", "end": "19:00", "title": "Birthday party at Sam's", "place": "Oak Park", "url": "https://calendar.google.com/" }
+        ]
+      },
+      "beats": [
+        { "say": "Good morning. Yesterday, in grey, ended with the swimming lesson.", "note": "Yesterday", "targets": ["event-swim"] },
+        { "say": "Standup at half past nine, planning at one.", "note": "Work blocks", "targets": ["event-standup", "event-planning"] },
+        { "say": "The dentist is at four; leave by half past three.", "note": "Dentist", "targets": ["event-dentist"], "select": "dentist" },
+        { "say": "Tomorrow is family day: park run, the market, and Sam's party in Oak Park.", "note": "Tomorrow", "targets": ["event-run", "event-market", "event-birthday"] }
+      ]
+    },
+    {
+      "id": "overnight", "type": "overnight", "name": "Overnight runs", "title": "The render failed, the tests landed", "status": "needs", "count": 1,
+      "data": {
+        "away": { "from": "Thu 22:40", "to": "Fri 07:55" },
+        "runs": [
+          { "id": "run-tests", "outcome": "ok", "app": "claude", "title": "prejemesi: wishlist tests", "detail": "42 tests added, 3 commits", "when": "22:35", "duration": "1 h 20 min", "url": "file:///C:/AI_DUMP/afk/prejemesi-tests.md" },
+          { "id": "run-render", "outcome": "fail", "app": "claude", "title": "videoLab: 4K render", "detail": "Timed out at scene 7", "when": "23:10", "duration": "3 h 4 min", "url": "file:///C:/AI_DUMP/afk/render.log" }
+        ]
+      },
+      "beats": [
+        { "say": "After your last prompt at twenty to eleven, the prejemesi session added forty two wishlist tests.", "note": "Tests landed", "targets": ["run-tests"] },
+        { "say": "The 4K render ran for three hours and timed out at scene seven.", "note": "Render failed", "targets": ["run-render"] }
+      ]
+    },
+    {
+      "id": "work", "type": "work", "name": "Work in flight", "title": "One merge ready, one review waiting", "status": "needs", "count": 2,
+      "data": {
+        "states": {
+          "ready": "Approved and green", "review": "Waiting for review", "draft": "Draft", "failing": "Pipeline failing",
+          "progress": "In progress", "local": "Local only", "merged": "Merged", "stale": "Ticket column is wrong"
+        },
+        "projects": [
+          {
+            "id": "ui-components", "scope": "work", "name": "ui-components", "app": "gitlab", "url": "https://example.com/ysc",
+            "cards": [
+              { "id": "mr-318", "ref": "!318", "title": "Payment forms opt out of Enter submit", "state": "ready", "url": "https://example.com/mr/318", "pipeline": { "status": "success", "url": "https://example.com/pipelines/318" }, "ticket": { "ref": "T-102", "column": "In review", "expected": "Approved", "url": "https://kanbanflow.com/" }, "session": { "label": "Orca", "url": "orca://" } },
+              { "id": "mr-321", "ref": "!321", "title": "Date picker keyboard support", "state": "review", "author": "Alex", "url": "https://example.com/mr/321", "pipeline": { "status": "success", "url": "https://example.com/pipelines/321" } },
+              { "id": "mr-320", "ref": "!320", "title": "Toast stacking", "state": "failing", "url": "https://example.com/mr/320", "pipeline": { "status": "failed", "url": "https://example.com/pipelines/320", "job": "lint" } },
+              { "id": "mr-316", "ref": "!316", "title": "Select clears on reset", "state": "merged", "url": "https://example.com/mr/316" },
+              { "id": "mr-317", "ref": "!317", "title": "CI split into lint and test", "state": "merged", "url": "https://example.com/mr/317" }
+            ]
+          },
+          {
+            "id": "mpx", "scope": "personal", "name": "mpx", "app": "github", "url": "https://github.com/MartinoPolo/mpx",
+            "cards": [
+              { "id": "mpx-brief", "ref": "main", "title": "Morning brief skill", "state": "progress", "url": "https://github.com/MartinoPolo/mpx", "local": { "uncommitted": 9, "unpushed": 1 } }
+            ]
+          },
+          {
+            "id": "prejemesi", "scope": "personal", "name": "prejemesi", "app": "github", "url": "https://github.com/MartinoPolo/prejemesi",
+            "cards": [
+              { "id": "pr-488", "ref": "#488", "title": "Agent access part 2: API", "state": "draft", "url": "https://github.com/MartinoPolo/prejemesi/pull/488", "pipeline": { "status": "running", "url": "https://github.com/MartinoPolo/prejemesi/actions" } },
+              { "id": "pr-487", "ref": "#487", "title": "Permanent wishlists", "state": "merged", "url": "https://github.com/MartinoPolo/prejemesi/pull/487" }
+            ]
+          }
+        ],
+        "autoHandled": [
+          { "id": "tidy", "text": "11 old checkouts with local changes", "proposal": "Stash and list them in the weekly review" }
+        ],
+        "quiet": ["kamosh", "orca", "flowguard-api"]
+      },
+      "beats": [
+        { "say": "Three eighteen is approved and green, but its ticket still sits in review.", "note": "Ready to merge", "targets": ["card-mr-318"], "scope": "work" },
+        { "say": "In review: Alex's date picker, and toast stacking, which fails in lint.", "note": "In review", "targets": ["card-mr-321", "card-mr-320"], "scope": "work" },
+        { "say": "Two merged yesterday.", "note": "Merged", "targets": ["column-merged"], "scope": "work" },
+        { "say": "On the personal side, mpx has the brief skill uncommitted and prejemesi has a draft running checks.", "note": "Personal", "targets": ["card-mpx-brief", "card-pr-488"], "scope": "personal" }
+      ]
+    },
+    {
+      "id": "slack", "type": "slack", "name": "Slack", "title": "One request waits on you", "status": "needs", "count": 1,
+      "data": {
+        "unaddressed": [
+          { "id": "s1", "channel": "#team-ui", "author": "Alex", "when": "16:40", "text": "@you could you look at !321 before Monday? Keyboard nav is the part I am unsure about.", "replies": 0, "url": "https://example.slack.com/archives/C1/p1" }
+        ],
+        "worthKnowing": [
+          { "id": "s2", "channel": "#admins", "author": "Chris", "when": "15:05", "text": "Load balancer drops ACKs between the balancer and router; we are watching it.", "handledBy": "Chris", "replies": 6, "url": "https://example.slack.com/archives/C2/p2" },
+          { "id": "s3", "channel": "#ai", "author": "Kim", "when": "11:20", "text": "Code review working group kicks off Tuesday, sign-up in the thread.", "replies": 14, "url": "https://example.slack.com/archives/C3/p3" }
+        ],
+        "addressedSummary": "Yesterday you fixed the failing feature tests, finished a review ask, and answered the forms question.",
+        "addressed": [
+          { "id": "s4", "channel": "#team-ui", "author": "Robin", "when": "13:16", "text": "Feature tests fail on the filter Apply button", "url": "https://example.slack.com/archives/C1/p4" },
+          { "id": "s5", "channel": "#team-ui", "author": "Taylor", "when": "14:02", "text": "Review please: !317", "url": "https://example.slack.com/archives/C1/p5" },
+          { "id": "s6", "channel": "DM", "author": "Jordan", "when": "17:45", "text": "Are the payment forms still submitting on Enter?", "url": "https://example.slack.com/archives/D1/p6" }
+        ],
+        "skipped": 35
+      },
+      "beats": [
+        { "say": "Alex wants your review of three twenty one before Monday.", "note": "Waiting on you", "targets": ["message-s1"] },
+        { "say": "Worth knowing: Chris is chasing a load balancer issue, and the AI code review group starts Tuesday.", "note": "Worth knowing", "targets": ["message-s2", "message-s3"] },
+        { "say": "Everything else you already handled: the feature tests, a review, and Jordan's forms question.", "note": "Handled", "targets": ["slack-addressed"] }
+      ]
+    },
+    {
+      "id": "mail", "type": "mail", "name": "Mail", "title": "Two emails to act on", "status": "needs", "count": 2,
+      "data": {
+        "rows": [
+          { "id": "token", "account": "work", "from": "GitLab", "subject": "Your personal access token expires soon", "snippet": "The GitLab Workflow token expires on 21 Oct.", "when": "Oct 15", "action": "Renew", "url": "https://mail.google.com/" },
+          { "id": "trip", "account": "personal", "from": "TravelCo", "subject": "Trip instructions: Lisbon, Oct 21", "snippet": "Check-in opens 48 hours before departure.", "when": "Oct 15", "action": "Read", "url": "https://mail.google.com/" },
+          { "id": "bootcamp", "account": "work", "from": "HR team", "subject": "Optional bootcamp in November", "snippet": "Optional, sent to everyone.", "when": "Oct 15", "action": "Optional", "url": "https://mail.google.com/" }
+        ],
+        "notifications": [
+          { "source": "GitLab", "count": 9 }, { "source": "Google", "count": 6 }, { "source": "KanbanFlow", "count": 3 }, { "source": "Other", "count": 4 }
+        ]
+      },
+      "beats": [
+        { "say": "GitLab warns that a token expires on Wednesday, and TravelCo sent the Lisbon check-in steps.", "note": "Act on", "targets": ["mail-token", "mail-trip"] },
+        { "say": "The bootcamp invite is optional.", "note": "Optional", "targets": ["mail-bootcamp"] }
+      ]
+    },
+    {
+      "id": "triage", "type": "triage", "name": "Obsidian triage", "title": "Three captures to file", "status": "fyi", "count": 3,
+      "data": {
+        "vault": "ObsidianMP",
+        "projects": ["mpx", "orca", "prejemesi", "skills", "videoLab"],
+        "headings": ["#AI", "#todo", "#quick", "#tooling", "#work"],
+        "groups": [
+          { "id": "daily", "note": "Daily/2026-10-15", "url": "obsidian://open?vault=ObsidianMP&file=Daily%2F2026-10-15", "items": [
+            { "id": "t1", "text": "Morning brief should move KF tickets", "project": "mpx", "heading": "#tooling", "priority": "high" },
+            { "id": "t2", "text": "Buy a birthday present for Sam", "project": "", "heading": "#todo", "priority": "highest" }
+          ] },
+          { "id": "ideas", "note": "Ideas", "url": "obsidian://open?vault=ObsidianMP&file=Ideas", "items": [
+            { "id": "t3", "text": "True crime videos with realistic animations", "project": "videoLab", "heading": "#AI", "priority": "low" }
+          ] }
+        ]
+      },
+      "beats": [
+        { "say": "From yesterday's note: KF moves for the brief, and Sam's present, which is due tomorrow.", "note": "Daily note", "targets": ["task-t1", "task-t2"] },
+        { "say": "One idea: true crime animations, parked as low priority.", "note": "Ideas", "targets": ["task-t3"] }
+      ]
+    },
+    {
+      "id": "retro", "type": "retro", "name": "Retro", "title": "Two fixes worth a session", "status": "fyi", "count": 2,
+      "data": {
+        "items": [
+          {
+            "id": "substitution", "title": "Arithmetic blocked as command substitution", "harness": "claude", "account": "personal", "cost": "about 40 blocked calls in 15 sessions",
+            "evidence": { "kind": "terminal", "lines": [
+              { "role": "tool", "text": "Bash(end=$((SECONDS+2700)); until [ -f done ]; do sleep 5; done)" },
+              { "role": "error", "text": "PreToolUse:Bash hook error: Blocked dangerous command: opaque command or process substitution cannot be inspected." },
+              { "role": "assistant", "text": "I'll write a scratchpad script instead." }
+            ], "session": { "label": "3589dbf6", "url": "file:///C:/Users/me/session.jsonl" } },
+            "fix": { "file": "mpx · src/safeguard/shell.ts", "diff": "- if (/\\$\\(/.test(command)) return true;\n+ if (/\\$\\((?!\\()/.test(command)) return true;" },
+            "session": { "harness": "claude", "account": "personal", "project": "mpx", "prompt": "Treat $(( )) as arithmetic in hasOpaqueCommandExpansion and add regression tests." }
+          },
+          {
+            "id": "commit", "title": "git add and commit chained in one call", "harness": "pi", "account": "work", "cost": "9 blocked commits",
+            "evidence": { "kind": "terminal", "lines": [
+              { "role": "tool", "text": "bash: git add -A && git commit -m \"fix: toast stacking\"" },
+              { "role": "error", "text": "Finish staging/index mutations in a separate completed tool call before git commit" }
+            ], "session": { "label": "8c38ddae", "url": "file:///C:/Users/me/session2.jsonl" } },
+            "fix": { "file": "mpx · content/skills/commit/SKILL.md", "diff": "+ Stage in one tool call, inspect git diff --cached, then commit in a separate call." },
+            "session": { "harness": "claude", "account": "personal", "project": "mpx", "prompt": "Tell the commit skill to stage and commit in separate calls." }
+          }
+        ]
+      },
+      "beats": [
+        { "say": "The shell hook blocks plain arithmetic as if it were command substitution; about forty calls this week.", "note": "Arithmetic blocked", "targets": ["retro-substitution"] },
+        { "say": "Commits also fail when staging shares the call; a one-line skill fix would stop it.", "note": "Split commits", "targets": ["retro-commit"] },
+        { "say": "Each fix has a session prompt ready.", "note": "Start sessions", "targets": ["retro-sessions"] }
+      ]
+    },
+    {
+      "id": "instructions", "type": "instructions", "name": "Instructions", "title": "Three changes, one unbuilt", "status": "fyi", "count": 3,
+      "data": {
+        "changes": [
+          { "id": "c1", "scope": "mpx output style", "summary": "Everything that needs you moves to one final HITL section.", "opinion": "Looks final. Answers are easier to scan; nothing to do.", "verdict": "final", "state": { "committed": true, "pushed": true, "built": true }, "url": "https://github.com/MartinoPolo/mpx/commit/d7584c2" },
+          { "id": "c2", "scope": "mpx morning-brief", "summary": "New skill, plus launcher fixes for slash prompts.", "opinion": "Still moving. Not committed, and dist is a day old.", "verdict": "attention", "state": { "committed": false, "pushed": false, "built": false }, "url": "https://github.com/MartinoPolo/mpx" },
+          { "id": "c3", "scope": "videoLab AGENTS.md", "summary": "Reality first: build scenes only from trusted sources.", "opinion": "Good rule; watch that it does not block quick drafts.", "verdict": "watch", "state": { "committed": true, "pushed": false }, "url": "https://github.com/MartinoPolo/videoLab" }
+        ]
+      },
+      "beats": [
+        { "say": "The HITL output style looks final; nothing to do.", "note": "Output style", "targets": ["change-c1"] },
+        { "say": "The morning brief work is not committed and the build is stale.", "note": "Not committed", "targets": ["change-c2"] },
+        { "say": "videoLab now insists on trusted sources; fine, but it may slow drafts.", "note": "videoLab", "targets": ["change-c3"] }
+      ]
+    },
+    {
+      "id": "news", "type": "news", "name": "AI news", "title": "Three picks", "status": "fyi", "count": 3,
+      "data": {
+        "items": [
+          { "id": "n1", "app": "googlegemini", "source": "Google", "title": "Gemini 3 Flash gets native audio output", "summary": "Cheaper speech for apps like this brief.", "date": "Oct 15", "url": "https://blog.google/" },
+          { "id": "n2", "app": "ycombinator", "source": "Hacker News", "title": "Show HN: local-first agent sandboxes", "summary": "412 points; containers per task, no daemon.", "date": "Oct 15", "url": "https://news.ycombinator.com/" },
+          { "id": "n3", "app": "claude", "source": "Claude Code", "title": "Claude Code 2.1.301", "summary": "Idle compaction now configurable per project.", "date": "Oct 15", "url": "https://github.com/anthropics/claude-code/releases" }
+        ]
+      },
+      "beats": [
+        { "say": "Gemini Flash now speaks natively, which could voice this brief cheaply.", "note": "Gemini audio", "targets": ["news-n1"] },
+        { "say": "On Hacker News, local-first agent sandboxes; and a small Claude Code release.", "note": "HN, Claude Code", "targets": ["news-n2", "news-n3"] }
+      ]
+    },
+    {
+      "id": "actions", "type": "actions", "name": "Action points", "title": "Five action points", "status": "needs", "count": 5,
+      "data": {
+        "items": [
+          { "id": "action-1", "text": "Review !321", "detail": "Alex asked in #team-ui, wants it before Monday", "app": "gitlab", "url": "https://example.com/mr/321", "chapter": "slack", "handoff": "you" },
+          { "id": "action-2", "text": "Merge !318 and move T-102", "detail": "Approved and green; ticket still in review", "app": "gitlab", "url": "https://example.com/mr/318", "chapter": "work", "handoff": "agent" },
+          { "id": "action-3", "text": "Renew the GitLab token", "detail": "GitLab Workflow token expires 21 Oct · GitLab email, 15 Oct", "app": "gmail", "url": "https://mail.google.com/", "chapter": "mail", "handoff": "you" },
+          { "id": "action-4", "text": "Rerun the 4K render", "detail": "Overnight run timed out at scene 7", "app": "claude", "url": "file:///C:/AI_DUMP/afk/render.log", "chapter": "overnight", "handoff": "agent" },
+          { "id": "action-5", "text": "Start the hook fix session", "detail": "Approve it in the retro first", "app": "claude", "chapter": "retro", "handoff": "agent" }
+        ]
+      },
+      "beats": [
+        { "say": "Five things need you. Alex asked in Slack for your review of three twenty one before Monday.", "note": "Review !321", "targets": ["action-1"] },
+        { "say": "Three eighteen is approved and green; I can merge it and move its ticket.", "note": "Merge !318", "targets": ["action-2"] },
+        { "say": "GitLab emailed yesterday that your Workflow token expires on the twenty first; renew it.", "note": "Renew token", "targets": ["action-3"] },
+        { "say": "The overnight render timed out; I can rerun it, and start the hook fix once you approve it.", "note": "Render, hook fix", "targets": ["action-4", "action-5"] }
+      ]
+    }
+  ]
+}
