@@ -9,6 +9,14 @@
     { "name": "Gerrit", "status": "unavailable", "reason": "SSH key not loaded", "chapters": ["work"] },
     { "name": "OpenAI news", "status": "unavailable", "reason": "HTTP 403", "chapters": ["news"] }
   ],
+  "projects": [
+    { "id": "prejemesi", "name": "prejemesi", "color": "#92d293" },
+    { "id": "mpx", "name": "mpx", "color": "#f2c94c" },
+    { "id": "videoLab", "name": "videoLab" },
+    { "id": "ui-components", "name": "ui-components", "color": "#00a1e9" },
+    { "id": "personal", "name": "Personal", "color": "#039be5" },
+    { "id": "work", "name": "Work", "color": "#7986cb" }
+  ],
   "chapters": [
     {
       "id": "calendar", "type": "calendar", "name": "Calendar", "title": "Standup, then the dentist", "status": "fyi", "count": 5,
@@ -48,8 +56,8 @@
       "data": {
         "away": { "from": "Thu 22:40", "to": "Fri 07:55" },
         "runs": [
-          { "id": "run-tests", "outcome": "ok", "app": "claude", "title": "prejemesi: wishlist tests", "detail": "42 tests added, 3 commits", "when": "22:35", "duration": "1 h 20 min", "url": "file:///C:/AI_DUMP/afk/prejemesi-tests.md" },
-          { "id": "run-render", "outcome": "fail", "app": "claude", "title": "videoLab: 4K render", "detail": "Timed out at scene 7", "when": "23:10", "duration": "3 h 4 min", "url": "file:///C:/AI_DUMP/afk/render.log" }
+          { "id": "run-tests", "project": "prejemesi", "outcome": "ok", "result": "Merged", "app": "claude", "title": "Wishlist tests", "detail": "42 tests added, 3 commits", "when": "22:35", "duration": "1 h 20 min", "url": "file:///C:/AI_DUMP/afk/prejemesi-tests.md" },
+          { "id": "run-render", "project": "videoLab", "outcome": "fail", "result": "Render failed", "app": "claude", "title": "4K render", "detail": "Timed out at scene 7", "when": "23:10", "duration": "3 h 4 min", "url": "file:///C:/AI_DUMP/afk/render.log" }
         ]
       },
       "beats": [
@@ -95,10 +103,10 @@
         "quiet": ["kamosh", "orca", "flowguard-api"]
       },
       "beats": [
-        { "say": "Three eighteen is approved and green, ready to merge.", "note": "Ready to merge", "targets": ["card-mr-318"], "scope": "work" },
+        { "say": "On the personal side, mpx has the brief skill uncommitted and prejemesi has a draft running checks.", "note": "Personal", "targets": ["card-mpx-brief", "card-pr-488"], "scope": "personal" },
+        { "say": "At work, three eighteen is approved and green, ready to merge.", "note": "Ready to merge", "targets": ["card-mr-318"], "scope": "work" },
         { "say": "In review: Alex's date picker, and toast stacking, which fails in lint.", "note": "In review", "targets": ["card-mr-321", "card-mr-320"], "scope": "work" },
-        { "say": "Two merged yesterday.", "note": "Merged", "targets": ["column-merged"], "scope": "work" },
-        { "say": "On the personal side, mpx has the brief skill uncommitted and prejemesi has a draft running checks.", "note": "Personal", "targets": ["card-mpx-brief", "card-pr-488"], "scope": "personal" }
+        { "say": "Two merged yesterday.", "note": "Merged", "targets": ["column-merged"], "scope": "work" }
       ]
     },
     {
@@ -128,9 +136,9 @@
         ]
       },
       "beats": [
-        { "say": "On the team board, T one oh two still sits in review, although three eighteen is approved and green.", "note": "T-102 behind", "targets": ["issue-T-102"], "scope": "work" },
-        { "say": "The other tickets match their merge requests.", "note": "In sync", "targets": ["issue-T-110", "issue-T-108", "issue-T-099"], "scope": "work" },
-        { "say": "On GitHub, four seventy is still open, though its pull request merged yesterday.", "note": "#470 still open", "targets": ["issue-gh-470"], "scope": "personal" }
+        { "say": "On GitHub, four seventy is still open, though its pull request merged yesterday.", "note": "#470 still open", "targets": ["issue-gh-470"], "scope": "personal" },
+        { "say": "On the team board, T one oh two still sits in review, although three eighteen is approved and green. Approve the move here.", "note": "T-102 behind", "targets": ["issue-T-102", "action-move-t102"], "scope": "work" },
+        { "say": "The other tickets match their merge requests.", "note": "In sync", "targets": ["issue-T-110", "issue-T-108", "issue-T-099"], "scope": "work" }
       ]
     },
     {
@@ -166,12 +174,12 @@
           { "id": "bootcamp", "account": "work", "from": "HR team", "subject": "Optional bootcamp in November", "snippet": "Optional, sent to everyone.", "when": "Oct 15", "action": "Optional", "url": "https://mail.google.com/" }
         ],
         "notifications": [
-          { "source": "GitLab", "count": 9 }, { "source": "Google", "count": 6 }, { "source": "KanbanFlow", "count": 3 }, { "source": "Other", "count": 4 }
+          { "account": "work", "source": "GitLab", "count": 9 }, { "account": "personal", "source": "Google", "count": 6 }, { "account": "work", "source": "KanbanFlow", "count": 3 }, { "account": "personal", "source": "Other", "count": 4 }
         ]
       },
       "beats": [
-        { "say": "GitLab warns that a token expires on Wednesday, and TravelCo sent the Lisbon check-in steps.", "note": "Act on", "targets": ["mail-token", "mail-trip"] },
-        { "say": "The bootcamp invite is optional.", "note": "Optional", "targets": ["mail-bootcamp"] }
+        { "say": "TravelCo sent the Lisbon check-in steps.", "note": "Personal", "targets": ["mail-trip"], "scope": "personal" },
+        { "say": "At work, GitLab warns that a token expires on Wednesday; the bootcamp invite is optional.", "note": "Work", "targets": ["mail-token", "mail-bootcamp"], "scope": "work" }
       ]
     },
     {
@@ -197,7 +205,7 @@
       ]
     },
     {
-      "id": "retro", "type": "retro", "name": "Retro", "title": "Two fixes worth a session", "status": "fyi", "count": 2,
+      "id": "retro", "type": "retro", "name": "AI retro", "title": "Two fixes worth a session", "status": "fyi", "count": 2,
       "data": {
         "items": [
           {
@@ -231,24 +239,24 @@
       "id": "instructions", "type": "instructions", "name": "Instructions", "title": "Three changes, one unbuilt", "status": "fyi", "count": 3,
       "data": {
         "changes": [
-          { "id": "c1", "scope": "mpx output style", "summary": "Everything that needs you moves to one final HITL section.", "opinion": "Looks final. Answers are easier to scan; nothing to do.", "verdict": "final", "state": { "committed": true, "pushed": true, "built": true }, "url": "https://github.com/MartinoPolo/mpx/commit/d7584c2" },
-          { "id": "c2", "scope": "mpx morning-brief", "summary": "New skill, plus launcher fixes for slash prompts.", "opinion": "Still moving. Not committed, and dist is a day old.", "verdict": "attention", "state": { "committed": false, "pushed": false, "built": false }, "url": "https://github.com/MartinoPolo/mpx" },
-          { "id": "c3", "scope": "videoLab AGENTS.md", "summary": "Reality first: build scenes only from trusted sources.", "opinion": "Good rule; watch that it does not block quick drafts.", "verdict": "watch", "state": { "committed": true, "pushed": false }, "url": "https://github.com/MartinoPolo/videoLab" }
+          { "id": "c1", "kind": "global", "scope": "mpx output style", "summary": "Everything that needs you moves to one final HITL section.", "opinion": "Looks final. Answers are easier to scan; nothing to do.", "verdict": "final", "state": { "committed": true, "pushed": true, "built": true }, "url": "https://github.com/MartinoPolo/mpx/commit/d7584c2" },
+          { "id": "c2", "kind": "skill", "added": true, "scope": "mpx morning-brief", "summary": "New skill, plus launcher fixes for slash prompts.", "opinion": "Still moving. Not committed, and dist is a day old.", "verdict": "attention", "state": { "committed": false, "pushed": false, "built": false }, "url": "https://github.com/MartinoPolo/mpx" },
+          { "id": "c3", "kind": "project", "scope": "videoLab AGENTS.md", "summary": "Reality first: build scenes only from trusted sources.", "opinion": "Good rule; watch that it does not block quick drafts.", "verdict": "watch", "state": { "committed": true, "pushed": false }, "url": "https://github.com/MartinoPolo/videoLab" }
         ]
       },
       "beats": [
         { "say": "The HITL output style looks final; nothing to do.", "note": "Output style", "targets": ["change-c1"] },
-        { "say": "The morning brief work is not committed and the build is stale.", "note": "Not committed", "targets": ["change-c2"] },
-        { "say": "videoLab now insists on trusted sources; fine, but it may slow drafts.", "note": "videoLab", "targets": ["change-c3"] }
+        { "say": "videoLab now insists on trusted sources; fine, but it may slow drafts.", "note": "videoLab", "targets": ["change-c3"] },
+        { "say": "The new morning brief skill is not committed and the build is stale.", "note": "Not committed", "targets": ["change-c2"] }
       ]
     },
     {
       "id": "news", "type": "news", "name": "AI news", "title": "Three picks", "status": "fyi", "count": 3,
       "data": {
         "items": [
-          { "id": "n1", "app": "googlegemini", "source": "Google", "title": "Gemini 3 Flash gets native audio output", "summary": "Cheaper speech for apps like this brief.", "date": "Oct 15", "url": "https://blog.google/" },
-          { "id": "n2", "app": "ycombinator", "source": "Hacker News", "title": "Show HN: local-first agent sandboxes", "summary": "412 points; containers per task, no daemon.", "date": "Oct 15", "url": "https://news.ycombinator.com/" },
-          { "id": "n3", "app": "claude", "source": "Claude Code", "title": "Claude Code 2.1.301", "summary": "Idle compaction now configurable per project.", "date": "Oct 15", "url": "https://github.com/anthropics/claude-code/releases" }
+          { "id": "n1", "app": "googlegemini", "source": "Google", "title": "Gemini 3 Flash gets native audio output", "summary": "Cheaper speech for apps like this brief.", "points": ["Streams speech directly from the model, no separate TTS call", "Eight voices, 24 languages", "Priced per output second"], "why": "Could replace the local narration step when the laptop is away.", "date": "Oct 15", "url": "https://blog.google/" },
+          { "id": "n2", "app": "ycombinator", "source": "Hacker News", "title": "Show HN: local-first agent sandboxes", "summary": "412 points; containers per task, no daemon.", "points": ["One container per task, torn down on exit", "Mounts only the worktree"], "why": "Same shape as the Docker Sandbox setup, without the daemon.", "date": "Oct 15", "url": "https://news.ycombinator.com/" },
+          { "id": "n3", "app": "claude", "source": "Claude Code", "title": "Claude Code 2.1.301", "summary": "Idle compaction now configurable per project.", "points": ["idleCompaction setting in project settings", "Faster resume of long sessions"], "date": "Oct 15", "url": "https://github.com/anthropics/claude-code/releases" }
         ]
       },
       "beats": [
@@ -260,23 +268,23 @@
       "id": "actions", "type": "actions", "name": "Action points", "title": "Ten action points", "status": "needs", "count": 10,
       "data": {
         "items": [
-          { "id": "action-review", "text": "Review !321", "detail": "Alex asked in #team-ui, wants it before Monday", "app": "gitlab", "url": "https://example.com/mr/321", "chapter": "slack", "source": "message-s1", "handoff": "you" },
-          { "id": "action-token", "text": "Renew the GitLab token", "detail": "Workflow token expires 21 Oct · GitLab email, 15 Oct", "app": "gmail", "url": "https://mail.google.com/", "chapter": "mail", "source": "mail-token", "handoff": "you", "agent": false },
-          { "id": "action-merge", "text": "Merge !318", "detail": "Approved and green", "app": "gitlab", "url": "https://example.com/mr/318", "chapter": "work", "source": "card-mr-318", "handoff": "agent" },
-          { "id": "action-move-t102", "text": "Move T-102 to Approved", "detail": "Still in review; !318 is approved and green", "app": "kanbanflow", "url": "https://kanbanflow.com/", "chapter": "issues", "source": "issue-T-102", "handoff": "agent" },
-          { "id": "action-close-470", "text": "Close #470", "detail": "Its pull request #487 merged yesterday", "app": "github", "url": "https://github.com/MartinoPolo/prejemesi/issues/470", "chapter": "issues", "source": "issue-gh-470", "handoff": "agent" },
-          { "id": "action-render", "text": "Rerun the 4K render", "detail": "Overnight run timed out at scene 7", "app": "claude", "url": "file:///C:/AI_DUMP/afk/render.log", "chapter": "overnight", "source": "run-render", "handoff": "agent" },
-          { "id": "action-file", "text": "File the three captures as set", "detail": "Project, heading and priority per capture", "app": "obsidian", "chapter": "triage", "handoff": "agent" },
-          { "id": "action-fix-substitution", "text": "Fix the arithmetic hook", "detail": "Fix session: Claude Code in mpx", "app": "claude", "chapter": "retro", "source": "retro-substitution", "handoff": "agent" },
-          { "id": "action-fix-commit", "text": "Fix the commit skill", "detail": "Fix session: Claude Code in mpx", "app": "claude", "chapter": "retro", "source": "retro-commit", "handoff": "agent" },
-          { "id": "action-commit-brief", "text": "Commit the brief skill", "detail": "Uncommitted, dist a day old", "app": "github", "url": "https://github.com/MartinoPolo/mpx", "chapter": "instructions", "source": "change-c2", "handoff": "you" }
+          { "id": "action-review", "project": "ui-components", "text": "Review !321", "detail": "Alex asked in #team-ui, wants it before Monday", "app": "gitlab", "url": "https://example.com/mr/321", "chapter": "slack", "source": "message-s1", "agent": false, "why": "Alex asked for your judgement" },
+          { "id": "action-token", "project": "work", "text": "Renew the GitLab token", "detail": "Workflow token expires 21 Oct · GitLab email, 15 Oct", "app": "gmail", "url": "https://mail.google.com/", "chapter": "mail", "source": "mail-token", "agent": false, "why": "Needs your GitLab login" },
+          { "id": "action-merge", "project": "ui-components", "text": "Merge !318", "detail": "Approved and green", "app": "gitlab", "url": "https://example.com/mr/318", "chapter": "work", "source": "card-mr-318" },
+          { "id": "action-move-t102", "project": "ui-components", "text": "Move T-102 to Approved", "detail": "Still in review; !318 is approved and green", "app": "kanbanflow", "url": "https://kanbanflow.com/", "chapter": "issues", "source": "issue-T-102" },
+          { "id": "action-close-470", "project": "prejemesi", "text": "Close #470", "detail": "Its pull request #487 merged yesterday", "app": "github", "url": "https://github.com/MartinoPolo/prejemesi/issues/470", "chapter": "issues", "source": "issue-gh-470" },
+          { "id": "action-render", "project": "videoLab", "text": "Rerun the 4K render", "detail": "Overnight run timed out at scene 7", "app": "claude", "url": "file:///C:/AI_DUMP/afk/render.log", "chapter": "overnight", "source": "run-render" },
+          { "id": "action-file", "project": "personal", "text": "File the three captures as set", "detail": "Project, heading and priority per capture", "app": "obsidian", "chapter": "triage" },
+          { "id": "action-fix-substitution", "project": "mpx", "text": "Fix the arithmetic hook", "detail": "Fix session: Claude Code in mpx", "app": "claude", "chapter": "retro", "source": "retro-substitution" },
+          { "id": "action-fix-commit", "project": "mpx", "text": "Fix the commit skill", "detail": "Fix session: Claude Code in mpx", "app": "claude", "chapter": "retro", "source": "retro-commit" },
+          { "id": "action-commit-brief", "project": "mpx", "text": "Commit the brief skill", "detail": "Uncommitted, dist a day old", "app": "github", "url": "https://github.com/MartinoPolo/mpx", "chapter": "instructions", "source": "change-c2" }
         ]
       },
       "beats": [
-        { "say": "Ten points, decided as you went. Two are yours: Alex's review before Monday, and the GitLab token that GitLab emailed about yesterday.", "note": "Yours", "targets": ["action-review", "action-token"] },
-        { "say": "I merge three eighteen and sync two tickets: T one oh two to Approved, and four seventy closed.", "note": "Merge and sync", "targets": ["action-merge", "action-move-t102", "action-close-470"] },
-        { "say": "I also rerun the render, file the captures, and start both fix sessions.", "note": "Agent runs", "targets": ["action-render", "action-file", "action-fix-substitution", "action-fix-commit"] },
-        { "say": "Committing the brief skill is yours. Change anything here, then save.", "note": "Commit, save", "targets": ["action-commit-brief"] }
+        { "say": "Ten points. Two need you: Alex's review before Monday, and the GitLab token that GitLab emailed about yesterday.", "note": "Manual steps", "targets": ["action-review", "action-token"] },
+        { "say": "For ui-components, one agent merges three eighteen and moves T one oh two to Approved.", "note": "ui-components", "targets": ["project-ui-components"] },
+        { "say": "mpx gets one agent for both hook fixes and the brief commit; videoLab reruns the render.", "note": "mpx, videoLab", "targets": ["project-mpx", "project-videoLab"] },
+        { "say": "Approve or dismiss what is still open, then save.", "note": "Save", "targets": ["action-close-470", "action-file"] }
       ]
     }
   ]

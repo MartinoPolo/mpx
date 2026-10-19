@@ -26,13 +26,17 @@ a { color: var(--brand-deep); }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 svg { flex: none; display: block; }
 
-/* The column centres on the screen while it fits, otherwise it keeps to the right of the rail. */
+/* The column centres on the screen while it fits, otherwise it keeps to the right of the rail. A chapter
+   that needs room (calendar, boards) widens the sheet; the width is a registered property so it animates. */
+@property --sheet-width { syntax: '<length>'; inherits: true; initial-value: 960px; }
 .app {
 	--rail-width: 256px; --row-gap: var(--space-3); --caption-height: 84px; --transport-height: 76px;
-	--column-width: min(var(--reading-width), 100vw - var(--rail-width) - 2 * var(--space-6));
+	--column-width: min(var(--sheet-width), 100vw - var(--rail-width) - 2 * var(--space-6));
 	--column-left: max(var(--rail-width) + var(--space-6), (100vw - var(--column-width)) / 2);
+	--transport-width: min(var(--reading-width), var(--column-width));
 	height: 100vh; position: relative;
 }
+.app.animate-width { transition: --sheet-width 450ms var(--ease-standard); }
 .column {
 	width: var(--column-width);
 	margin-left: var(--column-left);
@@ -84,7 +88,7 @@ svg { flex: none; display: block; }
 .sheet-head .kicker { font-size: 14px; font-weight: 600; color: var(--ink-soft); }
 .sheet-head h1 { margin: 0; font: 600 26px/1.15 var(--font-head); text-wrap: balance; }
 .sheet-head .position { margin-left: auto; font: 500 13px var(--font-mono); color: var(--ink-soft); align-self: flex-start; padding-top: 4px; }
-.sheet-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--space-3) var(--space-6) var(--space-6); }
+.sheet-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: var(--space-3) var(--space-6) var(--space-6); }
 .sheet::after { content: ''; position: absolute; inset: auto 0 0; height: 56px; background: linear-gradient(color-mix(in srgb, var(--paper) 0%, transparent), var(--paper) 85%); opacity: 0; pointer-events: none; transition: opacity var(--duration-fast); }
 .sheet.more-below::after { opacity: 1; }
 
@@ -95,12 +99,13 @@ svg { flex: none; display: block; }
 [data-target] { transition: opacity var(--duration-slow) var(--ease-standard), transform var(--duration-normal) var(--ease-spring), box-shadow var(--duration-normal) var(--ease-spring); }
 .highlighting [data-target]:not(.is-target, .on-path) { opacity: 0.8; }
 .is-target { box-shadow: 0 0 0 var(--border-width) var(--ink), 4px 4px 0 var(--border-width) var(--ink) !important; transform: translate(-1px, -2px); position: relative; z-index: 2; }
-.calendar-event.is-target, .all-day-chip.is-target { z-index: 5; }
+.calendar-event.is-target, .all-day-chip.is-target { z-index: 30; }
 
 .icon-link { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: var(--radius-button); color: var(--ink); transition: transform var(--duration-normal) var(--ease-spring), background var(--duration-fast); flex: none; }
 a.icon-link:hover, button.icon-link:hover { background: color-mix(in srgb, var(--ink) 9%, transparent); transform: translateY(-2px); }
 .chip { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; padding: 1px 8px; border-radius: var(--radius-badge); background: var(--paper); white-space: nowrap; }
 .group-title { margin: 0 0 var(--space-2); font-size: 14px; font-weight: 650; color: var(--ink-soft); }
+.empty-state { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 8px 14px; border-radius: 12px; border: 2px dashed color-mix(in srgb, var(--done) 55%, white); background: color-mix(in srgb, var(--fill-merged) 60%, white); font-weight: 650; color: color-mix(in srgb, var(--done) 70%, var(--ink)); }
 .muted-line { margin: var(--space-4) 0 0; font-size: 14px; color: var(--ink-soft); }
 .row-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--row-gap); }
 .text-button { display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: var(--radius-button); border: var(--border-width) solid var(--ink); background: var(--sticky); color: var(--on-sticky); font-weight: 650; box-shadow: var(--shadow-ordinary); transition: transform var(--duration-normal) var(--ease-spring), box-shadow var(--duration-normal) var(--ease-spring); }
@@ -122,20 +127,22 @@ a.icon-link:hover, button.icon-link:hover { background: color-mix(in srgb, var(-
 select.small-select { appearance: none; font-size: 14px; padding: 3px 26px 3px 8px; border-radius: var(--radius-button); border: 1.5px solid color-mix(in srgb, var(--ink) 30%, transparent); background: var(--paper) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316385c' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 6px center / 14px; cursor: pointer; }
 select.small-select:hover { border-color: var(--ink); }
 
-/* Decisions: every action point can be decided on its own slide and again in the action points. */
+/* Decisions: every action point is approved or dismissed on its own slide or in the action points;
+   until then it stays open. */
 .decision { display: inline-flex; flex: none; padding: 2px; gap: 2px; border-radius: 9px; background: var(--fill-draft); }
 .decision button { padding: 2px 10px; border-radius: 7px; font-size: 13px; font-weight: 650; line-height: 22px; color: var(--ink-soft); transition: background var(--duration-fast); }
 .decision button:hover { color: var(--ink); background: color-mix(in srgb, var(--paper) 70%, transparent); }
 .decision button[aria-pressed="true"] { color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--ink); }
-.decision button[aria-pressed="true"][data-value="agent"] { background: var(--fill-review); }
-.decision button[aria-pressed="true"][data-value="you"] { background: var(--sticky); color: var(--on-sticky); }
-.decision button[aria-pressed="true"][data-value="skip"] { background: var(--paper); color: var(--ink-soft); box-shadow: inset 0 0 0 1.5px var(--ink-soft); }
+.decision button[aria-pressed="true"][data-value="approve"] { background: var(--fill-ready); }
+.decision button[aria-pressed="true"][data-value="dismiss"] { background: var(--paper); color: var(--ink-soft); box-shadow: inset 0 0 0 1.5px var(--ink-soft); }
+.manual-chip { background: var(--sticky); color: var(--on-sticky); }
 .inline-decision { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin-top: 8px; padding: 4px 4px 4px 10px; border-radius: 10px; background: color-mix(in srgb, var(--paper) 78%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 14%, transparent); }
 .inline-decision .decision-text { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 14px; font-weight: 650; }
 .inline-decision .decision-text span { min-width: 0; }
 .inline-decision .decision-detail { font-weight: 400; color: var(--ink-soft); }
 .inline-decision .decision { margin-left: auto; }
-.inline-decision.skip .decision-text { color: var(--ink-soft); }
+.inline-decision.dismiss .decision-text { color: var(--ink-soft); text-decoration: line-through; }
+.inline-decision.approve { background: color-mix(in srgb, var(--fill-ready) 70%, white); }
 .decide-strip { margin-top: var(--space-5); }
 .decide-strip .inline-decision { margin-top: 0; min-height: 44px; background: var(--fill-review); box-shadow: none; }
 
@@ -143,7 +150,8 @@ select.small-select:hover { border-color: var(--ink); }
 .calendar-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-2) var(--space-4); margin: 0 0 var(--space-4); padding: 0; list-style: none; font-size: 14px; }
 .calendar-legend li { display: flex; align-items: center; gap: 6px; }
 .swatch { width: 12px; height: 12px; border-radius: 4px; background: var(--event-color); }
-.calendar-grid { --gutter: 52px; --day-gap: 8px; margin-inline: auto; max-width: calc(var(--gutter) + var(--day-count) * 380px); }
+/* A day column never gets narrower than --minimum-day-width; a narrow screen scrolls sideways instead. */
+.calendar-grid { --gutter: 52px; --day-gap: 8px; margin-inline: auto; min-width: calc(var(--gutter) + var(--day-count) * (var(--minimum-day-width) + var(--day-gap))); max-width: calc(var(--gutter) + var(--day-count) * 380px); }
 .calendar-days, .calendar-all-day, .calendar-body { display: grid; grid-template-columns: var(--gutter) repeat(var(--day-count), minmax(0, 1fr)); column-gap: var(--day-gap); }
 .calendar-day-head { display: flex; flex-direction: column; align-items: center; gap: 2px; padding-bottom: 6px; }
 .calendar-day-head .weekday { font-size: 13px; font-weight: 650; letter-spacing: 0.04em; color: var(--ink-soft); }
@@ -161,23 +169,23 @@ select.small-select:hover { border-color: var(--ink); }
 .day-track { position: relative; min-width: 0; }
 .day-track .hour-line { position: absolute; left: 0; right: 0; border-top: 1px solid color-mix(in srgb, var(--ink) 11%, transparent); }
 .day-track.past { background: color-mix(in srgb, var(--ink) 3%, transparent); border-radius: 6px; }
-.calendar-event { position: absolute; display: flex; flex-direction: column; justify-content: flex-start; text-align: left; overflow: hidden; padding: 3px 7px; border-radius: 6px; background: var(--event-color); color: var(--event-text); font-size: 14px; line-height: 1.25; box-shadow: 0 0 0 1.5px var(--paper); }
+.calendar-event { position: absolute; z-index: var(--stack, 1); display: flex; flex-direction: column; justify-content: flex-start; text-align: left; overflow: hidden; padding: 3px 7px; border-radius: 6px; background: var(--event-color); color: var(--event-text); font-size: 14px; line-height: 1.25; box-shadow: 0 0 0 1.5px var(--paper); }
 .calendar-event:hover { filter: brightness(0.95); }
 .calendar-event.busy { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--event-color) 45%, white) 0 6px, color-mix(in srgb, var(--event-color) 30%, white) 6px 12px); color: var(--ink); }
 /* Earlier days are history: greyed until the narration points at them. */
 .day-track.past .calendar-event:not(.is-target) { filter: grayscale(0.75); opacity: 0.65; }
 .calendar-event .event-title { font-weight: 650; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--title-lines, 1); overflow-wrap: anywhere; }
 .calendar-event .event-time { font: 400 12px var(--font-mono); white-space: nowrap; }
-.calendar-event.short { flex-direction: row; align-items: center; gap: 6px; padding-block: 0; }
-.calendar-event.narrow { font-size: 13px; padding-inline: 5px; }
-.calendar-event.narrow .event-time { display: none; }
-.calendar-event.tiny { font-size: 12px; line-height: 1; padding-inline: 6px; }
-.calendar-event.tiny .event-time { display: none; }
+.calendar-event.short { flex-direction: row; align-items: flex-start; gap: 6px; padding-block: 2px 0; }
+.calendar-event.short .event-title { flex: 0 1 auto; min-width: 0; white-space: nowrap; text-overflow: ellipsis; display: block; }
+.calendar-event.short .event-time { flex: none; padding-top: 1px; }
+.day-track.past .calendar-event.short .event-time { display: none; }
 .calendar-body { border-top: 1.5px solid color-mix(in srgb, var(--ink) 16%, transparent); }
-.now-line { position: absolute; left: -5px; right: 0; border-top: 2px solid var(--fail); z-index: 4; pointer-events: none; }
+.now-line { position: absolute; left: -5px; right: 0; border-top: 2px solid var(--fail); z-index: 20; pointer-events: none; }
 .now-line::before { content: ''; position: absolute; left: -1px; top: -7px; width: 12px; height: 12px; border-radius: 50%; background: var(--fail); }
-/* The popover sits on the calendar body, outside every day column, so dimming a column never reaches it. */
-.event-popover { position: absolute; z-index: 6; width: 270px; border-radius: 12px; padding: var(--space-3) var(--space-4); background: var(--paper); border: var(--border-width) solid var(--ink); box-shadow: var(--shadow-lifted); display: flex; flex-direction: column; gap: 6px; }
+/* The popover sits outside every day column, so dimming a column never reaches it, and is fixed to the
+   viewport beside its event, so the sheet edge never cuts it. */
+.event-popover { position: fixed; z-index: 40; width: 300px; max-width: calc(100vw - 16px); border-radius: 12px; padding: var(--space-3) var(--space-4); background: var(--paper); border: var(--border-width) solid var(--ink); box-shadow: var(--shadow-lifted); display: flex; flex-direction: column; gap: 6px; }
 .highlighting .event-popover[data-target] { opacity: 1; }
 .event-popover .head { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 650; color: var(--ink-soft); }
 .event-popover .head .actions { display: flex; margin-left: auto; margin-right: -8px; }
@@ -187,12 +195,20 @@ select.small-select:hover { border-color: var(--ink); }
 
 /* Work in flight: a Kanban board; the column says where an item stands, its fill says how it is doing. */
 .work-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-4); }
-.board { display: grid; grid-template-columns: var(--board-columns); gap: var(--space-3); align-items: start; }
+.board { position: relative; display: grid; grid-template-columns: var(--board-columns); gap: var(--space-3); align-items: start; }
 .board-column { border-radius: 14px; background: color-mix(in srgb, var(--brand) 7%, white); padding: 8px; min-height: 120px; }
 .board-column.empty { background: none; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ink) 14%, transparent); }
 .board-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; height: 26px; padding: 0 4px; margin-bottom: 8px; font-size: 14px; font-weight: 700; }
 .board-head .count { background: var(--paper); }
-.board-cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(170px, 100%), 1fr)); gap: var(--row-gap); }
+.board-cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(230px, 100%), 1fr)); gap: var(--row-gap); }
+/* A proposed move: a dashed ghost where the card would go and an arrow from the card to it. */
+.ghost-card { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 64px; border-radius: 10px; border: 2px dashed var(--brand-deep); background: color-mix(in srgb, var(--paper) 70%, transparent); font: 650 14px var(--font-mono); color: var(--brand-deep); }
+.ghost-card.approve { border-color: var(--done); color: color-mix(in srgb, var(--done) 70%, var(--ink)); background: var(--fill-merged); }
+.move-arrows { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 3; }
+.move-arrows path { fill: none; stroke: var(--brand-deep); stroke-width: 3; stroke-dasharray: 8 6; stroke-linecap: round; }
+.move-arrows path.approve { stroke: var(--done); stroke-dasharray: none; }
+.move-suggestion { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; font-size: 14px; font-weight: 700; color: var(--brand-deep); }
+.move-suggestion .reason { font-weight: 400; color: var(--ink-soft); }
 .work-card { display: flex; flex-direction: column; gap: 4px; padding: 8px 6px 4px 10px; border-radius: 10px; background: var(--state-fill); box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 12%, transparent); }
 .work-card .card-project { display: flex; align-items: center; gap: 5px; font: 500 12px var(--font-mono); color: var(--ink-soft); min-width: 0; }
 .work-card .card-project span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -209,16 +225,28 @@ select.small-select:hover { border-color: var(--ink); }
 .work-card .linked { display: flex; flex-wrap: wrap; gap: 4px; }
 .link-chip { text-decoration: none; color: var(--ink); font: 600 12px/20px var(--font-mono); padding: 0 7px; background: var(--state-fill); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 22%, transparent); }
 .link-chip:hover { box-shadow: inset 0 0 0 1.5px var(--ink); }
-.work-card .move { display: flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 650; }
-.work-card .move .reason { font-weight: 400; color: var(--ink-soft); }
 .work-card .inline-decision { padding: 4px; gap: 4px; }
 .work-card .inline-decision .decision-text { font-size: 13px; padding-left: 4px; }
 .quiet-toggle { display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-5); font-size: 15px; }
 
-/* Overnight runs. */
-.run { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto auto 34px; gap: var(--space-3); align-items: center; min-height: 52px; padding: 6px 6px 6px 14px; border-radius: 12px; background: var(--fill-merged); }
-.run.fail { background: var(--fill-failing); }
-.run.check { background: var(--fill-progress); }
+/* Project groups: a collapsible section tinted in the project's colour, shared by overnight runs and
+   action points. */
+.project-group { border-radius: 14px; background: color-mix(in srgb, var(--project-color) 13%, white); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--project-color) 45%, white); }
+.project-group + .project-group { margin-top: var(--space-4); }
+.project-head { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; padding: 6px 8px 6px 10px; border-radius: 14px 14px 0 0; background: var(--project-color); color: var(--project-text); font: 600 18px var(--font-head); list-style: none; cursor: pointer; }
+.project-head::-webkit-details-marker { display: none; }
+.project-head > svg { transition: transform var(--duration-normal) var(--ease-spring); }
+details.project-group[open] > .project-head > svg { transform: rotate(90deg); }
+details.project-group:not([open]) > .project-head { border-radius: 14px; }
+.project-head .project-count { font: 500 13px var(--font-mono); opacity: 0.85; }
+.project-body { padding: var(--space-2); }
+
+/* Overnight runs: the result word leads, coloured by outcome, so the state reads at a glance. */
+.run { display: grid; grid-template-columns: minmax(110px, max-content) minmax(0, 1fr) auto auto 34px; gap: var(--space-3); align-items: center; min-height: 52px; padding: 6px 6px 6px 14px; border-radius: 12px; background: var(--paper); }
+.result { font-size: 15px; font-weight: 800; letter-spacing: 0.01em; }
+.result.ok { color: color-mix(in srgb, var(--done) 80%, black); }
+.result.fail { color: color-mix(in srgb, var(--fail) 85%, black); }
+.result.partial, .result.check { color: color-mix(in srgb, var(--warn) 60%, black); }
 .run .title { font-weight: 650; }
 .run .detail { font-size: 14px; }
 .run .mono { font-size: 14px; }
@@ -248,6 +276,14 @@ select.small-select:hover { border-color: var(--ink); }
 .handled-list li { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 14px; background: var(--paper); border-radius: 8px; padding: 2px 4px 2px 10px; }
 .handled-list li > span:nth-child(2) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+/* Account panels: personal left, work right; the one not being narrated dims. */
+.account-panels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); align-items: start; }
+.account-panel { transition: opacity var(--duration-slow) var(--ease-standard), filter var(--duration-slow) var(--ease-standard); }
+.account-panel.dimmed { opacity: 0.4; filter: grayscale(0.6); }
+.panel-head { display: flex; align-items: center; gap: 8px; margin: 0 0 var(--space-2); font: 600 18px var(--font-head); }
+.panel-head .count { font-family: var(--font-mono); }
+.account-panel .mail-row { grid-template-columns: minmax(0, 1fr) auto 34px; }
+
 /* Gmail rows. */
 .gmail { list-style: none; margin: 0; padding: 4px; border-radius: 14px; background: color-mix(in srgb, var(--ink) 4%, white); display: flex; flex-direction: column; gap: var(--row-gap); }
 .mail-row { display: grid; grid-template-columns: 76px minmax(0, 1fr) auto 34px; gap: var(--space-3); align-items: center; min-height: 58px; padding: 6px 6px 6px 12px; border-radius: 10px; background: var(--paper); }
@@ -255,12 +291,9 @@ select.small-select:hover { border-color: var(--ink); }
 .mail-row .from-line { display: flex; gap: 8px; align-items: baseline; }
 .mail-row .from { font-size: 16px; }
 .mail-row.unread .from, .mail-row.unread .subject { font-weight: 700; }
-.mail-row .subject-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 15px; }
+.mail-row .subject-line { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: 15px; }
 .mail-row .snippet { color: var(--ink-soft); }
 .mail-row .date { font: 500 13px var(--font-mono); }
-.account-chip { justify-self: start; }
-.account-chip.work { background: var(--fill-review); }
-.account-chip.personal { background: var(--fill-ready); }
 .action-chip { background: var(--fill-draft); }
 .action-chip.act { background: var(--fill-progress); }
 .notifications { display: flex; gap: var(--space-3); flex-wrap: wrap; align-items: center; }
@@ -300,13 +333,14 @@ select.small-select:hover { border-color: var(--ink); }
 .diff .line { white-space: pre-wrap; padding: 0 6px; border-radius: 4px; }
 .diff .line.plus { background: var(--fill-ready); }
 .diff .line.minus { background: var(--fill-failing); }
-.retro-item.skip { background: color-mix(in srgb, var(--ink) 4%, white); }
-.retro-item.skip .title { color: var(--ink-soft); }
+.retro-item.dismiss { background: color-mix(in srgb, var(--ink) 4%, white); }
+.retro-item.dismiss .title { color: var(--ink-soft); }
 .head-decision { display: flex; border-radius: 11px; }
 .session-line { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 10px; background: var(--paper); font-size: 14px; }
 .session-line .prompt { font: 400 13px var(--font-mono); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* Instructions. */
+/* Instructions: global first, then project instructions, then skills. */
+.change-section + .change-section { margin-top: var(--space-5); }
 .change { display: grid; grid-template-columns: minmax(0, 1fr) auto 34px; gap: var(--space-3); align-items: center; padding: 8px 6px 8px 14px; border-radius: 12px; }
 .change.final { background: var(--fill-ready); }
 .change.watch { background: var(--fill-progress); }
@@ -321,29 +355,41 @@ select.small-select:hover { border-color: var(--ink); }
 .state-chips .chip.no { background: color-mix(in srgb, var(--paper) 55%, transparent); box-shadow: inset 0 0 0 1.5px var(--ink); }
 
 /* AI news. */
-.news-item { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: var(--space-3); align-items: center; padding: 10px 6px 10px 14px; border-radius: 12px; background: var(--fill-draft); }
-.news-item .title { font-weight: 650; font-size: 16px; }
-.news-item .summary { font-size: 15px; }
+.news-item { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: var(--space-3); align-items: start; padding: 12px 6px 12px 14px; border-radius: 12px; background: var(--fill-draft); }
+.news-item > svg { margin-top: 2px; }
+.news-item .title { display: inline-flex; align-items: center; gap: 6px; font: 600 19px/1.25 var(--font-head); color: var(--ink); text-decoration: none; border-radius: var(--radius-button); }
+.news-item .title:hover { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.news-item .summary { font-size: 16px; font-weight: 600; margin-top: 2px; }
+.news-more { margin-top: 6px; }
+.news-more summary { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px; font-weight: 650; color: var(--ink-soft); list-style: none; border-radius: var(--radius-button); }
+.news-more summary::-webkit-details-marker { display: none; }
+.news-more summary svg { transition: transform var(--duration-normal) var(--ease-spring); }
+.news-more[open] summary svg { transform: rotate(90deg); }
+.news-more ul { margin: 6px 0 0; padding-left: 20px; font-size: 15px; display: flex; flex-direction: column; gap: 3px; }
+.news-more .why { margin: 8px 0 0; padding: 6px 10px; border-radius: 8px; background: var(--paper); font-size: 15px; }
 .news-item .meta { font: 400 13px var(--font-mono); color: var(--ink-soft); }
 .news-item .side { display: flex; align-items: center; gap: 2px; }
 .vote[aria-pressed="true"].up { background: var(--fill-ready); box-shadow: inset 0 0 0 1.5px var(--ink); }
 .vote[aria-pressed="true"].down { background: var(--fill-failing); box-shadow: inset 0 0 0 1.5px var(--ink); }
 
-/* Action points. */
-/* Action points: the fill says who does it, so a skipped point reads as skipped, not as done. */
-.action-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--row-gap); }
-.action { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; column-gap: 10px; row-gap: 2px; align-items: center; padding: 7px 7px 7px 8px; border-radius: 12px; background: var(--paper); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ink) 14%, transparent); }
-.action > .source-app { grid-row: 1 / 3; align-self: start; display: flex; }
+/* Action points: one per line, grouped by project; the head of each group decides the follow-up agents. */
+.action-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.action { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; column-gap: 10px; align-items: center; padding: 7px 7px 7px 8px; border-radius: 12px; background: var(--paper); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ink) 10%, transparent); }
+.action > .source-app { align-self: start; display: flex; }
 .action .icon-link { width: 30px; height: 30px; }
-.action .text, .action .detail { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.action .meta-line { grid-column: 2 / -1; display: flex; align-items: center; gap: 8px; min-width: 0; }
-.action .from { margin-left: auto; }
-.action.agent { background: color-mix(in srgb, var(--fill-review) 55%, white); }
-.action.you { background: color-mix(in srgb, var(--sticky) 22%, white); }
-.action.skip { background: color-mix(in srgb, var(--ink) 3%, white); }
-.action.skip .text, .action.skip .detail { color: var(--ink-soft); }
-.action .text { font-size: 16px; font-weight: 650; }
-.action .detail { flex: 1; font-size: 14px; color: var(--ink-soft); }
+.action .body { min-width: 0; }
+.action .text { font-size: 16px; font-weight: 650; line-height: 1.3; }
+.action .detail { font-size: 14px; color: var(--ink-soft); line-height: 1.35; }
+.action .side { display: flex; align-items: center; gap: 8px; }
+.action.approve { background: color-mix(in srgb, var(--fill-ready) 65%, white); }
+.action.dismiss { background: color-mix(in srgb, var(--ink) 3%, white); }
+.action.dismiss .text { color: var(--ink-soft); text-decoration: line-through; }
+.action .manual-chip { margin-left: 6px; vertical-align: 2px; }
+.project-head .spawn { margin-left: auto; font: 400 14px var(--font-body); }
+.project-head .segmented { background: color-mix(in srgb, var(--paper) 55%, transparent); }
+.project-head .segmented button { color: var(--ink); }
+.project-head .approve-all { padding: 5px 12px; border-radius: var(--radius-button); background: var(--paper); color: var(--ink); font: 650 14px var(--font-body); box-shadow: inset 0 0 0 1.5px var(--ink); }
+.project-head .approve-all:hover { background: var(--fill-ready); }
 .action .from { font-size: 13px; font-weight: 600; color: var(--ink-soft); background: none; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 20%, transparent); }
 .action .from:hover { color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--ink); }
 .save-area { display: flex; justify-content: flex-end; align-items: center; gap: var(--space-4); margin-top: var(--space-3); }
@@ -355,7 +401,7 @@ select.small-select:hover { border-color: var(--ink); }
 .quiet-slide .detail { font: 400 15px var(--font-body); color: var(--ink-soft); }
 
 /* Transport: a floating pill at the bottom centre. */
-.transport { position: fixed; left: var(--column-left); bottom: var(--space-5); z-index: 20; display: flex; align-items: center; gap: 4px; height: var(--transport-height); padding: 0 12px 0 10px; border-radius: 999px; background: var(--paper); border: var(--border-width) solid var(--ink); box-shadow: var(--shadow-ordinary); width: var(--column-width); }
+.transport { position: fixed; left: calc(var(--column-left) + (var(--column-width) - var(--transport-width)) / 2); bottom: var(--space-5); z-index: 20; display: flex; align-items: center; gap: 4px; height: var(--transport-height); padding: 0 12px 0 10px; border-radius: 999px; background: var(--paper); border: var(--border-width) solid var(--ink); box-shadow: var(--shadow-ordinary); width: var(--transport-width); }
 .control { display: inline-grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; color: var(--ink); transition: transform var(--duration-normal) var(--ease-spring), background var(--duration-fast); }
 .control:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 9%, transparent); transform: translateY(-2px); }
 .control:active:not(:disabled) { transform: translateY(1px); }
@@ -385,6 +431,10 @@ select.small-select:hover { border-color: var(--ink); }
 	.outline::before { left: 21px; }
 	.rail-date .date { font-size: 15px; text-align: center; }
 }
+/* Two account panels need room for a readable row each; narrower screens stack them. */
+@media (max-width: 999px) {
+	.account-panels { grid-template-columns: minmax(0, 1fr); }
+}
 /* Below 760 the rail becomes a top strip and the page scrolls. */
 @media (max-width: 759px) {
 	body { overflow: auto; }
@@ -401,11 +451,13 @@ select.small-select:hover { border-color: var(--ink); }
 	.capture, .change, .news-item { grid-template-columns: minmax(0, 1fr) auto; }
 	.board { grid-template-columns: minmax(0, 1fr); }
 	.board-column.empty { display: none; }
-	.action-grid { grid-template-columns: minmax(0, 1fr); }
+	.action { grid-template-columns: 30px minmax(0, 1fr); }
+	.action .side { grid-column: 2; flex-wrap: wrap; margin-top: 6px; }
+	.project-head { flex-wrap: wrap; }
 	.mail-row { grid-template-columns: minmax(0, 1fr) auto auto; }
-	.mail-row .account-chip, .capture .box, .news-item > svg, .run > svg:first-child, .run .duration, .time { display: none; }
+	.capture .box, .news-item > svg, .run .mono, .time { display: none; }
 	.capture .selects { grid-column: 1 / -1; flex-wrap: wrap; }
-	.run { grid-template-columns: minmax(0, 1fr) auto 34px; }
+	.run { grid-template-columns: auto minmax(0, 1fr) 34px; }
 	.state-chips { flex-direction: row; grid-column: 1 / -1; grid-row: 2; }
 	.event-popover { position: static; width: auto; margin-top: var(--space-3); }
 }
@@ -524,46 +576,77 @@ const chapterOfType = (type) => chapters.find((chapter) => chapter.type === type
 const sourceProblems = (chapter) => (brief.sources ?? []).filter((source) => source.status !== 'ok' && source.chapters?.includes(chapter.id));
 const problemText = (problems) => problems.map((source) => `${source.name}: ${source.reason ?? source.status}`).join('; ');
 
-/* Choices live in memory and download as choices.json from the action points. Each action point
-   holds one decision (agent, you, skip), shared by its control on the source slide and at the end. */
+/* Projects carry a colour (brief.projects); one missing from the list gets a stable one from the palette. */
+const PROJECT_PALETTE = ['#5b8def', '#e07a5f', '#81b29a', '#9b72cf', '#f2cc8f', '#3d9ad1', '#d4a5a5'];
+const projectOf = (id) => {
+	const known = (brief.projects ?? []).find((project) => project.id === id);
+	const color = known?.color ?? PROJECT_PALETTE[[...String(id)].reduce((sum, character) => sum + character.charCodeAt(0), 0) % PROJECT_PALETTE.length];
+	return { id, name: known?.name ?? id ?? 'Other', color };
+};
+const projectStyle = (project) => `--project-color:${escapeHtml(project.color)};--project-text:${textOn(project.color)}`;
+// Groups items by their project in first-seen order.
+function byProject(items) {
+	const groups = new Map();
+	for (const item of items) {
+		const id = item.project ?? 'other';
+		if (!groups.has(id)) groups.set(id, { project: projectOf(id), items: [] });
+		groups.get(id).items.push(item);
+	}
+	return [...groups.values()];
+}
+
+/* Choices live in memory and download as choices.json from the action points. Each action point is
+   open until approved or dismissed, on its source slide or at the end. Approved agent points of one
+   project go to the follow-up agents its spawn choice sets: one for the project, one per point, or none. */
 const actionItems = chapterOfType('actions')?.data?.items ?? [];
-const choices = { news: {}, triage: {}, decisions: {}, autoHandled: {} };
+const choices = { news: {}, triage: {}, decisions: {}, autoHandled: {}, spawn: {} };
 for (const group of chapterOfType('triage')?.data?.groups ?? []) for (const item of group.items) choices.triage[item.id] = { project: item.project ?? '', heading: item.heading ?? '', priority: item.priority ?? '' };
-for (const item of actionItems) choices.decisions[item.id] = item.handoff === 'agent' && item.agent !== false ? 'agent' : 'you';
 for (const item of chapterOfType('work')?.data?.autoHandled ?? []) choices.autoHandled[item.id] = true;
+for (const group of byProject(actionItems)) choices.spawn[group.project.id] = 'one';
+const isManual = (item) => item.agent === false;
+const approvedAgentPoints = (items) => items.filter((item) => !isManual(item) && choices.decisions[item.id] === 'approve');
 function exportedChoices() {
 	const retroItems = chapterOfType('retro')?.data?.items ?? [];
 	return {
 		date: brief.date,
 		exported: new Date().toISOString(),
 		actions: actionItems.map((item) => ({
-			id: item.id, text: item.text, chapter: item.chapter, source: item.source, url: item.url, decision: choices.decisions[item.id],
+			id: item.id, text: item.text, project: item.project, chapter: item.chapter, source: item.source, url: item.url,
+			manual: isManual(item), decision: choices.decisions[item.id] ?? 'open',
 			session: retroItems.find((retroItem) => `retro-${retroItem.id}` === item.source)?.session,
 		})),
+		agents: byProject(actionItems).map(({ project, items }) => ({ project: project.id, spawn: choices.spawn[project.id], actions: approvedAgentPoints(items).map((item) => item.id) }))
+			.filter((group) => group.actions.length && group.spawn !== 'none'),
 		triage: (chapterOfType('triage')?.data?.groups ?? []).flatMap((group) => group.items.map((item) => ({ id: item.id, note: group.note, text: item.text, ...choices.triage[item.id] }))),
 		news: (chapterOfType('news')?.data?.items ?? []).filter((item) => choices.news[item.id]).map((item) => ({ id: item.id, title: item.title, url: item.url, vote: choices.news[item.id] })),
 		autoHandled: (chapterOfType('work')?.data?.autoHandled ?? []).map((item) => ({ id: item.id, text: item.text, proposal: item.proposal, enabled: choices.autoHandled[item.id] })),
 	};
 }
+function agentCount() {
+	return byProject(actionItems).reduce((total, { project, items }) => {
+		const approved = approvedAgentPoints(items).length;
+		return total + (choices.spawn[project.id] === 'none' ? 0 : choices.spawn[project.id] === 'each' ? approved : Math.min(approved, 1));
+	}, 0);
+}
 function choiceSummary() {
-	const decided = Object.values(choices.decisions);
-	const count = (value) => decided.filter((decision) => decision === value).length;
+	const count = (value) => actionItems.filter((item) => (choices.decisions[item.id] ?? 'open') === value).length;
 	const votes = Object.values(choices.news).filter(Boolean).length;
-	return [`${count('agent')} for the agent`, `${count('you')} for you`, `${count('skip')} skipped`, votes && `${votes} news vote${votes === 1 ? '' : 's'}`].filter(Boolean).join(' · ');
+	const agents = agentCount();
+	return [`${count('approve')} approved`, `${count('dismiss')} dismissed`, `${count('open')} open`, `${agents} agent${agents === 1 ? '' : 's'} to start`, votes && `${votes} news vote${votes === 1 ? '' : 's'}`].filter(Boolean).join(' · ');
 }
 
-const DECISION_LABELS = { agent: 'Agent', you: 'Me', skip: 'Skip' };
+const DECISION_LABELS = { approve: 'Approve', dismiss: 'Dismiss' };
 function decisionControl(item) {
-	const values = item.agent === false ? ['you', 'skip'] : ['agent', 'you', 'skip'];
-	return `<span class="decision" role="group" aria-label="${escapeHtml(`Who does it: ${item.text}`)}">${values.map((value) => `<button type="button" data-decide="${escapeHtml(item.id)}" data-value="${value}" aria-pressed="${choices.decisions[item.id] === value}">${DECISION_LABELS[value]}</button>`).join('')}</span>`;
+	return `<span class="decision" role="group" aria-label="${escapeHtml(`Decide: ${item.text}`)}">${Object.entries(DECISION_LABELS).map(([value, label]) => `<button type="button" data-decide="${escapeHtml(item.id)}" data-value="${value}" aria-pressed="${choices.decisions[item.id] === value}">${label}</button>`).join('')}</span>`;
 }
+const manualChip = (item) => isManual(item) ? `<span class="chip manual-chip" title="${escapeHtml(item.why ?? 'Only you can do this')}">Manual</span>` : '';
 // Renderers place a point's control beside its source; points without a source gather at the chapter's
 // foot. A source hidden by the scope switch keeps its control hidden too.
 const placedDecisions = new Set();
 function decisionRow(item, withDetail = false) {
 	placedDecisions.add(item.id);
-	return `<div class="inline-decision ${choices.decisions[item.id]}" ${target(item.id)}>
-		<span class="decision-text">${icon('checklist', 16)}<span>${escapeHtml(item.text)}${withDetail && item.detail ? ` <span class="decision-detail">· ${escapeHtml(item.detail)}</span>` : ''}</span></span>
+	return `<div class="inline-decision ${choices.decisions[item.id] ?? 'open'}" ${target(item.id)}>
+		<span class="decision-text">${icon('checklist', 16)}<span>${escapeHtml(item.text)}${manualChip(item)}${withDetail && item.detail ? ` <span class="decision-detail">· ${escapeHtml(item.detail)}</span>` : ''}</span></span>
 		${decisionControl(item)}
 	</div>`;
 }
@@ -626,22 +709,44 @@ function textOn(hex) {
 
 /* Boards shared by merge requests and issues: a scope switch and Kanban columns of cards. */
 const SCOPE_ICONS = { work: 'gitlab', personal: 'github' };
-// A chapter split by scope opens on work and keeps the scope a beat or a click chose.
+// A chapter split by scope opens on personal, the order the narration follows, and keeps the scope a
+// beat or a click chose.
 function settleScope(chapter, scopes) {
-	if (!scopes.includes(chapter.scope)) chapter.scope = scopes.includes('work') ? 'work' : scopes[0];
+	if (!scopes.includes(chapter.scope)) chapter.scope = scopes.includes('personal') ? 'personal' : scopes[0];
 }
 function scopeSwitch(chapter, scopes, countOf, iconOf = (scope) => SCOPE_ICONS[scope]) {
 	if (scopes.length < 2) return '';
 	return `<div class="work-top"><div class="segmented" role="group" aria-label="Scope">${scopes.map((scope) => `<button type="button" data-scope="${escapeHtml(scope)}" aria-pressed="${scope === chapter.scope}">${icon(iconOf(scope) ?? 'terminal', 16)}${escapeHtml(scope[0].toUpperCase() + scope.slice(1))} <span class="mono">${countOf(scope)}</span></button>`).join('')}</div></div>`;
 }
+/* Chapters ask for the sheet width they need; the sheet animates to it and back to the reading width. */
+const READING_WIDTH = 960;
+// Padding, border and the body's vertical scrollbar.
+const SHEET_CHROME_WIDTH = 2 * 24 + 2 * 3 + 16;
+let requestedWidth = READING_WIDTH;
+const requestWidth = (contentWidth) => { requestedWidth = Math.max(READING_WIDTH, Math.ceil(contentWidth + SHEET_CHROME_WIDTH)); };
+function availableContentWidth() {
+	const style = getComputedStyle(byId('app'));
+	return innerWidth - parseFloat(style.getPropertyValue('--rail-width')) - 2 * parseFloat(style.getPropertyValue('--space-6')) - SHEET_CHROME_WIDTH;
+}
+const BUSY_COLUMN_WIDTH = 250;
+const EMPTY_COLUMN_WIDTH = 104;
+const BOARD_GAP = 12;
 function board(columns, targetPrefix) {
-	// Busy columns widen and wrap their cards in pairs; empty ones stay narrow but keep their place.
-	const tracks = columns.map(({ cards }) => cards.length ? `minmax(0, ${Math.min(3, Math.ceil(cards.length / 2))}fr)` : 'minmax(84px, 0.5fr)').join(' ');
-	return `<div class="board" style="--board-columns:${tracks}">${columns.map(({ id, name, cards }) => `
+	// A busy column never gets narrower than one readable card and takes a second card track when long
+	// and the window has room for it; empty ones stay narrow but keep their place. The sheet widens to
+	// fit, or the board scrolls sideways.
+	const widths = columns.map(({ cards }) => cards.length ? BUSY_COLUMN_WIDTH : EMPTY_COLUMN_WIDTH);
+	const total = () => widths.reduce((sum, width) => sum + width, 0) + BOARD_GAP * (columns.length - 1);
+	const longest = columns.map((column, index) => index).filter((index) => columns[index].cards.length > 4).sort((left, right) => columns[right].cards.length - columns[left].cards.length);
+	for (const index of longest) if (total() + BUSY_COLUMN_WIDTH <= availableContentWidth()) widths[index] += BUSY_COLUMN_WIDTH;
+	requestWidth(total());
+	const tracks = columns.map(({ cards }, index) => cards.length ? `minmax(${widths[index]}px, ${widths[index]}fr)` : `minmax(${EMPTY_COLUMN_WIDTH}px, 0.4fr)`).join(' ');
+	return `<div class="board" style="--board-columns:${tracks}">${columns.map(({ id, name, cards, count = cards.length }) => `
 		<section class="board-column ${cards.length ? '' : 'empty'}" ${target(`${targetPrefix}-${id}`)} aria-label="${escapeHtml(name)}">
-			<div class="board-head"><span>${escapeHtml(name)}</span>${cards.length ? `<span class="count">${cards.length}</span>` : ''}</div>
+			<div class="board-head"><span>${escapeHtml(name)}</span>${count ? `<span class="count">${count}</span>` : ''}</div>
 			<ul class="board-cards">${cards.join('')}</ul>
 		</section>`).join('')}
+		<svg class="move-arrows" aria-hidden="true"></svg>
 	</div>`;
 }
 const slug = (text) => String(text).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -665,38 +770,62 @@ const RENDERERS = {
 		const decisionStripHeight = actionItems.filter((item) => item.chapter === chapter.id && !item.source).length * 64;
 		const chromeHeight = 150 + (allDayEvents.length ? 40 : 0) + decisionStripHeight;
 		const hourHeight = Math.max(26, Math.min(48, Math.floor((stage.clientHeight - chromeHeight) / (lastHour - firstHour))));
-		const minimumBlockHeight = 16;
-		const trackHeight = (lastHour - firstHour) * hourHeight;
 		const hours = Array.from({ length: lastHour - firstHour + 1 }, (_, index) => firstHour + index);
 		const eventTitle = (event) => event.busyOnly ? 'Busy' : event.title;
 		const focusIndex = Math.max(0, days.findIndex((day) => day.focus));
-		const topOf = (event) => (minutesOf(event.start) / 60 - firstHour) * hourHeight;
+		const pixelsAt = (time) => (minutesOf(time) / 60 - firstHour) * hourHeight;
+		// The sheet widens until every day gets a comfortable column; the grid's minimum day width holds below that.
+		const COMFORTABLE_DAY_WIDTH = 200;
+		const MINIMUM_DAY_WIDTH = 160;
+		requestWidth(52 + days.length * (COMFORTABLE_DAY_WIDTH + 8));
+
+		/* Overlapping events cascade instead of splitting the column: each later one is indented a step and
+		   drawn on top, so every block keeps nearly the full day width. A title row never hides under another:
+		   an event starting within a title row of an earlier one moves down below it, even if its drawn time
+		   is then a little late. */
+		const TITLE_ROW = 21;
+		const READABLE_WIDTH = 112;
+		const layoutDay = (dayEvents) => {
+			const placed = [];
+			for (const event of dayEvents) {
+				let top = pixelsAt(event.start);
+				for (const other of placed) if (top < other.top + TITLE_ROW && top > other.top - TITLE_ROW) top = other.top + TITLE_ROW;
+				const bottom = Math.max(pixelsAt(event.end), top + TITLE_ROW);
+				placed.push({ event, top, bottom, shifted: top > pixelsAt(event.start) + 1 });
+			}
+			const laneBottoms = [];
+			for (const block of placed) {
+				let lane = laneBottoms.findIndex((bottom) => bottom <= block.top);
+				if (lane < 0) { lane = laneBottoms.length; laneBottoms.push(0); }
+				laneBottoms[lane] = block.bottom;
+				block.lane = lane;
+			}
+			const indent = Math.min(22, (MINIMUM_DAY_WIDTH - READABLE_WIDTH) / Math.max(1, laneBottoms.length - 1));
+			for (const block of placed) {
+				block.left = block.lane * indent;
+				// Text shows down to where the next block drawn over this one begins.
+				const coveredFrom = Math.min(...placed.filter((other) => other.top > block.top && other.top < block.bottom).map((other) => other.top));
+				block.textHeight = Math.min(block.bottom, coveredFrom) - block.top;
+			}
+			return placed;
+		};
+		const dayLayouts = new Map(days.map((day) => [day.id, layoutDay(timed.filter((event) => event.day === day.id)
+			.sort((left, right) => minutesOf(left.start) - minutesOf(right.start) || minutesOf(right.end) - minutesOf(left.end)))]));
+		const trackHeight = Math.max((lastHour - firstHour) * hourHeight, ...[...dayLayouts.values()].flat().map((block) => block.bottom + 2));
 
 		const dayColumn = (day, dayIndex) => {
 			const past = dayIndex < focusIndex;
-			const dayEvents = timed.filter((event) => event.day === day.id).sort((left, right) => minutesOf(left.start) - minutesOf(right.start) || minutesOf(right.end) - minutesOf(left.end));
-			// Lanes follow the drawn extent, so a short block stretched to the minimum height never covers the next one.
-			const drawnEnd = (event) => Math.max(minutesOf(event.end), minutesOf(event.start) + (minimumBlockHeight + 1) / hourHeight * 60);
-			const laneEnds = [];
-			for (const event of dayEvents) {
-				let lane = laneEnds.findIndex((end) => end <= minutesOf(event.start));
-				if (lane < 0) { lane = laneEnds.length; laneEnds.push(0); }
-				laneEnds[lane] = drawnEnd(event);
-				event.lane = lane;
-			}
-			const blocks = dayEvents.map((event) => {
-				const overlapping = dayEvents.filter((other) => minutesOf(other.start) < drawnEnd(event) && drawnEnd(other) > minutesOf(event.start));
-				const laneCount = Math.max(...overlapping.map((other) => other.lane)) + 1;
-				const height = Math.max((minutesOf(event.end) - minutesOf(event.start)) / 60 * hourHeight - 3, minimumBlockHeight);
-				const width = 100 / laneCount;
-				const classes = ['calendar-event', event.busyOnly && 'busy', height < 40 && 'short', height < 22 && 'tiny', laneCount > 1 && 'narrow', event.id === chapter.selected && 'selected'].filter(Boolean).join(' ');
+			const blocks = dayLayouts.get(day.id).map(({ event, top, bottom, left, textHeight, shifted }, order) => {
+				const height = bottom - top - 2;
+				const short = textHeight < 40;
+				const classes = ['calendar-event', event.busyOnly && 'busy', short && 'short', shifted && 'shifted', event.id === chapter.selected && 'selected'].filter(Boolean).join(' ');
 				const label = `${eventTitle(event)}, ${event.start} to ${event.end}`;
-				// Tall blocks wrap the title over the lines that fit above the time.
-				const titleLines = height < 40 ? 1 : Math.max(1, Math.floor((height - 24) / 18));
+				// Tall blocks wrap the title over the lines that stay uncovered above the time.
+				const titleLines = short ? 1 : Math.max(1, Math.floor((textHeight - 24) / 18));
 				return `<button class="${classes}" type="button" data-event="${escapeHtml(event.id)}" ${target(`event-${event.id}`)}
 					aria-label="${escapeHtml(label)}" aria-pressed="${event.id === chapter.selected}" title="${escapeHtml(label)}"
-					style="${eventStyle(event)};--title-lines:${titleLines};top:${topOf(event) + 1}px;height:${height}px;left:calc(${event.lane * width}% + 2px);width:calc(${width}% - 4px)">
-					<span class="event-title">${escapeHtml(eventTitle(event))}</span><span class="event-time">${escapeHtml(event.start)}${height < 40 ? '' : `–${escapeHtml(event.end)}`}</span>
+					style="${eventStyle(event)};--title-lines:${titleLines};--stack:${order + 1};top:${top + 1}px;height:${height}px;left:${left + 2}px;width:calc(100% - ${left + 4}px)">
+					<span class="event-title">${escapeHtml(eventTitle(event))}</span><span class="event-time">${escapeHtml(event.start)}${short ? '' : `–${escapeHtml(event.end)}`}</span>
 				</button>`;
 			}).join('');
 			const nowLine = day.focus && nowHours !== undefined && nowHours >= firstHour && nowHours <= lastHour
@@ -706,15 +835,9 @@ const RENDERERS = {
 
 		const selected = timed.find((event) => event.id === chapter.selected && days.some((day) => day.id === event.day));
 		const popover = selected ? (() => {
-			const dayIndex = days.findIndex((day) => day.id === selected.day);
-			const day = days[dayIndex];
-			// Day column edges in the calendar body grid: gutter, then equal columns separated by the day gap.
-			const columnWidth = `((100% - var(--gutter) - ${days.length} * var(--day-gap)) / ${days.length})`;
-			const columnLeft = `(var(--gutter) + var(--day-gap) + ${dayIndex} * (${columnWidth} + var(--day-gap)))`;
-			const side = dayIndex < days.length - 1 ? `left:calc(${columnLeft} + ${columnWidth} + 10px)` : `right:calc(100% - ${columnLeft} + 10px)`;
-			const top = Math.max(0, Math.min(topOf(selected), trackHeight - 170)) + 10;
+			const day = days.find((item) => item.id === selected.day);
 			return `
-			<aside class="event-popover" ${target('event-detail')} style="${side};top:${top}px" aria-label="Selected event">
+			<aside class="event-popover" ${target('event-detail')} data-anchor="${escapeHtml(selected.id)}" aria-label="Selected event">
 				<div class="head"><span class="swatch" style="--event-color:${escapeHtml(colorOf(selected))}"></span>${escapeHtml(calendars.get(selected.calendarId)?.name ?? '')}
 					<span class="actions">${iconLink(selected.url, 'Open in Google Calendar')}<button class="icon-link" type="button" data-action="close-event" aria-label="Close event" title="Close event">${icon('cross', 18)}</button></span></div>
 				<h2>${escapeHtml(eventTitle(selected))}</h2>
@@ -725,7 +848,7 @@ const RENDERERS = {
 
 		return `
 			<ul class="calendar-legend">${[...calendars.values()].map((calendar) => `<li><span class="swatch" style="--event-color:${escapeHtml(calendar.color)}"></span>${escapeHtml(calendar.name)}${calendar.busyOnly ? ' <span class="mono" style="color:var(--ink-soft);font-size:13px">busy only</span>' : ''}</li>`).join('')}</ul>
-			<div class="calendar-grid" style="--day-count:${days.length}">
+			<div class="calendar-grid" style="--day-count:${days.length};--minimum-day-width:${MINIMUM_DAY_WIDTH}px">
 				<div class="calendar-days"><span></span>${days.map((day, index) => `<div class="calendar-day-head ${day.focus ? 'focus' : ''} ${index < focusIndex ? 'past' : ''}"><span class="weekday">${escapeHtml(day.label)}</span><span class="date">${escapeHtml(day.date)}</span></div>`).join('')}</div>
 				${allDayEvents.length ? `<div class="calendar-all-day"><span class="label">all day</span>${days.map((day) => `<div class="all-day-cell">${allDayEvents.filter((event) => event.day === day.id).map((event) => `<button class="all-day-chip" type="button" data-event="${escapeHtml(event.id)}" ${target(`event-${event.id}`)} style="${eventStyle(event)}" title="${escapeHtml(event.title)}">${escapeHtml(event.title)}</button>`).join('')}</div>`).join('')}</div>` : ''}
 				<div class="calendar-body">
@@ -793,36 +916,47 @@ const RENDERERS = {
 			const attributes = `class="chip link-chip" style="--state-fill:${STATE_FILLS[link.state] ?? 'var(--paper)'}" title="${escapeHtml(`${link.ref}: ${stateNames[link.state] ?? link.state ?? ''}`)}"`;
 			return href ? `<a ${attributes} href="${escapeHtml(href)}" target="_blank" rel="noopener">${escapeHtml(link.ref)}</a>` : `<span ${attributes}>${escapeHtml(link.ref)}</span>`;
 		};
-		const issueCard = (issue) => {
-			const decision = inlineDecision(`issue-${issue.id}`);
-			return `
-			<li class="work-card" ${target(`issue-${issue.id}`)} style="--state-fill:${issue.move ? 'var(--fill-progress)' : 'var(--paper)'}">
+		// A proposed move is decided by the point whose source is the issue; a dismissed one drops its ghost and arrow.
+		const moveDecision = (issue) => choices.decisions[actionItems.find((item) => item.source === `issue-${issue.id}`)?.id];
+		const issueCard = (issue) => `
+			<li class="work-card" ${target(`issue-${issue.id}`)} ${issue.move ? `data-move-from="${escapeHtml(issue.id)}"` : ''} style="--state-fill:${issue.move ? 'var(--fill-progress)' : 'var(--paper)'}">
 				<div class="ref">${appIcon(current.app, 15)}<span>${escapeHtml(issue.ref)}</span></div>
 				<div class="title" title="${escapeHtml(issue.title)}">${escapeHtml(issue.title)}</div>
 				${issue.links?.length ? `<div class="linked">${issue.links.map(linkChip).join('')}</div>` : ''}
-				${issue.move && !decision ? `<div class="move">${icon('goto', 14)}<span>${escapeHtml(issue.move.to)}</span>${issue.move.reason ? `<span class="reason">${escapeHtml(issue.move.reason)}</span>` : ''}</div>` : ''}
-				${decision}
+				${issue.move ? `<div class="move-suggestion">${icon('goto', 16)}<span>Move to ${escapeHtml(issue.move.to)}</span>${issue.move.reason ? `<span class="reason">${escapeHtml(issue.move.reason)}</span>` : ''}</div>` : ''}
+				${inlineDecision(`issue-${issue.id}`)}
 				<div class="card-foot"><span class="links">${iconLink(issue.url, `Open ${issue.ref} in ${APP_NAMES[current.app] ?? current.app}`, BRAND_ICONS[current.app] ? current.app : 'external')}</span></div>
 			</li>`;
-		};
-		const columns = (current.columns ?? []).map((name) => ({ id: slug(name), name, cards: current.issues.filter((issue) => issue.column === name).map(issueCard) }));
+		const ghostCard = (issue) => `<li class="ghost-card ${moveDecision(issue) ?? ''}" data-move-to="${escapeHtml(issue.id)}">${icon('goto', 16)}${escapeHtml(issue.ref)} moves here</li>`;
+		const columns = (current.columns ?? []).map((name) => {
+			const issues = current.issues.filter((issue) => issue.column === name);
+			const arriving = current.issues.filter((issue) => issue.move?.to === name && moveDecision(issue) !== 'dismiss');
+			return { id: slug(name), name, count: issues.length, cards: [...issues.map(issueCard), ...arriving.map(ghostCard)] };
+		});
 		return `
 			${scopeSwitch(chapter, boards.map((item) => item.scope), openCount, (scope) => { const app = boards.find((item) => item.scope === scope)?.app; return BRAND_ICONS[app] ? app : 'ticket'; })}
 			${board(columns, 'issue-column')}`;
 	},
 
-	overnight(data) {
-		const OUTCOMES = { ok: ['pipelineSuccess', 'var(--done)', 'Succeeded'], fail: ['pipelineFailed', 'var(--fail)', 'Failed'], check: ['eye', 'var(--ink)', 'Needs a check'] };
-		return `${data.away ? `<p class="away-line">${icon('moon', 16)}<span>Away ${escapeHtml(data.away.from)} to ${escapeHtml(data.away.to)}</span></p>` : ''}<ul class="row-list">${(data.runs ?? []).map((run) => {
-			const [iconName, color, label] = OUTCOMES[run.outcome] ?? OUTCOMES.ok;
+	overnight(data, chapter) {
+		const OUTCOME_WORDS = { ok: 'Done', fail: 'Failed', partial: 'Partly done', check: 'Check' };
+		const run = (item) => {
+			const outcome = OUTCOME_WORDS[item.outcome] ? item.outcome : 'ok';
 			return `
-			<li class="run ${escapeHtml(run.outcome)}" ${target(run.id)}>
-				<span style="color:${color}">${icon(iconName, 22, label)}</span>
-				<div><div class="title">${escapeHtml(run.title)}</div>${run.detail ? `<div class="detail">${escapeHtml(run.detail)}</div>` : ''}${inlineDecision(run.id)}</div>
-				<span class="mono">${escapeHtml(run.when)}</span>
-				<span class="mono duration">${escapeHtml(run.duration ?? '')}</span>
-				${iconLink(run.url, `Open ${run.title} output`) || '<span></span>'}
-			</li>`; }).join('')}</ul>`;
+			<li class="run" ${target(item.id)}>
+				<span class="result ${outcome}">${escapeHtml(item.result ?? OUTCOME_WORDS[outcome])}</span>
+				<div><div class="title">${escapeHtml(item.title)}</div>${item.detail ? `<div class="detail">${escapeHtml(item.detail)}</div>` : ''}${inlineDecision(item.id)}</div>
+				<span class="mono">${escapeHtml(item.when)}</span>
+				<span class="mono duration">${escapeHtml(item.duration ?? '')}</span>
+				${iconLink(item.url, `Open ${item.title} output`) || '<span></span>'}
+			</li>`;
+		};
+		return `${data.away ? `<p class="away-line">${icon('moon', 16)}<span>Last night, ${escapeHtml(data.away.from)} to ${escapeHtml(data.away.to)}</span></p>` : ''}
+			${byProject(data.runs ?? []).map(({ project, items }) => `
+			<details class="project-group" style="${projectStyle(project)}" data-disclosure="project-${escapeHtml(project.id)}" ${disclosureOpen(chapter, `project-${project.id}`, true) ? 'open' : ''} ${target(`project-${project.id}`)}>
+				<summary class="project-head">${icon('chevron', 18)}<span>${escapeHtml(project.name)}</span><span class="project-count">${items.length} run${items.length === 1 ? '' : 's'}</span></summary>
+				<div class="project-body"><ul class="row-list">${items.map(run).join('')}</ul></div>
+			</details>`).join('')}`;
 	},
 
 	slack(data, chapter) {
@@ -834,34 +968,45 @@ const RENDERERS = {
 				<div class="side">${item.replies ? `<span title="${escapeHtml(item.replies)} replies">${icon('thread', 16)}</span>${escapeHtml(item.replies)}` : ''}${iconLink(item.url, 'Open in Slack')}</div>
 			</li>`;
 		const section = (title, items, waiting) => items?.length ? `<section class="slack-section"><h2 class="group-title">${title}</h2><ul class="row-list">${items.map((item) => message(item, waiting)).join('')}</ul></section>` : '';
+		// Waiting on you always shows, so an empty one says plainly that nothing does.
 		return `
-			${section('Waiting on you', data.unaddressed, true)}
+			${section('Waiting on you', data.unaddressed, true) || `<section class="slack-section"><h2 class="group-title">Waiting on you</h2><div class="empty-state" ${target('slack-waiting')}>${icon('check', 18)}Nothing waits on you</div></section>`}
 			${section('Worth knowing', data.worthKnowing, false)}
 			${data.addressedSummary ? `
 			<section class="slack-section handled" ${target('slack-addressed')}>
 				<p>${icon('check', 16)}<span>${escapeHtml(data.addressedSummary)}</span></p>
-				${data.addressed?.length ? `<details data-disclosure="slack" ${chapter.disclosureOpen ? 'open' : ''}><summary>${icon('chevron', 16)}${escapeHtml(data.addressed.length)} handled threads</summary>
+				${data.addressed?.length ? `<details data-disclosure="slack-handled" ${disclosureOpen(chapter, 'slack-handled', false) ? 'open' : ''}><summary>${icon('chevron', 16)}${escapeHtml(data.addressed.length)} handled ${data.addressed.length === 1 ? 'thread' : 'threads'}</summary>
 					<ul class="handled-list">${data.addressed.map((item) => `<li><span class="mono" style="font-size:13px">${escapeHtml(item.when)}</span><span title="${escapeHtml(item.text)}"><strong>${escapeHtml(item.author)}</strong> ${escapeHtml(item.text)}</span>${iconLink(item.url, 'Open in Slack') || '<span></span>'}</li>`).join('')}</ul></details>` : ''}
 			</section>` : ''}
 			${data.skipped ? `<p class="muted-line">${escapeHtml(data.skipped)} messages skipped as noise</p>` : ''}`;
 	},
 
 	mail(data) {
-		return `
-			<ul class="gmail">${(data.rows ?? []).map((row) => {
-				const acts = row.class !== 'fyi';
-				return `
-				<li class="mail-row ${acts ? 'unread' : ''}" ${target(`mail-${row.id}`)}>
-					<span class="chip account-chip ${escapeHtml(row.account)}">${escapeHtml(row.account)}</span>
+		const row = (item) => {
+			const acts = item.class !== 'fyi';
+			return `
+				<li class="mail-row ${acts ? 'unread' : ''}" ${target(`mail-${item.id}`)}>
 					<div style="min-width:0">
-						<div class="from-line"><span class="from">${escapeHtml(row.from)}</span>${row.action ? `<span class="chip action-chip ${acts ? 'act' : ''}">${escapeHtml(row.action)}</span>` : ''}</div>
-						<div class="subject-line" title="${escapeHtml(`${row.subject}: ${row.snippet ?? ''}`)}"><span class="subject">${escapeHtml(row.subject)}</span>${row.snippet ? ` <span class="snippet">– ${escapeHtml(row.snippet)}</span>` : ''}</div>
-						${inlineDecision(`mail-${row.id}`)}
+						<div class="from-line"><span class="from">${escapeHtml(item.from)}</span>${item.action ? `<span class="chip action-chip ${acts ? 'act' : ''}">${escapeHtml(item.action)}</span>` : ''}</div>
+						<div class="subject-line" title="${escapeHtml(`${item.subject}: ${item.snippet ?? ''}`)}"><span class="subject">${escapeHtml(item.subject)}</span>${item.snippet ? ` <span class="snippet">– ${escapeHtml(item.snippet)}</span>` : ''}</div>
+						${inlineDecision(`mail-${item.id}`)}
 					</div>
-					<span class="date">${escapeHtml(row.when)}</span>
-					${iconLink(row.url, 'Open in Gmail') || '<span></span>'}
-				</li>`; }).join('')}</ul>
-			${data.notifications?.length ? `<p class="muted-line notifications"><span>Notifications</span>${data.notifications.map((item) => `<span class="count-pair">${escapeHtml(item.source)} ${escapeHtml(item.count)}</span>`).join('')}</p>` : ''}`;
+					<span class="date">${escapeHtml(item.when)}</span>
+					${iconLink(item.url, 'Open in Gmail') || '<span></span>'}
+				</li>`;
+		};
+		const notifications = (items) => items.length ? `<p class="muted-line notifications"><span>Notifications</span>${items.map((item) => `<span class="count-pair">${escapeHtml(item.source)} ${escapeHtml(item.count)}</span>`).join('')}</p>` : '';
+		// One panel per account, so an empty one says plainly that nothing came there.
+		requestWidth(2 * 500 + 16);
+		return `<div class="account-panels">${['personal', 'work'].map((account) => {
+			const rows = (data.rows ?? []).filter((item) => item.account === account);
+			return `
+			<section class="account-panel" data-panel="${account}" aria-label="${account} mail">
+				<h2 class="panel-head">${icon('gmail', 20)}${account === 'personal' ? 'Personal' : 'Work'}${rows.length ? `<span class="count">${rows.length}</span>` : ''}</h2>
+				${rows.length ? `<ul class="gmail">${rows.map(row).join('')}</ul>` : `<div class="empty-state" ${target(`mail-empty-${account}`)}>${icon('check', 18)}Nothing new${account === 'work' ? ' at work' : ''}</div>`}
+				${notifications((data.notifications ?? []).filter((item) => item.account === account))}
+			</section>`; }).join('')}</div>
+			${notifications((data.notifications ?? []).filter((item) => !['personal', 'work'].includes(item.account)))}`;
 	},
 
 	triage(data) {
@@ -894,7 +1039,7 @@ const RENDERERS = {
 				const open = item.id === chapter.openItem;
 				const decision = actionItems.find((entry) => entry.source === `retro-${item.id}`);
 				return `
-				<section class="retro-item ${decision ? choices.decisions[decision.id] : ''}" ${target(`retro-${item.id}`)}>
+				<section class="retro-item ${decision ? choices.decisions[decision.id] ?? '' : ''}" ${target(`retro-${item.id}`)}>
 					<div class="retro-head">
 						<button class="retro-toggle" type="button" data-retro-open="${escapeHtml(item.id)}" aria-expanded="${open}" aria-controls="retro-body-${escapeHtml(item.id)}">
 							${icon('chevron', 16).replace('<svg', '<svg class="chevron"')}${harnessIcon(item.harness)}<span><span class="title">${escapeHtml(item.title)}</span><span class="cost">${escapeHtml(item.cost)}</span></span>
@@ -915,50 +1060,82 @@ const RENDERERS = {
 
 	instructions(data) {
 		const VERDICTS = { final: 'Final', watch: 'Watch', attention: 'Needs attention' };
-		return `<ul class="row-list">${(data.changes ?? []).map((change) => {
+		const KINDS = [['global', 'Global instructions'], ['project', 'Project instructions'], ['skill', 'Skills']];
+		const change = (change) => {
 			const states = Object.entries(change.state ?? {});
 			return `
 			<li class="change ${escapeHtml(change.verdict)}" ${target(`change-${change.id}`)}>
 				<div>
-					<div class="scope-line"><span class="scope">${escapeHtml(change.scope)}</span><span class="chip">${escapeHtml(VERDICTS[change.verdict] ?? change.verdict)}</span>${headDecision(`change-${change.id}`)}</div>
+					<div class="scope-line"><span class="scope">${escapeHtml(change.scope)}</span>${change.kind === 'skill' ? `<span class="chip">${change.added ? 'New' : 'Updated'}</span>` : ''}<span class="chip">${escapeHtml(VERDICTS[change.verdict] ?? change.verdict)}</span>${headDecision(`change-${change.id}`)}</div>
 					<div class="summary">${escapeHtml(change.summary)}</div>
 					<div class="opinion">${escapeHtml(change.opinion)}</div>
 				</div>
 				<div class="state-chips">${states.map(([key, value]) => `<span class="chip ${value ? '' : 'no'}" title="${escapeHtml(`${value ? '' : 'Not '}${key}`)}">${icon(value ? 'check' : 'cross', 14, value ? 'yes' : 'no')}${escapeHtml(key)}</span>`).join('')}</div>
 				${iconLink(change.url, `Open ${change.scope} change`, /github\.com/.test(change.url ?? '') ? 'github' : /gitlab/.test(change.url ?? '') ? 'gitlab' : 'external') || '<span></span>'}
-			</li>`; }).join('')}</ul>`;
+			</li>`;
+		};
+		return KINDS.map(([kind, title]) => {
+			const changes = (data.changes ?? []).filter((item) => (item.kind ?? 'project') === kind);
+			return changes.length ? `<section class="change-section"><h2 class="group-title">${title}</h2><ul class="row-list">${changes.map(change).join('')}</ul></section>` : '';
+		}).join('');
 	},
 
-	news(data) {
-		return `<ul class="row-list">${(data.items ?? []).map((item) => `
+	news(data, chapter) {
+		// With at most three items there is room to open each one fully; a click folds it.
+		return `<ul class="row-list">${(data.items ?? []).map((item) => {
+			const href = safeUrl(item.url);
+			const title = href ? `<a class="title" href="${escapeHtml(href)}" target="_blank" rel="noopener">${escapeHtml(item.title)}${icon('external', 16)}</a>` : `<span class="title">${escapeHtml(item.title)}</span>`;
+			const more = item.points?.length || item.why ? `
+					<details class="news-more" data-disclosure="news-${escapeHtml(item.id)}" ${disclosureOpen(chapter, `news-${item.id}`, true) ? 'open' : ''}>
+						<summary>${icon('chevron', 16)}More</summary>
+						${item.points?.length ? `<ul>${item.points.map((point) => `<li>${escapeHtml(point)}</li>`).join('')}</ul>` : ''}
+						${item.why ? `<p class="why"><strong>For you:</strong> ${escapeHtml(item.why)}</p>` : ''}
+					</details>` : '';
+			return `
 			<li class="news-item" ${target(`news-${item.id}`)}>
 				${appIcon(item.app, 24)}
 				<div>
 					<div class="meta">${escapeHtml(item.source)} · ${escapeHtml(item.date)}</div>
-					<div class="title">${escapeHtml(item.title)}</div>
+					${title}
 					<div class="summary">${escapeHtml(item.summary)}</div>
+					${more}
 				</div>
 				<div class="side">
-					${iconLink(item.url, `Open on ${item.source}`)}
 					${['up', 'down'].map((vote) => `<button class="icon-link vote ${vote}" type="button" data-news="${escapeHtml(item.id)}" data-vote="${vote}" aria-pressed="${choices.news[item.id] === vote}" aria-label="${vote === 'up' ? 'More like this' : 'Less like this'}: ${escapeHtml(item.title)}" title="${vote === 'up' ? 'More like this' : 'Less like this'}">${icon(vote === 'up' ? 'thumbUp' : 'thumbDown', 20)}</button>`).join('')}
 				</div>
-			</li>`).join('')}</ul>`;
+			</li>`; }).join('')}</ul>`;
 	},
 
-	actions(data) {
-		return `
-			<ul class="action-grid">${(data.items ?? []).map((item) => {
-				const destination = chapters.find((chapter) => chapter.id === item.chapter);
-				return `
-				<li class="action ${choices.decisions[item.id]}" ${target(item.id)}>
+	actions(data, chapter) {
+		const SPAWN_LABELS = { one: 'One agent', each: 'Agent per point', none: 'No agent' };
+		const action = (item) => {
+			const destination = chapters.find((entry) => entry.id === item.chapter);
+			return `
+				<li class="action ${choices.decisions[item.id] ?? 'open'}" ${target(item.id)}>
 					<span class="source-app">${iconLink(item.url, `Open in ${APP_NAMES[item.app] ?? 'app'}`, appIcon(item.app)) || `<span class="icon-link">${appIcon(item.app)}</span>`}</span>
-					<span class="text" title="${escapeHtml(item.text)}">${escapeHtml(item.text)}</span>
-					${decisionControl(item)}
-					<span class="meta-line">
-						<span class="detail" title="${escapeHtml(item.detail ?? '')}">${escapeHtml(item.detail ?? '')}</span>
+					<div class="body">
+						<div class="text">${escapeHtml(item.text)}${manualChip(item)}</div>
+						${item.detail || item.why ? `<div class="detail">${escapeHtml([item.detail, isManual(item) && item.why && `Manual: ${item.why}`].filter(Boolean).join(' · '))}</div>` : ''}
+					</div>
+					<span class="side">
 						${destination ? `<button class="chip from" type="button" data-goto="${escapeHtml(destination.id)}" title="${escapeHtml(`Back to ${destination.name}`)}">${escapeHtml(destination.name)}</button>` : ''}
+						${decisionControl(item)}
 					</span>
-				</li>`; }).join('')}</ul>
+				</li>`;
+		};
+		// Agent points come first; manual ones follow with the reason no agent can do them.
+		return `
+			${byProject(data.items ?? []).map(({ project, items }) => {
+				const agentPoints = items.filter((item) => !isManual(item));
+				const approved = approvedAgentPoints(items).length;
+				return `
+				<details class="project-group" style="${projectStyle(project)}" data-disclosure="project-${escapeHtml(project.id)}" ${disclosureOpen(chapter, `project-${project.id}`, true) ? 'open' : ''} ${target(`project-${project.id}`)}>
+					<summary class="project-head">${icon('chevron', 18)}<span>${escapeHtml(project.name)}</span><span class="project-count">${agentPoints.length ? `${approved}/${agentPoints.length} for agents` : 'only you'}</span>
+						${agentPoints.length ? `<span class="spawn segmented" role="group" aria-label="${escapeHtml(`Follow-up agents for ${project.name}`)}">${Object.entries(SPAWN_LABELS).map(([value, label]) => `<button type="button" data-spawn="${escapeHtml(project.id)}" data-value="${value}" aria-pressed="${choices.spawn[project.id] === value}">${label}</button>`).join('')}</span>
+						<button class="approve-all" type="button" data-approve-all="${escapeHtml(project.id)}">Approve all</button>` : ''}
+					</summary>
+					<div class="project-body"><ul class="action-list">${[...agentPoints, ...items.filter(isManual)].map(action).join('')}</ul></div>
+				</details>`; }).join('')}
 			<div class="save-area">
 				<span class="summary" id="choice-summary">${escapeHtml(choiceSummary())}</span>
 				<button class="text-button" type="button" data-action="save">${icon('download', 18)} Save choices</button>
@@ -966,7 +1143,11 @@ const RENDERERS = {
 	},
 };
 
+// Open state of collapsible parts survives re-renders; a part keeps its default until clicked.
+const disclosureOpen = (chapter, key, fallback) => chapter.disclosures?.[key] ?? fallback;
+
 function renderBody(chapter) {
+	requestedWidth = READING_WIDTH;
 	if (chapter.status === 'quiet' || chapter.status === 'unavailable') {
 		return `<div class="quiet-slide">${icon(chapter.status === 'quiet' ? 'check' : 'warning', 40)}<p>${escapeHtml(chapter.title)}</p>${chapter.detail ? `<span class="detail">${escapeHtml(chapter.detail)}</span>` : ''}</div>`;
 	}
@@ -996,10 +1177,57 @@ const maximumBeats = Math.max(...chapters.map((chapter) => chapter.beats.length)
 // instead of animating into it, which flashed every day column on each click.
 function renderStage(scrollTop = stage.scrollTop) {
 	stage.innerHTML = renderBody(currentChapter());
+	byId('app').style.setProperty('--sheet-width', `${requestedWidth}px`);
 	const lit = markTargets();
 	stage.scrollTop = scrollTop;
 	scrollTargetsIntoView(lit);
 	showScrollHint();
+	followLayout();
+}
+/* Parts drawn against other elements' positions follow them every frame, so they stay attached while
+   the sheet width animates or the stage scrolls. */
+function followLayout() {
+	placePopover();
+	drawMoveArrows();
+}
+function placePopover() {
+	const popover = stage.querySelector('.event-popover');
+	if (!popover || getComputedStyle(popover).position !== 'fixed') return;
+	const anchor = stage.querySelector(`[data-event="${CSS.escape(popover.dataset.anchor)}"]`);
+	if (!anchor) return;
+	const margin = 8;
+	const gap = 12;
+	const event = anchor.getBoundingClientRect();
+	const width = popover.offsetWidth;
+	const height = popover.offsetHeight;
+	let left = event.right + gap;
+	if (left + width > innerWidth - margin) left = event.left - gap - width;
+	if (left < margin) left = Math.min(Math.max(margin, event.left), innerWidth - margin - width);
+	const top = Math.min(Math.max(margin, event.top), innerHeight - margin - height);
+	popover.style.left = `${Math.round(left)}px`;
+	popover.style.top = `${Math.round(top)}px`;
+}
+function drawMoveArrows() {
+	for (const layer of stage.querySelectorAll('.move-arrows')) {
+		const board = layer.parentElement.getBoundingClientRect();
+		const markup = [...layer.parentElement.querySelectorAll('[data-move-to]')].map((ghost) => {
+			const card = layer.parentElement.querySelector(`[data-move-from="${CSS.escape(ghost.dataset.moveTo)}"]`);
+			if (!card) return '';
+			const from = card.getBoundingClientRect();
+			const to = ghost.getBoundingClientRect();
+			const forward = to.left >= from.right;
+			const startX = (forward ? from.right : from.left) - board.left;
+			const endX = (forward ? to.left : to.right) - board.left;
+			const startY = from.top + from.height / 2 - board.top;
+			const endY = to.top + to.height / 2 - board.top;
+			const bend = (endX - startX) / 2;
+			const head = forward ? -1 : 1;
+			const approved = ghost.classList.contains('approve') ? 'approve' : '';
+			return `<path class="${approved}" d="M${startX} ${startY} C${startX + bend} ${startY}, ${endX - bend} ${endY}, ${endX} ${endY}"/>
+				<path class="${approved}" style="stroke-dasharray:none" d="M${endX + head * 10} ${endY - 7} L${endX} ${endY} L${endX + head * 10} ${endY + 7}"/>`;
+		}).join('');
+		if (layer.drawn !== markup) { layer.innerHTML = markup; layer.drawn = markup; }
+	}
 }
 // Fades the sheet's lower edge while more of a long chapter waits below.
 function showScrollHint() {
@@ -1047,24 +1275,37 @@ function markTargets() {
 	for (const name of targets) stage.querySelectorAll(`[data-target="${CSS.escape(name)}"]`).forEach((element) => {
 		element.classList.add('is-target');
 		lit.push(element);
-		// Opacity multiplies down the tree, so containers of a target must not be dimmed.
-		for (let ancestor = element.parentElement; ancestor && ancestor !== stage; ancestor = ancestor.parentElement) ancestor.classList.add('on-path');
+		// Opacity multiplies down the tree, so containers of a target must not be dimmed; a folded
+		// group opens to show what is being said.
+		for (let ancestor = element.parentElement; ancestor && ancestor !== stage; ancestor = ancestor.parentElement) {
+			ancestor.classList.add('on-path');
+			if (ancestor.tagName === 'DETAILS' && !ancestor.open) ancestor.open = true;
+		}
 	});
 	stage.classList.toggle('highlighting', lit.length > 0);
+	// The account panel the beat is about stays bright; the other dims.
+	const panels = [...stage.querySelectorAll('[data-panel]')];
+	const spoken = beat.scope ?? panels.find((panel) => lit.length && lit.every((element) => panel.contains(element)))?.dataset.panel;
+	for (const panel of panels) panel.classList.toggle('dimmed', Boolean(spoken) && panel.dataset.panel !== spoken);
 	return lit;
 }
-// Brings every lit item into view when they fit together, otherwise the first one.
-function scrollTargetsIntoView(elements) {
+// Brings every lit item into view when they fit together, otherwise the first one; sideways too, for a
+// calendar or board wider than a narrow window.
+function scrollTargetsIntoView(targets) {
+	// Overlays such as the event popover follow their anchor instead of scrolling with the sheet.
+	const elements = targets.filter((element) => getComputedStyle(element).position !== 'fixed');
 	if (!elements.length) return;
-	const stageTop = stage.getBoundingClientRect().top;
+	const stageBox = stage.getBoundingClientRect();
 	const ringMargin = 12;
-	const top = Math.min(...elements.map((element) => element.getBoundingClientRect().top)) - stageTop + stage.scrollTop - ringMargin;
-	const bottom = Math.max(...elements.map((element) => element.getBoundingClientRect().bottom)) - stageTop + stage.scrollTop + ringMargin;
-	const visibleBottom = stage.scrollTop + stage.clientHeight;
-	let scrollTop = stage.scrollTop;
-	if (bottom - top > stage.clientHeight || top < stage.scrollTop) scrollTop = top;
-	else if (bottom > visibleBottom) scrollTop = bottom - stage.clientHeight;
-	if (scrollTop !== stage.scrollTop) stage.scrollTo({ top: scrollTop, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+	const scrollFor = (start, end, scrolled, visible) => {
+		const first = Math.min(...elements.map((element) => element.getBoundingClientRect()[start])) - stageBox[start] + scrolled - ringMargin;
+		const last = Math.max(...elements.map((element) => element.getBoundingClientRect()[end])) - stageBox[start] + scrolled + ringMargin;
+		if (last - first > visible || first < scrolled) return first;
+		return last > scrolled + visible ? last - visible : scrolled;
+	};
+	const top = scrollFor('top', 'bottom', stage.scrollTop, stage.clientHeight);
+	const left = scrollFor('left', 'right', stage.scrollLeft, stage.clientWidth);
+	if (top !== stage.scrollTop || left !== stage.scrollLeft) stage.scrollTo({ top, left, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
 }
 function setChapter(index, beatIndex = 0) {
 	state.chapter = index;
@@ -1202,6 +1443,7 @@ function frame(now) {
 		else if (state.elapsed >= duration) advance();
 	}
 	paintProgress();
+	followLayout();
 	requestAnimationFrame(frame);
 }
 
@@ -1231,14 +1473,25 @@ byId('beat-panel').addEventListener('click', (event) => {
 });
 stage.addEventListener('click', (event) => {
 	const chapter = currentChapter();
-	const element = event.target.closest('[data-goto], [data-event], [data-scope], [data-retro-open], [data-news], [data-decide], [data-action]');
+	const element = event.target.closest('[data-goto], [data-event], [data-scope], [data-retro-open], [data-news], [data-decide], [data-spawn], [data-approve-all], [data-action]');
 	if (!element) return;
+	// Controls in a group's head must not fold the group.
+	if (element.closest('summary') && !element.matches('summary')) event.preventDefault();
 	if (element.dataset.goto) return setChapter(chapters.findIndex((item) => item.id === element.dataset.goto));
 	if (element.dataset.event) { chapter.selected = element.dataset.event; return renderStage(); }
 	if (element.dataset.scope) { chapter.scope = element.dataset.scope; return renderStage(); }
 	if (element.dataset.retroOpen) { chapter.openItem = chapter.openItem === element.dataset.retroOpen ? undefined : element.dataset.retroOpen; return renderStage(); }
 	if (element.dataset.news) { choices.news[element.dataset.news] = choices.news[element.dataset.news] === element.dataset.vote ? undefined : element.dataset.vote; return renderStage(); }
-	if (element.dataset.decide) { choices.decisions[element.dataset.decide] = element.dataset.value; return renderStage(); }
+	if (element.dataset.decide) {
+		const id = element.dataset.decide;
+		choices.decisions[id] = choices.decisions[id] === element.dataset.value ? undefined : element.dataset.value;
+		return renderStage();
+	}
+	if (element.dataset.spawn) { choices.spawn[element.dataset.spawn] = element.dataset.value; return renderStage(); }
+	if (element.dataset.approveAll) {
+		for (const item of actionItems) if ((item.project ?? 'other') === element.dataset.approveAll && !isManual(item)) choices.decisions[item.id] = 'approve';
+		return renderStage();
+	}
 	if (element.dataset.action === 'close-event') { chapter.selected = undefined; return renderStage(); }
 	if (element.dataset.action === 'save') downloadChoices();
 });
@@ -1247,7 +1500,12 @@ stage.addEventListener('change', (event) => {
 	if (element.dataset.triage) choices.triage[element.dataset.triage][element.dataset.field] = element.value;
 	if (element.dataset.auto) choices.autoHandled[element.dataset.auto] = element.checked;
 });
-stage.addEventListener('toggle', (event) => { if (event.target.dataset?.disclosure) currentChapter().disclosureOpen = event.target.open; }, true);
+stage.addEventListener('toggle', (event) => {
+	const key = event.target.dataset?.disclosure;
+	if (key) currentChapter().disclosures = { ...currentChapter().disclosures, [key]: event.target.open };
+}, true);
+let resizeFrame = 0;
+addEventListener('resize', () => { cancelAnimationFrame(resizeFrame); resizeFrame = requestAnimationFrame(() => renderStage()); });
 document.addEventListener('keydown', (event) => {
 	if (event.target.closest?.('input, select, textarea') || event.altKey || event.ctrlKey || event.metaKey) return;
 	if (event.key === ' ') {
@@ -1269,6 +1527,9 @@ byId('rail-window').textContent = Number.isNaN(since.getTime()) ? '' : `since ${
 byId('rail-window').title = brief.window?.label ?? '';
 buildProgress();
 setChapter(0);
+// The first chapter opens at its own width; only later changes animate.
+getComputedStyle(byId('app')).getPropertyValue('--sheet-width');
+byId('app').classList.add('animate-width');
 requestAnimationFrame(frame);
 </script>
 </body>

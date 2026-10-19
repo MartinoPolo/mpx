@@ -2,8 +2,8 @@
 name: morning-brief
 description:
   'Builds the daily morning brief: an interactive narrated page covering calendar, overnight runs,
-  merge requests, issues, Slack, mail, Obsidian triage, session retro, instruction changes and AI
-  news since the last brief, with action points decided where they arise and saved for a separate
+  merge requests, issues, Slack, mail, Obsidian triage, AI retro, instruction changes and AI
+  news since the last brief, with action points approved where they arise and saved for a separate
   apply session'
 argument-hint: '[--no-state] [--rebuild]'
 triggers:
@@ -49,7 +49,12 @@ wait, never by ending the turn.
      `sources/personal.json` and `sources/work.json`, each `ok` with `data` or `unavailable` with
      `reason`. `--only personal|work` reruns one.
    - `node "<skill-dir>/scripts/repos.mjs" --since <since> --out <dayDirectory>/sources/repos.json`
-   - `node "<skill-dir>/scripts/sessions.mjs" --since <since> --out <dayDirectory>/sources/sessions.json`
+   - `node "<skill-dir>/scripts/sessions.mjs" --since <since> --until <until> --out <dayDirectory>/sources/sessions.json`
+   - Reach the work Git hosts (GitLab, Gerrit; [provider routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md))
+     with a ten-second timeout. When they time out and OpenVPN GUI is installed, connect
+     `openvpn-gui --command connect <profile>` (profile `MORNING_BRIEF_VPN`, else the only one in
+     `%USERPROFILE%/OpenVPN/config`) and retry for up to two minutes. Still unreachable: ask me to
+     connect the VPN and wait up to five minutes, then go on with the work hosts unavailable.
 3. Launch one subagent per area below in parallel. Give each the window, the day folder, its input
    files, the read-only rule, and a ten-minute budget; each writes `sources/<area>.json` and returns
    one line. Bound every command with a timeout. A failed area becomes an `unavailable` chapter.
@@ -83,45 +88,54 @@ wait, never by ending the turn.
   `kf` from a work repository whose configuration names the board; personally GitHub. Each board
   keeps its own columns (`kf board --json`; GitHub: open, in progress when a branch or PR exists,
   closed) and each issue links its MRs with their state. GitHub usually closes issues from merged
-  PRs; KanbanFlow never moves on its own. An issue whose column lags its MR (merged but open,
-  approved but still in WIP) gets a proposed `move` and an action point.
-- **Overnight runs**: work that kept running while I was away: from my last prompt of the evening to
-  my first of the morning (`sessions.json` `away`). Sessions with `activeWhileAway` (long
-  implementations, renders, AFK executions) and Orca automation runs that did work in that gap; read
-  their final reports for results. One terse line each: outcome, what finished, start time,
-  duration, link to the result. Routines are not reported: skipped or scheduled runs that did
-  nothing, and the brief's own runs.
+  PRs; KanbanFlow never moves on its own. An issue whose column lags its MR (merged but open, in
+  review but still in WIP) gets a proposed `move` (`to`, `reason`) and an action point whose
+  `source` is the issue: the page draws an arrow to the target column with its Approve control.
+- **Overnight runs**: work that kept running last night only, from my last prompt of the evening
+  to my first of the morning (`sessions.json` `away`), even when the window spans several days.
+  Sessions with `activeWhileAway` (long implementations, renders, AFK executions) and Orca automation
+  runs that did work in that gap; read their final reports for results. Each run has a `project`, an
+  `outcome` (`ok`, `fail`, `partial`, `check`), a `result` of one to three words that says the state
+  (merged, render failed, session limit), a terse `title` without the project name, `detail`, start
+  time, duration and a link to the result. Routines are not reported: skipped or scheduled runs that
+  did nothing, and the brief's own runs.
 - **Obsidian triage**: daily notes in `$MPX_OBSIDIAN_VAULT/Daily/` from the window and today, and
   changes to `Ideas.md`. Unchecked dump bullets and tasks not yet under a capture heading become
   items with a proposed project, heading and priority per `_Tooling/TaskGenius/task-system.md` and
   the project registry. Link each to its note with `obsidian://open?vault=<vault>&file=<path>`.
-- **Retro** (`sessions.json`): problems in sessions of both accounts and harnesses: tool errors,
+- **AI retro** (`sessions.json`): problems in sessions of both accounts and harnesses: tool errors,
   hook blocks, my corrections, repeated attempts at one step. At most five, ranked by cost, each with
   the transcript lines that show it, a concrete fix, the file it belongs in, and a prompt for a
   session that would apply the fix.
 - **Instructions**: commits in the window touching agent instructions, rules, skills and decision
-  records (`AGENTS.md`, `CLAUDE.md`, `DECISIONS.md`, mpx `content/`), global first. Per change: one
-  line on what changes for agents, your opinion in one sentence with a verdict (final, watch, needs
-  attention), and whether it is committed, pushed and, for mpx, built into `dist/`.
+  records (`AGENTS.md`, `CLAUDE.md`, `DECISIONS.md`, mpx `content/`). Each change has a `kind`:
+  `global` (global `AGENTS.md`/`CLAUDE.md` and shared instructions), `project`, or `skill` (with
+  `added` for a new one); the page shows them in that order, skills in their own section. Per change:
+  one line on what changes for agents, your opinion in one sentence with a verdict (final, watch,
+  needs attention), and whether it is committed, pushed and, for mpx, built into `dist/`.
 - **AI news**: at most three items newer than the window, from different vendors: Claude Code,
   Codex and Gemini releases, Anthropic, OpenAI and Google announcements, Hacker News front-page AI
-  stories. Read `$MPX_AI_DUMP/morning-brief/taste.md` when present and follow its preferences.
+  stories. Each has a `summary`, two to four `points` with the concrete changes and a `why` sentence
+  on what it means for my setup. Read `$MPX_AI_DUMP/morning-brief/taste.md` when present and follow
+  its preferences.
 
 Calendar, Slack and mail come from the gatherers; the main session shapes them into chapters.
 The calendar shows one column per day: earlier days the window covers (greyed as history), today,
 and all of tomorrow; a day without events gets no column, only a clause in the narration. Events are
 coloured by calendar and busy-only work blocks stay untitled. Slack leads with what still waits on
-me, then what is worth knowing, then one sentence on what I already handled; handled messages stay
-listed but are not narrated one by one. A problem someone else is handling names them
-(`handledBy`). Mail lists only what needs action; notifications collapse into one count line, and alerts
-go to merge requests.
+me, shown even when empty, then what is worth knowing, then one sentence on what I already handled;
+handled messages stay listed but are not narrated one by one. A problem someone else is handling
+names them (`handledBy`). Mail lists only what needs action, in a personal and a work panel;
+notifications collapse into count lines per `account`, and alerts go to merge requests. Merge
+requests, issues and mail are narrated personal first, then work.
 
 ## brief.json
 
 [brief.sample.json](templates/brief.sample.json) shows every chapter type; the page template is the
 authoritative reader and `build.mjs` validates it. Top level: `date`, `dayDirectory`, `now`,
 `window` (`since`, `until`, `label`), `sources` (`name`, `status`, `reason`, and `chapters` the
-problem affects), `chapters`. Each chapter has `id`, `type`, `name`, `title`, `status` (`needs`,
+problem affects), `projects` (`id`, `name`, `color` from `--tag-<project>-bg` in the vault's
+`.obsidian/snippets/tagColors.css`; the page picks a colour for a project without one), `chapters`. Each chapter has `id`, `type`, `name`, `title`, `status` (`needs`,
 `fyi`, `quiet`, `unavailable`), `count`, `beats`, and `data` for its type; quiet and unavailable
 chapters carry `detail` instead. Calendar days use ISO dates as `id`; give each calendar a distinct
 Google colour, list only calendars with events, and prefer a titled event over its busy-only copy.
@@ -129,11 +143,15 @@ Google colour, list only calendars with events, and prefer a titled event over i
 Order: calendar, overnight, work, issues, slack, mail, triage, retro, instructions, news, actions.
 
 Each action point has `id`, `text`, a `detail` with why and where it came from (for example, which
-email warned about an expiring token), `app`, a link, its `chapter`, and `handoff` (`agent` or
-`you`), the default decision. `agent: false` marks what only I can do. `source` names the target id
-of the item it came from: the page puts its Agent, Me and Skip control beside that item, and points
-without a source gather at the foot of their chapter. The actions chapter lists every point with the
-same state, groups them in beats (mine first, then the agent's), and saves the choices.
+email warned about an expiring token), `app`, a link, its `chapter` and its `project` (a `projects`
+id; `personal` or `work` for points outside a repository). Agents do the work by default;
+`agent: false` with `why` marks the rare step only I can do. `source` names the target id of the
+item it came from: the page puts its Approve and Dismiss control beside that item, and points
+without a source gather at the foot of their chapter. A point stays open until I decide it. The
+actions chapter lists every point one per line, grouped by project, with the same state; each
+project chooses one follow-up agent for its approved points, one per point, or none. Its beats name
+the manual steps first, then the agent work per project, and the saved choices drive the apply
+session.
 
 ## Narration
 
@@ -141,9 +159,11 @@ Each beat is one spoken sentence (`say`), a sidebar `note` label of at most four
 `targets` naming the elements it lights. Target ids: run and action ids as written (an action id
 lights its control on the source slide); `event-<id>`, `day-<day id>`, `card-<id>`,
 `column-<board column>`, `issue-<id>`, `issue-column-<column name, lowercase and hyphenated>`,
-`auto-<id>`, `message-<id>`, `slack-addressed`, `mail-<id>`, `task-<id>`, `retro-<id>`,
-`change-<id>`, `news-<id>`. `select` opens a calendar event's popover and `scope` switches work and
-personal on merge requests and issues.
+`auto-<id>`, `message-<id>`, `slack-waiting` (empty), `slack-addressed`, `mail-<id>`,
+`mail-empty-<account>`, `task-<id>`, `retro-<id>`, `change-<id>`, `news-<id>`, `project-<id>` (a
+project group on overnight runs and action points). `select` opens a calendar event's popover;
+`scope` switches work and personal on merge requests and issues and, on mail, keeps that panel
+bright while the other dims.
 Quiet chapters get one silent beat with `hold` of about two seconds.
 
 - The highlight shows what is being said: each beat targets exactly the items its sentence names,

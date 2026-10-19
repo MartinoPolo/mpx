@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 
 const CHAPTER_TYPES = ['calendar', 'overnight', 'work', 'issues', 'slack', 'mail', 'triage', 'retro', 'instructions', 'news', 'actions'];
-const HANDOFFS = ['agent', 'you'];
+const CHANGE_KINDS = ['global', 'project', 'skill'];
 const STATUSES = ['needs', 'fyi', 'quiet', 'unavailable'];
 const NOTE_MAXIMUM_WORDS = 4;
 // simple-icons ship paths without colour; these are the brands' own.
@@ -52,7 +52,11 @@ for (const source of brief.sources ?? []) {
 for (const item of brief.chapters?.find((chapter) => chapter.type === 'actions')?.data?.items ?? []) {
   if (!item.id || !item.text) problems.push('every action point needs id and text');
   if (!chapterIds.has(item.chapter)) problems.push(`action "${item.id}": chapter "${item.chapter}" is not a chapter id; its decision shows on that slide`);
-  if (!HANDOFFS.includes(item.handoff)) problems.push(`action "${item.id}": handoff must be one of ${HANDOFFS.join(', ')}`);
+  if (!item.project) problems.push(`action "${item.id}": project is required; action points are grouped by it`);
+  if (item.agent === false && !item.why) problems.push(`action "${item.id}": a manual point needs why no agent can do it`);
+}
+for (const change of brief.chapters?.find((chapter) => chapter.type === 'instructions')?.data?.changes ?? []) {
+  if (!CHANGE_KINDS.includes(change.kind)) problems.push(`instruction change "${change.id}": kind must be one of ${CHANGE_KINDS.join(', ')}`);
 }
 if (problems.length) {
   console.error(`brief.json is invalid:\n- ${problems.join('\n- ')}`);

@@ -1,16 +1,19 @@
 #!/usr/bin/env node
 // Lists Claude and Pi sessions of both accounts that changed in the window, with their first prompt,
-// last prompt and failed tool results, plus `away`: the longest gap between my prompts. Sessions
-// with `activeWhileAway` kept working in it. Usage: sessions.mjs --since <iso> [--out <file>]
+// last prompt and failed tool results, plus `away`: last night, the longest gap between my prompts in
+// the day before `until`. Sessions with `activeWhileAway` kept working in it.
+// Usage: sessions.mjs --since <iso> [--until <iso>] [--out <file>]
 import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 
 const TITLE_LENGTH = 160;
-const { values } = parseArgs({ options: { since: { type: 'string' }, out: { type: 'string' } } });
+const DAY_MILLISECONDS = 24 * 60 * 60 * 1000;
+const { values } = parseArgs({ options: { since: { type: 'string' }, until: { type: 'string' }, out: { type: 'string' } } });
 const since = new Date(values.since ?? '');
-if (Number.isNaN(since.getTime()) || !process.env.APPDATA) {
-  console.error('Usage: sessions.mjs --since <iso> [--out <file>] (needs APPDATA for the MPX configuration)');
+const until = new Date(values.until ?? Date.now());
+if (Number.isNaN(since.getTime()) || Number.isNaN(until.getTime()) || !process.env.APPDATA) {
+  console.error('Usage: sessions.mjs --since <iso> [--until <iso>] [--out <file>] (needs APPDATA for the MPX configuration)');
   process.exit(1);
 }
 const config = JSON.parse(await readFile(join(process.env.APPDATA, 'mpx', 'config.json'), 'utf8'));
@@ -80,11 +83,15 @@ for (const [account, roots] of Object.entries(config.accounts)) {
 }
 sessions.sort((left, right) => right.modified.localeCompare(left.modified));
 
-// I was away during the longest gap between my prompts; what kept running then is overnight work.
-const promptTimes = sessions.flatMap((session) => session.promptTimes).sort((left, right) => left - right);
+// Last night is the longest gap between my prompts in the day before `until`, counting the gap from
+// my last prompt to `until` when I have not prompted yet this morning. A window spanning several days
+// still reports only that night; what kept running then is overnight work.
+const promptTimes = sessions.flatMap((session) => session.promptTimes).filter((time) => time <= until).sort((left, right) => left - right);
+const dayStart = new Date(until.getTime() - DAY_MILLISECONDS);
+const marks = [promptTimes.filter((time) => time < dayStart).at(-1), ...promptTimes.filter((time) => time >= dayStart), until].filter(Boolean);
 let away;
-for (let index = 1; index < promptTimes.length; index++) {
-  if (!away || promptTimes[index] - promptTimes[index - 1] > away.to - away.from) away = { from: promptTimes[index - 1], to: promptTimes[index] };
+for (let index = 1; index < marks.length; index++) {
+  if (!away || marks[index] - marks[index - 1] > away.to - away.from) away = { from: marks[index - 1], to: marks[index] };
 }
 for (const session of sessions) {
   const whileAway = away ? session.entryTimes.filter((time) => time > away.from && time < away.to) : [];
@@ -92,6 +99,6 @@ for (const session of sessions) {
   delete session.promptTimes;
   delete session.entryTimes;
 }
-const text = `${JSON.stringify({ since: values.since, away: away && { from: away.from.toISOString(), to: away.to.toISOString() }, sessions }, null, 2)}\n`;
+const text = `${JSON.stringify({ since: values.since, until: until.toISOString(), away: away && { from: away.from.toISOString(), to: away.to.toISOString() }, sessions }, null, 2)}\n`;
 if (values.out) await writeFile(values.out, text);
 else process.stdout.write(text);
