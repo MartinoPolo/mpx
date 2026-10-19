@@ -30,6 +30,8 @@ const problems = [];
 if (!brief.date || !brief.window?.since || !brief.window?.until) problems.push('date and window.since/until are required');
 if (!Array.isArray(brief.chapters) || brief.chapters.length === 0) problems.push('chapters must be a non-empty array');
 const chapterIds = new Set();
+const spokenBeats = (brief.chapters ?? []).flatMap((chapter) => chapter.beats ?? []);
+const translationLanguages = [...new Set([...(brief.narration?.languages ?? []).map((narration) => narration.code), ...spokenBeats.flatMap((beat) => Object.keys(beat.translations ?? {}))])].filter((code) => code !== 'en');
 for (const [index, chapter] of (brief.chapters ?? []).entries()) {
   const where = `chapters[${index}] (${chapter.id ?? 'no id'})`;
   if (!chapter.id || chapterIds.has(chapter.id)) problems.push(`${where}: id must be present and unique`);
@@ -42,7 +44,8 @@ for (const [index, chapter] of (brief.chapters ?? []).entries()) {
   for (const beat of chapter.beats ?? []) {
     if (!beat.say || !beat.note) problems.push(`${where}: every beat needs say and note`);
     if (String(beat.note ?? '').split(/\s+/).length > NOTE_MAXIMUM_WORDS) problems.push(`${where}: note "${beat.note}" must be a label of at most ${NOTE_MAXIMUM_WORDS} words`);
-    if (/—/.test(`${beat.say ?? ''}${chapter.title ?? ''}`)) problems.push(`${where}: replace em dashes in title and say with commas or full stops`);
+    if (/—/.test(`${beat.say ?? ''}${Object.values(beat.translations ?? {}).join('')}${chapter.title ?? ''}`)) problems.push(`${where}: replace em dashes in title, say and translations with commas or full stops`);
+    for (const language of translationLanguages) if (!beat.hold && !beat.translations?.[language]) problems.push(`${where}: beat "${beat.note}" has no translations.${language}; every spoken beat carries each narration language`);
     if (narrated && !beat.hold && !beat.targets?.length) problems.push(`${where}: beat "${beat.note}" names no targets; every spoken point lights what it is about`);
   }
 }

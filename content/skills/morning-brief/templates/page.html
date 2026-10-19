@@ -408,6 +408,7 @@ details.project-group:not([open]) > .project-head { border-radius: 14px; }
 .control:disabled { opacity: 0.4; cursor: default; }
 .control.play { width: 48px; height: 48px; margin-inline: 2px; background: var(--sticky); border: var(--border-width) solid var(--ink); box-shadow: var(--shadow-compact); }
 .control.play:hover { background: var(--sticky); box-shadow: var(--shadow-ordinary); }
+.control[hidden] { display: none; }
 .control.speed { width: auto; border-radius: 19px; padding: 0 8px; grid-auto-flow: column; gap: 3px; font: 600 13px var(--font-mono); }
 .control[aria-pressed="true"].mute { background: var(--fill-progress); }
 .progress { flex: 1; min-width: 120px; display: flex; gap: 4px; align-items: center; height: 30px; margin: 0 12px; }
@@ -494,6 +495,7 @@ details.project-group:not([open]) > .project-head { border-radius: 14px; }
 		<div class="progress" id="progress" aria-label="Brief progress by chapter"></div>
 		<span class="time" id="time" aria-hidden="true"></span>
 		<button class="control speed" id="speed" type="button"></button>
+		<button class="control speed" id="language" type="button" hidden></button>
 		<button class="control mute" id="mute" type="button"></button>
 	</div>
 </div>
@@ -1161,12 +1163,19 @@ function renderBody(chapter) {
 const SPEEDS = [1, 1.25, 1.5, 2];
 const WORDS_PER_SECOND = 2.6;
 const BEAT_PAUSE_SECONDS = 0.5;
-const state = { chapter: 0, beat: 0, elapsed: 0, playing: false, speedIndex: 0, voice: true, finished: false, speaking: false };
+/* Narration languages: `say` is English, other languages read `translations.<code>`; the page remembers
+   the last choice and otherwise opens with the first language narrated. */
+const LANGUAGE_KEY = 'morning-brief-language';
+const languages = brief.narration?.languages?.map((narration) => narration.code) ?? [...new Set([...chapters.flatMap((chapter) => chapter.beats.flatMap((beat) => Object.keys(beat.translations ?? {}))), 'en'])];
+const storedLanguage = (() => { try { return localStorage.getItem(LANGUAGE_KEY); } catch { return null; } })();
+const state = { chapter: 0, beat: 0, elapsed: 0, playing: false, speedIndex: 0, voice: true, finished: false, speaking: false, language: languages.includes(storedLanguage) ? storedLanguage : languages[0] };
 const speed = () => SPEEDS[state.speedIndex];
 const browserVoice = 'speechSynthesis' in window;
 const clip = new Audio();
 clip.preload = 'auto';
-const beatSeconds = (beat) => (beat.hold ?? (beat.audioSeconds ?? beat.say.split(/\s+/).length / WORDS_PER_SECOND) + BEAT_PAUSE_SECONDS) / speed();
+const spokenText = (beat) => (state.language === 'en' ? beat.say : beat.translations?.[state.language] ?? beat.say);
+const beatClip = (beat) => beat.clips?.[state.language];
+const beatSeconds = (beat) => (beat.hold ?? (beatClip(beat)?.seconds ?? spokenText(beat).split(/\s+/).length / WORDS_PER_SECOND) + BEAT_PAUSE_SECONDS) / speed();
 const chapterSeconds = (chapter) => chapter.beats.reduce((total, beat) => total + beatSeconds(beat), 0);
 const currentChapter = () => chapters[state.chapter];
 const currentBeat = () => currentChapter().beats[state.beat];
@@ -1261,7 +1270,7 @@ function renderOutline() {
 	panel.style.setProperty('--beat-rows', String(maximumBeats));
 	panel.innerHTML = `
 		<div class="beat-panel-head">${String(state.chapter + 1).padStart(2, '0')} · ${escapeHtml(chapter.name)}</div>
-		<ol class="outline-beats">${chapter.beats.map((beat, beatIndex) => `<li><button class="outline-beat ${beatIndex === state.beat ? 'current' : beatIndex < state.beat ? 'done' : ''}" type="button" data-beat="${beatIndex}" title="${escapeHtml(beat.say)}" ${beatIndex === state.beat ? 'aria-current="step"' : ''}>${escapeHtml(beat.note ?? `Point ${beatIndex + 1}`)}</button></li>`).join('')}</ol>
+		<ol class="outline-beats">${chapter.beats.map((beat, beatIndex) => `<li><button class="outline-beat ${beatIndex === state.beat ? 'current' : beatIndex < state.beat ? 'done' : ''}" type="button" data-beat="${beatIndex}" title="${escapeHtml(spokenText(beat))}" ${beatIndex === state.beat ? 'aria-current="step"' : ''}>${escapeHtml(beat.note ?? `Point ${beatIndex + 1}`)}</button></li>`).join('')}</ol>
 		${sourceProblems(chapter).map((source) => `<div class="panel-warning" title="${escapeHtml(source.reason ?? source.status)}">${icon('warning', 14)}<span>${escapeHtml(source.name)}: ${escapeHtml(source.reason ?? source.status)}</span></div>`).join('')}`;
 }
 function highlight() {
@@ -1325,7 +1334,7 @@ function setBeat(index, newChapter = false) {
 	const retroTarget = chapter.type === 'retro' && (beat.targets ?? []).map((name) => name.replace(/^retro-/, '')).find((id) => chapter.data.items.some((item) => item.id === id));
 	if (retroTarget && retroTarget !== chapter.openItem) { chapter.openItem = retroTarget; changed = true; }
 	if (newChapter) renderStage(0); else if (changed) renderStage(); else highlight();
-	byId('caption').textContent = beat.say;
+	byId('caption').textContent = spokenText(beat);
 	renderOutline();
 	renderTransport();
 	speak();
@@ -1339,8 +1348,8 @@ function speak() {
 	stopVoice();
 	if (!state.voice || !state.playing) return;
 	const beat = currentBeat();
-	if (beat.audio) {
-		clip.src = beat.audio;
+	if (beatClip(beat)) {
+		clip.src = beatClip(beat).audio;
 		clip.playbackRate = speed();
 		clip.onended = clip.onerror = () => { state.speaking = false; };
 		state.speaking = true;
@@ -1348,9 +1357,9 @@ function speak() {
 		return;
 	}
 	if (!browserVoice || beat.hold) return;
-	const utterance = new SpeechSynthesisUtterance(beat.say);
+	const utterance = new SpeechSynthesisUtterance(spokenText(beat));
 	utterance.rate = speed();
-	utterance.lang = brief.narration?.language ?? 'en';
+	utterance.lang = state.language;
 	const voices = window.speechSynthesis.getVoices().filter((voice) => voice.lang.startsWith(utterance.lang));
 	utterance.voice = voices.find((voice) => /natural|online/i.test(voice.name)) ?? voices[0] ?? null;
 	utterance.onend = utterance.onerror = () => { state.speaking = false; };
@@ -1412,6 +1421,11 @@ function renderTransport() {
 	speedButton.innerHTML = `${icon('speed', 18)}<span>${speed()}×</span>`;
 	speedButton.setAttribute('aria-label', `Speed ${speed()} times, change speed`);
 	speedButton.title = `Speed ${speed()}×`;
+	const languageButton = byId('language');
+	languageButton.hidden = languages.length < 2;
+	languageButton.textContent = state.language.toUpperCase();
+	languageButton.setAttribute('aria-label', `Narration language ${state.language}, change language`);
+	languageButton.title = `Narration: ${languages.map((code) => code.toUpperCase()).join(' / ')}`;
 	const mute = byId('mute');
 	mute.innerHTML = icon(state.voice ? 'volume' : 'muted', 20);
 	mute.setAttribute('aria-pressed', String(!state.voice));
@@ -1453,6 +1467,12 @@ byId('beat-next').addEventListener('click', () => stepBeat(1));
 byId('chapter-previous').addEventListener('click', () => stepChapter(-1));
 byId('chapter-next').addEventListener('click', () => stepChapter(1));
 byId('speed').addEventListener('click', () => { state.speedIndex = (state.speedIndex + 1) % SPEEDS.length; clip.playbackRate = speed(); buildProgress(); renderTransport(); });
+byId('language').addEventListener('click', () => {
+	state.language = languages[(languages.indexOf(state.language) + 1) % languages.length];
+	try { localStorage.setItem(LANGUAGE_KEY, state.language); } catch {}
+	buildProgress();
+	setBeat(state.beat);
+});
 byId('mute').addEventListener('click', () => { state.voice = !state.voice; renderTransport(); speak(); });
 byId('progress').addEventListener('click', (event) => {
 	const segment = event.target.closest('[data-segment]');
