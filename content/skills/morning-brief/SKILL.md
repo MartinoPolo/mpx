@@ -179,14 +179,14 @@ Quiet chapters get one silent beat with `hold` of about two seconds.
 - Sound like a colleague, not a press release: plain words, short sentences, an opinion where it
   helps; no puffery ("pivotal", "seamless"), no "Additionally", no em dashes. Titles in sentence case.
 - Every MR, ticket, message, event, run and file on the page is a link; status words stay short.
-
-## Deliver
-
-Report the `file:///` link to `index.html` first, then sources that were unavailable and why, the
 - Czech is written as a Czech colleague would say it, not translated word by word: informal `ty`,
   the narrator speaks in feminine forms ("zkontrolovala jsem"), and people, products, repositories
   and established jargon (merge request, review, commit) stay as written. Check agreement and case
   endings; numbers in words.
+
+## Deliver
+
+Report the `file:///` link to `index.html` first, then sources that were unavailable and why, the
 gatherer cost, narrated characters, and action point count. The page is local. Publish it as an artifact only when asked,
 from the work account; before sharing beyond me, ask whether personal mail and calendar items stay.
 End with the [result line]({{MPX_SHARED_INSTRUCTIONS}}/RESULT_LINE.md) linking the page.
