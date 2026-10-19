@@ -1,11 +1,9 @@
 #!/usr/bin/env node
-// Voices every beat of <day>/brief.json with VoiceStudio into <day>/audio/, once per narration
-// language, and records each clip on its beat as clips.<language> = { audio, seconds }. English
-// reads `say`, any other language reads `translations.<language>`. Clips are keyed by voice,
-// language and text, so a rerun only renders changed sentences. When the backend is not running, it
-// is started from the VoiceStudio checkout for this run and stopped afterwards, so nothing stays
-// resident between briefs.
-// Usage: narrate.mjs <day-directory> [--languages cs,en] [--voice <language>=<profile id or name>]...
+// Voices every beat of <day>/brief.json with VoiceStudio into <day>/audio/ and records each clip's
+// path and length on its beat. Clips are keyed by voice, language and text, so a rerun only renders
+// changed sentences. When the backend is not running, it is started from the VoiceStudio checkout
+// for this run and stopped afterwards, so nothing stays resident between briefs.
+// Usage: narrate.mjs <day-directory> [--voice <profile id or name>] [--language <ISO 639-1>]
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { openSync } from 'node:fs';
@@ -15,9 +13,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { parseArgs } from 'node:util';
 
 const DEFAULT_BACKEND = 'http://127.0.0.1:3900';
-// The first language is the one the page opens with.
-const DEFAULT_LANGUAGES = 'cs,en';
-const DEFAULT_VOICES = { en: 'Morning brief EN', cs: 'Morning brief CS' };
+const DEFAULT_VOICE = 'Morning brief';
+const DEFAULT_LANGUAGE = 'en';
 const HEALTH_TIMEOUT_MILLISECONDS = 5000;
 const STARTUP_TIMEOUT_MILLISECONDS = 180000;
 const STARTUP_POLL_MILLISECONDS = 2000;
@@ -25,30 +22,23 @@ const STARTUP_POLL_MILLISECONDS = 2000;
 const REQUEST_TIMEOUT_MILLISECONDS = 300000;
 const RETRY_ATTEMPTS = 5;
 
-const { positionals, values } = parseArgs({ allowPositionals: true, options: { languages: { type: 'string' }, voice: { type: 'string', multiple: true } } });
+const { positionals, values } = parseArgs({ allowPositionals: true, options: { voice: { type: 'string' }, language: { type: 'string' } } });
 const [dayDirectory] = positionals;
 if (!dayDirectory || !isAbsolute(dayDirectory)) {
-  console.error('Usage: narrate.mjs <absolute day directory> [--languages cs,en] [--voice <language>=<profile>]...');
+  console.error('Usage: narrate.mjs <absolute day directory> [--voice <profile id or name>] [--language <code>]');
   process.exit(1);
 }
 const backend = (process.env.VOICESTUDIO_URL ?? DEFAULT_BACKEND).replace(/\/$/, '');
 const voiceStudioDirectory = process.env.VOICESTUDIO_DIR ?? (process.env.MPX_CLONED && join(process.env.MPX_CLONED, 'VoiceStudio'));
-const voiceOptions = Object.fromEntries((values.voice ?? []).map((option) => option.split(/=(.*)/s, 2)));
-const languages = (values.languages ?? process.env.MORNING_BRIEF_LANGUAGES ?? DEFAULT_LANGUAGES).split(',').map((code) => code.trim()).filter(Boolean);
-const narrations = languages.map((code) => ({ code, voice: voiceOptions[code] ?? process.env[`MORNING_BRIEF_VOICE_${code.toUpperCase()}`] ?? DEFAULT_VOICES[code] }));
-const unvoiced = narrations.filter((narration) => !narration.voice).map((narration) => narration.code);
-if (unvoiced.length) {
-  console.error(`No voice for ${unvoiced.join(', ')}: pass --voice <language>=<profile> or set MORNING_BRIEF_VOICE_<LANGUAGE>`);
-  process.exit(1);
-}
+const voice = values.voice ?? process.env.MORNING_BRIEF_VOICE ?? DEFAULT_VOICE;
+const language = values.language ?? process.env.MORNING_BRIEF_LANGUAGE ?? DEFAULT_LANGUAGE;
 const briefPath = join(dayDirectory, 'brief.json');
 const brief = JSON.parse(await readFile(briefPath, 'utf8'));
 await mkdir(join(dayDirectory, 'audio'), { recursive: true });
 
 const exists = (path) => access(path).then(() => true, () => false);
 const beats = brief.chapters.flatMap((chapter) => (chapter.beats ?? []).filter((beat) => beat.say && !beat.hold));
-const textOf = (beat, code) => (code === 'en' ? beat.say : beat.translations?.[code]);
-const clipName = (beat, { code, voice }) => `${createHash('sha256').update(`voicestudio\n${voice}\n${code}\n${textOf(beat, code)}`).digest('hex').slice(0, 16)}.wav`;
+const clipName = (beat) => `${createHash('sha256').update(`voicestudio\n${voice}\n${language}\n${beat.say}`).digest('hex').slice(0, 16)}.wav`;
 
 async function healthy() {
   try {
@@ -99,17 +89,15 @@ function wavSeconds(wav) {
   throw new Error('response is not a WAV file');
 }
 
-async function synthesize(beat, narration) {
-  const text = textOf(beat, narration.code);
-  if (!text) throw new Error(`no translations.${narration.code}`);
-  const clipPath = join(dayDirectory, 'audio', clipName(beat, narration));
+async function synthesize(beat) {
+  const clipPath = join(dayDirectory, 'audio', clipName(beat));
   if (!(await exists(clipPath))) {
     let response;
     for (let attempt = 1; ; attempt++) {
       response = await fetch(`${backend}/v1/audio/speech`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ model: 'tts-1', voice: narration.voice, language: narration.code, input: text, response_format: 'wav' }),
+        body: JSON.stringify({ model: 'tts-1', voice, language, input: beat.say, response_format: 'wav' }),
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MILLISECONDS),
       });
       // A freshly started backend runs its own warm-up job and refuses work until the GPU frees up.
@@ -122,14 +110,14 @@ async function synthesize(beat, narration) {
     wavSeconds(wav);
     await writeFile(clipPath, wav);
   }
-  beat.clips[narration.code] = { audio: `audio/${clipName(beat, narration)}`, seconds: Math.round(wavSeconds(await readFile(clipPath)) * 100) / 100 };
+  beat.audio = `audio/${clipName(beat)}`;
+  beat.audioSeconds = Math.round(wavSeconds(await readFile(clipPath)) * 100) / 100;
 }
 
-const jobs = narrations.flatMap((narration) => beats.map((beat) => ({ beat, narration })));
-let missing = 0;
-for (const { beat, narration } of jobs) if (textOf(beat, narration.code) && !(await exists(join(dayDirectory, 'audio', clipName(beat, narration))))) missing++;
+const missing = [];
+for (const beat of beats) if (!(await exists(join(dayDirectory, 'audio', clipName(beat))))) missing.push(beat);
 let startedBackend;
-if (missing && !(await healthy())) {
+if (missing.length && !(await healthy())) {
   try {
     startedBackend = await startBackend();
   } catch (error) {
@@ -140,28 +128,19 @@ if (missing && !(await healthy())) {
 
 // One GPU renders one clip at a time, so requests run in order.
 const failures = [];
-for (const beat of beats) {
-  beat.clips = {};
-  delete beat.audio;
-  delete beat.audioSeconds;
-}
 try {
-  for (const { beat, narration } of jobs) {
-    await synthesize(beat, narration).catch((error) => failures.push(`${narration.code} "${beat.say.slice(0, 40)}": ${error.message}`));
+  for (const beat of beats) {
+    await synthesize(beat).catch((error) => { delete beat.audio; delete beat.audioSeconds; failures.push(`"${beat.say.slice(0, 40)}": ${error.message}`); });
   }
 } finally {
   if (startedBackend) stopTree(startedBackend);
 }
-brief.narration = { provider: 'voicestudio', languages: narrations };
+brief.narration = { provider: 'voicestudio', voice, language };
 await writeFile(briefPath, `${JSON.stringify(brief, null, 2)}\n`);
+const voiced = beats.filter((beat) => beat.audio).length;
+const totalSeconds = beats.reduce((total, beat) => total + (beat.audioSeconds ?? 0), 0);
 const started = startedBackend ? ', backend started and stopped for this run' : '';
-const summaries = narrations.map(({ code }) => {
-  const voiced = beats.filter((beat) => beat.clips[code]);
-  const seconds = voiced.reduce((total, beat) => total + beat.clips[code].seconds, 0);
-  const characters = beats.reduce((total, beat) => total + (textOf(beat, code)?.length ?? 0), 0);
-  return `${code} ${voiced.length} of ${beats.length} beats, ${Math.round(seconds)} s, ${characters} characters`;
-});
-console.log(`voiced ${summaries.join('; ')}; ${missing} rendered${started}`);
+console.log(`voiced ${voiced} of ${beats.length} beats, ${missing.length} rendered${started}, ${Math.round(totalSeconds)} s, ${beats.reduce((total, beat) => total + beat.say.length, 0)} characters`);
 if (failures.length) {
   console.error(failures.join('\n'));
   process.exit(2);

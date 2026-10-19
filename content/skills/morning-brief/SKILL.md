@@ -61,16 +61,15 @@ wait, never by ending the turn.
    If subagents run in the background, wait in the foreground until every expected
    `sources/<area>.json` exists or the budget ends.
 4. When all are back, write `<dayDirectory>/brief.json` (shape below).
-5. `node "<skill-dir>/scripts/narrate.mjs" <dayDirectory>` voices every beat in each narration
-   language (`--languages`, `MORNING_BRIEF_LANGUAGES`, default `cs,en`; the page opens with the
-   first) with the local VoiceStudio backend (`VOICESTUDIO_URL`, default `http://127.0.0.1:3900`)
-   into `audio/` and records `clips.<language>` (`audio`, `seconds`) on each beat; unchanged
-   sentences reuse their clips. Each language has its own VoiceStudio profile (`--voice cs=<profile>`,
-   `MORNING_BRIEF_VOICE_CS`; defaults `Morning brief CS` and `Morning brief EN`). A backend that is
-   not running is started from the checkout (`VOICESTUDIO_DIR`, default `$MPX_CLONED/VoiceStudio`)
-   for this step and stopped after it, logging to `voicestudio.log`. Exit code 2 when the backend
-   cannot start or a clip fails: continue, the page falls back to the browser voice. Narration stays
-   on the machine.
+5. `node "<skill-dir>/scripts/narrate.mjs" <dayDirectory>` voices every beat with the local
+   VoiceStudio backend (`VOICESTUDIO_URL`, default `http://127.0.0.1:3900`) into `audio/` and
+   records `audio` and `audioSeconds` on each beat; unchanged sentences reuse their clips. A backend
+   that is not running is started from the checkout (`VOICESTUDIO_DIR`, default
+   `$MPX_CLONED/VoiceStudio`) for this step and stopped after it, logging to `voicestudio.log`. The voice
+   is a VoiceStudio profile id or name (`--voice`, `MORNING_BRIEF_VOICE`, default `Morning brief`)
+   and `--language` (`MORNING_BRIEF_LANGUAGE`, default `en`) must match the language of the `say`
+   sentences. Exit code 2 when the backend cannot start or a clip fails: continue, the page falls
+   back to the browser voice. Narration stays on the machine.
 6. `node "<skill-dir>/scripts/build.mjs" <dayDirectory> --commit-state` (omit the flag for
    `--no-state`) validates the brief and renders `index.html`. Open the page in a browser and step
    through every beat before delivering: nothing overlaps, every highlight lands on what is said.
@@ -156,10 +155,8 @@ session.
 
 ## Narration
 
-Each beat is one spoken sentence in English (`say`) and in every other narration language
-(`translations.cs`), a sidebar `note` label of at most four words, and `targets` naming the
-elements it lights. The page has a language switch for captions and voice; the rest of the page
-stays English. Target ids: run and action ids as written (an action id
+Each beat is one spoken sentence (`say`), a sidebar `note` label of at most four words, and
+`targets` naming the elements it lights. Target ids: run and action ids as written (an action id
 lights its control on the source slide); `event-<id>`, `day-<day id>`, `card-<id>`,
 `column-<board column>`, `issue-<id>`, `issue-column-<column name, lowercase and hyphenated>`,
 `auto-<id>`, `message-<id>`, `slack-waiting` (empty), `slack-addressed`, `mail-<id>`,
@@ -179,10 +176,6 @@ Quiet chapters get one silent beat with `hold` of about two seconds.
 - Sound like a colleague, not a press release: plain words, short sentences, an opinion where it
   helps; no puffery ("pivotal", "seamless"), no "Additionally", no em dashes. Titles in sentence case.
 - Every MR, ticket, message, event, run and file on the page is a link; status words stay short.
-- Czech is written as a Czech colleague would say it, not translated word by word: informal `ty`,
-  the narrator speaks in feminine forms ("zkontrolovala jsem"), and people, products, repositories
-  and established jargon (merge request, review, commit) stay as written. Check agreement and case
-  endings; numbers in words.
 
 ## Deliver
 

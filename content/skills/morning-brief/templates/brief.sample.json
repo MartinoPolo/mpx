@@ -45,10 +45,10 @@
         ]
       },
       "beats": [
-        { "say": "Good morning. Yesterday, in grey, ended with the swimming lesson.", "translations": { "cs": "Dobré ráno. Včerejšek, šedě, skončil plaváním." }, "note": "Yesterday", "targets": ["event-swim"] },
-        { "say": "Standup at half past nine, planning at one.", "translations": { "cs": "Standup v půl desáté, plánování v jednu." }, "note": "Work blocks", "targets": ["event-standup", "event-planning"] },
-        { "say": "The dentist is at four; leave by half past three.", "translations": { "cs": "Zubař je ve čtyři, vyraž v půl čtvrté." }, "note": "Dentist", "targets": ["event-dentist"], "select": "dentist" },
-        { "say": "Tomorrow is family day: park run, the market, and Sam's party in Oak Park.", "translations": { "cs": "Zítra je rodinný den: parkrun, trh a Samova oslava v Oak Parku." }, "note": "Tomorrow", "targets": ["event-run", "event-market", "event-birthday"] }
+        { "say": "Good morning. Yesterday, in grey, ended with the swimming lesson.", "note": "Yesterday", "targets": ["event-swim"] },
+        { "say": "Standup at half past nine, planning at one.", "note": "Work blocks", "targets": ["event-standup", "event-planning"] },
+        { "say": "The dentist is at four; leave by half past three.", "note": "Dentist", "targets": ["event-dentist"], "select": "dentist" },
+        { "say": "Tomorrow is family day: park run, the market, and Sam's party in Oak Park.", "note": "Tomorrow", "targets": ["event-run", "event-market", "event-birthday"] }
       ]
     },
     {
@@ -61,8 +61,8 @@
         ]
       },
       "beats": [
-        { "say": "After your last prompt at twenty to eleven, the prejemesi session added forty two wishlist tests.", "translations": { "cs": "Po tvém posledním promptu za dvacet jedenáct přidalo sezení v Přejeme si čtyřicet dva testů wishlistu." }, "note": "Tests landed", "targets": ["run-tests"] },
-        { "say": "The 4K render ran for three hours and timed out at scene seven.", "translations": { "cs": "Render ve 4K běžel tři hodiny a u scény sedm vypršel." }, "note": "Render failed", "targets": ["run-render"] }
+        { "say": "After your last prompt at twenty to eleven, the prejemesi session added forty two wishlist tests.", "note": "Tests landed", "targets": ["run-tests"] },
+        { "say": "The 4K render ran for three hours and timed out at scene seven.", "note": "Render failed", "targets": ["run-render"] }
       ]
     },
     {
@@ -103,10 +103,10 @@
         "quiet": ["kamosh", "orca", "flowguard-api"]
       },
       "beats": [
-        { "say": "On the personal side, mpx has the brief skill uncommitted and prejemesi has a draft running checks.", "translations": { "cs": "Na osobní straně má mpx necommitnutý skill briefu a v Přejeme si běží kontroly na draftu." }, "note": "Personal", "targets": ["card-mpx-brief", "card-pr-488"], "scope": "personal" },
-        { "say": "At work, three eighteen is approved and green, ready to merge.", "translations": { "cs": "V práci je tři sta osmnáct schválený a zelený, připravený ke sloučení." }, "note": "Ready to merge", "targets": ["card-mr-318"], "scope": "work" },
-        { "say": "In review: Alex's date picker, and toast stacking, which fails in lint.", "translations": { "cs": "V review je Alexův výběr data a skládání toastů, které padá na lintu." }, "note": "In review", "targets": ["card-mr-321", "card-mr-320"], "scope": "work" },
-        { "say": "Two merged yesterday.", "translations": { "cs": "Včera se sloučily dva." }, "note": "Merged", "targets": ["column-merged"], "scope": "work" }
+        { "say": "On the personal side, mpx has the brief skill uncommitted and prejemesi has a draft running checks.", "note": "Personal", "targets": ["card-mpx-brief", "card-pr-488"], "scope": "personal" },
+        { "say": "At work, three eighteen is approved and green, ready to merge.", "note": "Ready to merge", "targets": ["card-mr-318"], "scope": "work" },
+        { "say": "In review: Alex's date picker, and toast stacking, which fails in lint.", "note": "In review", "targets": ["card-mr-321", "card-mr-320"], "scope": "work" },
+        { "say": "Two merged yesterday.", "note": "Merged", "targets": ["column-merged"], "scope": "work" }
       ]
     },
     {
@@ -136,9 +136,9 @@
         ]
       },
       "beats": [
-        { "say": "On GitHub, four seventy is still open, though its pull request merged yesterday.", "translations": { "cs": "Na GitHubu je čtyři sta sedmdesát pořád otevřené, i když se jeho pull request včera sloučil." }, "note": "#470 still open", "targets": ["issue-gh-470"], "scope": "personal" },
-        { "say": "On the team board, T one oh two still sits in review, although three eighteen is approved and green. Approve the move here.", "translations": { "cs": "Na týmové nástěnce je T sto dva pořád v review, přestože tři sta osmnáct je schválený a zelený. Přesun schval tady." }, "note": "T-102 behind", "targets": ["issue-T-102", "action-move-t102"], "scope": "work" },
-        { "say": "The other tickets match their merge requests.", "translations": { "cs": "Ostatní úkoly odpovídají svým merge requestům." }, "note": "In sync", "targets": ["issue-T-110", "issue-T-108", "issue-T-099"], "scope": "work" }
+        { "say": "On GitHub, four seventy is still open, though its pull request merged yesterday.", "note": "#470 still open", "targets": ["issue-gh-470"], "scope": "personal" },
+        { "say": "On the team board, T one oh two still sits in review, although three eighteen is approved and green. Approve the move here.", "note": "T-102 behind", "targets": ["issue-T-102", "action-move-t102"], "scope": "work" },
+        { "say": "The other tickets match their merge requests.", "note": "In sync", "targets": ["issue-T-110", "issue-T-108", "issue-T-099"], "scope": "work" }
       ]
     },
     {
@@ -160,9 +160,9 @@
         "skipped": 35
       },
       "beats": [
-        { "say": "Alex wants your review of three twenty one before Monday.", "translations": { "cs": "Alex chce do pondělí tvoje review tři sta dvacet jedna." }, "note": "Waiting on you", "targets": ["message-s1"] },
-        { "say": "Worth knowing: Chris is chasing a load balancer issue, and the AI code review group starts Tuesday.", "translations": { "cs": "Pro informaci: Chris řeší problém s load balancerem a skupina k AI code review začíná v úterý." }, "note": "Worth knowing", "targets": ["message-s2", "message-s3"] },
-        { "say": "Everything else you already handled: the feature tests, a review, and Jordan's forms question.", "translations": { "cs": "Všechno ostatní už máš vyřízené: feature testy, jedno review a Jordanův dotaz k formulářům." }, "note": "Handled", "targets": ["slack-addressed"] }
+        { "say": "Alex wants your review of three twenty one before Monday.", "note": "Waiting on you", "targets": ["message-s1"] },
+        { "say": "Worth knowing: Chris is chasing a load balancer issue, and the AI code review group starts Tuesday.", "note": "Worth knowing", "targets": ["message-s2", "message-s3"] },
+        { "say": "Everything else you already handled: the feature tests, a review, and Jordan's forms question.", "note": "Handled", "targets": ["slack-addressed"] }
       ]
     },
     {
@@ -178,8 +178,8 @@
         ]
       },
       "beats": [
-        { "say": "TravelCo sent the Lisbon check-in steps.", "translations": { "cs": "TravelCo poslalo postup pro check-in v Lisabonu." }, "note": "Personal", "targets": ["mail-trip"], "scope": "personal" },
-        { "say": "At work, GitLab warns that a token expires on Wednesday; the bootcamp invite is optional.", "translations": { "cs": "V práci GitLab varuje, že ve středu vyprší token. Pozvánka na bootcamp je nepovinná." }, "note": "Work", "targets": ["mail-token", "mail-bootcamp"], "scope": "work" }
+        { "say": "TravelCo sent the Lisbon check-in steps.", "note": "Personal", "targets": ["mail-trip"], "scope": "personal" },
+        { "say": "At work, GitLab warns that a token expires on Wednesday; the bootcamp invite is optional.", "note": "Work", "targets": ["mail-token", "mail-bootcamp"], "scope": "work" }
       ]
     },
     {
@@ -199,9 +199,9 @@
         ]
       },
       "beats": [
-        { "say": "From yesterday's note: KF moves for the brief, and Sam's present, which is due tomorrow.", "translations": { "cs": "Ze včerejší poznámky: přesuny v KF kvůli briefu a dárek pro Sama, který je potřeba do zítřka." }, "note": "Daily note", "targets": ["task-t1", "task-t2"] },
-        { "say": "One idea: true crime animations, parked as low priority.", "translations": { "cs": "Jeden nápad: animace o skutečných zločinech, odložené s nízkou prioritou." }, "note": "Ideas", "targets": ["task-t3"] },
-        { "say": "Once the projects look right, the agent files all three.", "translations": { "cs": "Až budou projekty sedět, agent založí všechny tři." }, "note": "File them", "targets": ["action-file"] }
+        { "say": "From yesterday's note: KF moves for the brief, and Sam's present, which is due tomorrow.", "note": "Daily note", "targets": ["task-t1", "task-t2"] },
+        { "say": "One idea: true crime animations, parked as low priority.", "note": "Ideas", "targets": ["task-t3"] },
+        { "say": "Once the projects look right, the agent files all three.", "note": "File them", "targets": ["action-file"] }
       ]
     },
     {
@@ -230,9 +230,9 @@
         ]
       },
       "beats": [
-        { "say": "The shell hook blocks plain arithmetic as if it were command substitution; about forty calls this week.", "translations": { "cs": "Shellový hook blokuje obyčejnou aritmetiku, jako by šlo o substituci příkazů. Tento týden asi čtyřicet volání." }, "note": "Arithmetic blocked", "targets": ["retro-substitution"] },
-        { "say": "Commits also fail when staging shares the call; a one-line skill fix would stop it.", "translations": { "cs": "Commity taky padají, když je staging ve stejném volání. Jednořádková oprava skillu by to zastavila." }, "note": "Split commits", "targets": ["retro-commit"] },
-        { "say": "Each comes with a fix session ready to start.", "translations": { "cs": "Ke každému je připravené opravné sezení." }, "note": "Fix sessions", "targets": ["action-fix-substitution", "action-fix-commit"] }
+        { "say": "The shell hook blocks plain arithmetic as if it were command substitution; about forty calls this week.", "note": "Arithmetic blocked", "targets": ["retro-substitution"] },
+        { "say": "Commits also fail when staging shares the call; a one-line skill fix would stop it.", "note": "Split commits", "targets": ["retro-commit"] },
+        { "say": "Each comes with a fix session ready to start.", "note": "Fix sessions", "targets": ["action-fix-substitution", "action-fix-commit"] }
       ]
     },
     {
@@ -245,9 +245,9 @@
         ]
       },
       "beats": [
-        { "say": "The HITL output style looks final; nothing to do.", "translations": { "cs": "Výstupní styl HITL vypadá hotově, není co dělat." }, "note": "Output style", "targets": ["change-c1"] },
-        { "say": "videoLab now insists on trusted sources; fine, but it may slow drafts.", "translations": { "cs": "VideoLab teď trvá na důvěryhodných zdrojích. V pořádku, ale může to zpomalit koncepty." }, "note": "videoLab", "targets": ["change-c3"] },
-        { "say": "The new morning brief skill is not committed and the build is stale.", "translations": { "cs": "Nový skill ranního briefu není commitnutý a build je zastaralý." }, "note": "Not committed", "targets": ["change-c2"] }
+        { "say": "The HITL output style looks final; nothing to do.", "note": "Output style", "targets": ["change-c1"] },
+        { "say": "videoLab now insists on trusted sources; fine, but it may slow drafts.", "note": "videoLab", "targets": ["change-c3"] },
+        { "say": "The new morning brief skill is not committed and the build is stale.", "note": "Not committed", "targets": ["change-c2"] }
       ]
     },
     {
@@ -260,8 +260,8 @@
         ]
       },
       "beats": [
-        { "say": "Gemini Flash now speaks natively, which could voice this brief cheaply.", "translations": { "cs": "Gemini Flash teď mluví nativně, takže by tenhle brief mohl namluvit levně." }, "note": "Gemini audio", "targets": ["news-n1"] },
-        { "say": "On Hacker News, local-first agent sandboxes; and a small Claude Code release.", "translations": { "cs": "Na Hacker News jsou lokální sandboxy pro agenty a menší vydání Claude Code." }, "note": "HN, Claude Code", "targets": ["news-n2", "news-n3"] }
+        { "say": "Gemini Flash now speaks natively, which could voice this brief cheaply.", "note": "Gemini audio", "targets": ["news-n1"] },
+        { "say": "On Hacker News, local-first agent sandboxes; and a small Claude Code release.", "note": "HN, Claude Code", "targets": ["news-n2", "news-n3"] }
       ]
     },
     {
@@ -281,10 +281,10 @@
         ]
       },
       "beats": [
-        { "say": "Ten points. Two need you: Alex's review before Monday, and the GitLab token that GitLab emailed about yesterday.", "translations": { "cs": "Deset bodů. Dva potřebují tebe: Alexovo review do pondělí a token v GitLabu, o kterém GitLab včera psal." }, "note": "Manual steps", "targets": ["action-review", "action-token"] },
-        { "say": "For ui-components, one agent merges three eighteen and moves T one oh two to Approved.", "translations": { "cs": "Pro ui-components jeden agent sloučí tři sta osmnáct a přesune T sto dva do sloupce Approved." }, "note": "ui-components", "targets": ["project-ui-components"] },
-        { "say": "mpx gets one agent for both hook fixes and the brief commit; videoLab reruns the render.", "translations": { "cs": "Mpx dostane jednoho agenta na obě opravy hooku a commit briefu. VideoLab pustí render znovu." }, "note": "mpx, videoLab", "targets": ["project-mpx", "project-videoLab"] },
-        { "say": "Approve or dismiss what is still open, then save.", "translations": { "cs": "Schval nebo zamítni, co je ještě otevřené, a pak ulož." }, "note": "Save", "targets": ["action-close-470", "action-file"] }
+        { "say": "Ten points. Two need you: Alex's review before Monday, and the GitLab token that GitLab emailed about yesterday.", "note": "Manual steps", "targets": ["action-review", "action-token"] },
+        { "say": "For ui-components, one agent merges three eighteen and moves T one oh two to Approved.", "note": "ui-components", "targets": ["project-ui-components"] },
+        { "say": "mpx gets one agent for both hook fixes and the brief commit; videoLab reruns the render.", "note": "mpx, videoLab", "targets": ["project-mpx", "project-videoLab"] },
+        { "say": "Approve or dismiss what is still open, then save.", "note": "Save", "targets": ["action-close-470", "action-file"] }
       ]
     }
   ]
