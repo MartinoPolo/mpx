@@ -31,8 +31,8 @@ re-renders an existing `brief.json`.
 ## Requirements
 
 Launched through `ccw` (or `cc`) so `MPX_ACTIVE_CONTENT_ROOT` is set; `MPX_AI_DUMP` absolute; `node`,
-`bash` and `git` on PATH. Optional: `gh`, `glab`, `kf`, `orca`. A missing optional tool makes only
-its part unavailable.
+`bash` and `git` on PATH. Optional: `gh`, `glab`, `kf`, `orca`, and a VoiceStudio checkout with
+`uv` for narration. A missing optional tool makes only its part unavailable.
 
 ## Run
 
@@ -56,10 +56,15 @@ wait, never by ending the turn.
    If subagents run in the background, wait in the foreground until every expected
    `sources/<area>.json` exists or the budget ends.
 4. When all are back, write `<dayDirectory>/brief.json` (shape below).
-5. `node "<skill-dir>/scripts/narrate.mjs" <dayDirectory>` voices every beat with ElevenLabs into
-   `audio/` and records `audio` and `audioSeconds` on each beat; unchanged sentences reuse their
-   clips. Exit code 2 without `ELEVENLABS_API_KEY` or on a failed clip: continue, the page falls back
-   to the browser voice. Only the `say` sentences leave the machine.
+5. `node "<skill-dir>/scripts/narrate.mjs" <dayDirectory>` voices every beat with the local
+   VoiceStudio backend (`VOICESTUDIO_URL`, default `http://127.0.0.1:3900`) into `audio/` and
+   records `audio` and `audioSeconds` on each beat; unchanged sentences reuse their clips. A backend
+   that is not running is started from the checkout (`VOICESTUDIO_DIR`, default
+   `$MPX_CLONED/VoiceStudio`) for this step and stopped after it, logging to `voicestudio.log`. The voice
+   is a VoiceStudio profile id or name (`--voice`, `MORNING_BRIEF_VOICE`, default `Morning brief`)
+   and `--language` (`MORNING_BRIEF_LANGUAGE`, default `en`) must match the language of the `say`
+   sentences. Exit code 2 when the backend cannot start or a clip fails: continue, the page falls
+   back to the browser voice. Narration stays on the machine.
 6. `node "<skill-dir>/scripts/build.mjs" <dayDirectory> --commit-state` (omit the flag for
    `--no-state`) validates the brief and renders `index.html`. Open the page in a browser and step
    through every beat before delivering: nothing overlaps, every highlight lands on what is said.

@@ -1109,7 +1109,8 @@ function speak() {
 	if (!browserVoice || beat.hold) return;
 	const utterance = new SpeechSynthesisUtterance(beat.say);
 	utterance.rate = speed();
-	const voices = window.speechSynthesis.getVoices().filter((voice) => voice.lang.startsWith('en'));
+	utterance.lang = brief.narration?.language ?? 'en';
+	const voices = window.speechSynthesis.getVoices().filter((voice) => voice.lang.startsWith(utterance.lang));
 	utterance.voice = voices.find((voice) => /natural|online/i.test(voice.name)) ?? voices[0] ?? null;
 	utterance.onend = utterance.onerror = () => { state.speaking = false; };
 	state.speaking = true;

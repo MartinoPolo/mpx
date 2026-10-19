@@ -31,7 +31,7 @@ preview: [refined.html](refined.html). Design language: [DESIGN_SYSTEM.md](../DE
   sidebar.
 - **Highlight.** The beat's `targets` get an outline ring and lift; the rest stays readable. The
   highlight always matches what is being said and clears when narration moves on. Narration plays
-  each beat's ElevenLabs clip (`audio`), falling back to the browser voice and a timer of about
+  each beat's narration clip (`audio`), falling back to the browser voice and a timer of about
   2.6 words per second at 1×.
 
 ## Chapters

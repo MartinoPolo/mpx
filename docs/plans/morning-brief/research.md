@@ -49,8 +49,8 @@ it predates the decisions below.
   day and other improvement loops (separate automations, reported under overnight runs).
 - Later: Reddit and YouTube picks; apply actions that move KanbanFlow tickets to the column matching
   their MR state and merge approved, green MRs (with monitoring and rebasing).
-- Narration uses ElevenLabs (`eleven_multilingual_v2`, which reads Czech names) through
-  `scripts/narrate.mjs`; without `ELEVENLABS_API_KEY` the page uses captions and the browser voice.
+- Narration uses a local VoiceStudio backend (OmniVoice, 600+ languages including Czech) through
+  `scripts/narrate.mjs`; when the backend is unreachable the page uses captions and the browser voice.
 - The page saves choices as `morning-brief-choices-<date>.json` (download, or copy); the apply
   session reads that file.
 - Any click on a link or control pauses playback; I resume when I come back.
