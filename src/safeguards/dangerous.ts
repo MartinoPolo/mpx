@@ -27,6 +27,7 @@ const PROTECTED_DELETE_COMPONENTS = new Set([
   'worktrees',
 ]);
 const WORKTREE_CONTAINER_COMPONENTS = new Set(['worktree', 'worktrees']);
+const SHELL_KEYWORD_PREFIXES = new Set(['if', 'then', 'elif', 'else', 'while', 'until', 'do', '{', '!']);
 const ORPHANED_WORKTREE_SCAN_DIRECTORY_LIMIT = 20_000;
 const SCRATCH_COMPONENTS = new Set(['.tmp', '.temp', '.scratch', 'tmp', 'temp', 'scratch']);
 const GENERATED_COMPONENTS = new Set([
@@ -148,7 +149,7 @@ function tokenize(command: string): { tokens: Token[]; malformed: boolean } {
       index += 1;
       continue;
     }
-    if (';|&>'.includes(character)) {
+    if (';|&>()'.includes(character)) {
       finishWord();
       tokens.push({ operator: character });
       continue;
@@ -235,7 +236,7 @@ function unwrap(words: readonly Word[]): readonly Word[] {
   while (result.length > 0) {
     while (/^[A-Za-z_][A-Za-z0-9_]*=/u.test(result[0]?.value ?? '')) result = result.slice(1);
     const name = executableName(result[0]?.value ?? '');
-    if (name === 'command' || name === 'exec' || name === 'time') {
+    if (name === 'command' || name === 'exec' || name === 'time' || SHELL_KEYWORD_PREFIXES.has(name)) {
       result = result.slice(1);
       continue;
     }
@@ -646,6 +647,7 @@ async function inspect(command: string, cwd: string, depth: number, blocks: stri
 
   const unquoted = command.replace(/(['"])(?:\\.|(?!\1)[^\\])*\1/gu, '');
   if (/:\s*\(\s*\)\s*\{[^}]*:\s*\|\s*:[^}]*\}/u.test(unquoted)) blocks.push(block('fork bomb'));
+  if (/SetEnvironmentVariable\s*\(\s*(['"]?)PATH\1\s*[,)]/iu.test(command)) blocks.push(block('persistent Windows PATH mutation via PowerShell'));
   if (/>\s*(?:\/dev\/(?:sd[a-z]\d*|nvme\d+n\d+(?:p\d+)?|mmcblk\d+(?:p\d+)?)|\\\\\.\\PhysicalDrive\d+)/iu.test(unquoted)) {
     blocks.push(block('a redirect targets a raw device'));
   }

@@ -55,6 +55,24 @@ void test('allows narrow and non-force cleanup but blocks unsafe, mixed, travers
   });
 });
 
+void test('inspects forced deletion inside compound commands and subshells', async () => {
+  await temporary(async cwd => {
+    assert.deepEqual(await decisions(['for d in a b; do rm -rf node_modules; done', '(rm -rf dist)'], cwd), ['allow', 'allow']);
+    for (const command of [
+      'for d in a; do rm -rf src; done',
+      'if true; then rm -rf src; fi',
+      'if true; then :; else rm -rf src; fi',
+      'while true; do rm -rf src; done',
+      '{ rm -rf src; }',
+      '! rm -rf src',
+      '(rm -rf src)',
+      'case x in a) rm -rf src;; esac',
+    ]) {
+      assert.equal((await evaluateDangerousCommand(command, cwd)).decision, 'block', command);
+    }
+  });
+});
+
 void test('allows forced deletion beneath MPX_TEMP but not of the root itself', async () => {
   await temporary(async cwd => {
     // Outside the system temp, so only MPX_TEMP can make its children deletable; nothing is actually deleted.
