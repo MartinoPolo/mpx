@@ -55,6 +55,27 @@ void test('allows narrow and non-force cleanup but blocks unsafe, mixed, travers
   });
 });
 
+void test('allows forced deletion beneath MPX_TEMP but not of the root itself', async () => {
+  await temporary(async cwd => {
+    // Outside the system temp, so only MPX_TEMP can make its children deletable; nothing is actually deleted.
+    const declaredTemp = path.join(path.parse(cwd).root, `mpx-declared-temp-${process.pid}`);
+    const previous = process.env.MPX_TEMP;
+    process.env.MPX_TEMP = declaredTemp;
+    try {
+      assert.deepEqual(
+        await decisions([
+          `rm -rf "${path.join(declaredTemp, 'project.task').replaceAll('\\', '/')}"`,
+          `rm -rf "${declaredTemp.replaceAll('\\', '/')}"`,
+        ], cwd),
+        ['allow', 'block'],
+      );
+    } finally {
+      if (previous === undefined) delete process.env.MPX_TEMP;
+      else process.env.MPX_TEMP = previous;
+    }
+  });
+});
+
 void test('allows forced deletion of orphaned worktree leftovers but protects live checkouts', async () => {
   await temporary(async cwd => {
     const create = async (relative: string): Promise<void> => {

@@ -284,14 +284,15 @@ function isBroadTarget(value: string): boolean {
     /^[A-Za-z]:$/u.test(normalized) || /[*?\[]/u.test(value);
 }
 
-function beneathSystemTemp(resolved: string): boolean {
+function beneathTemporaryRoot(resolved: string): boolean {
   const normalize = (candidate: string): string => {
     const result = path.resolve(candidate);
     return process.platform === 'win32' ? result.toLowerCase() : result;
   };
   const target = normalize(resolved);
-  const root = normalize(tmpdir());
-  return target !== root && target.startsWith(`${root}${path.sep}`);
+  // MPX_TEMP is the machine's declared disposable root, so its children are as safe to delete as the system temp's.
+  const roots = [tmpdir(), process.env.MPX_TEMP].filter((root): root is string => Boolean(root?.trim())).map(normalize);
+  return roots.some(root => target !== root && target.startsWith(`${root}${path.sep}`));
 }
 
 function safeForcedDeletionTarget(target: Word, cwd: string): boolean {
@@ -311,7 +312,7 @@ function safeForcedDeletionTarget(target: Word, cwd: string): boolean {
     : path.resolve(cwd, literal);
   if (orphanedWorktreeLeftover(resolved)) return true;
   if (components.some((component) => WORKTREE_CONTAINER_COMPONENTS.has(component))) return false;
-  return beneathSystemTemp(resolved);
+  return beneathTemporaryRoot(resolved);
 }
 
 function mayContainGitEntry(directory: string): boolean {
