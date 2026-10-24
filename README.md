@@ -216,6 +216,8 @@ as above; shared domains do not suppress project configuration warnings. Inspect
 - `MPX_AI_GENERATED`: saved media and the durable tutorial library.
 - `MPX_AI_DUMP`: retained non-project AI work, such as verification, backups, and imports; project plans and reports stay in their repository.
 - `MPX_TEMP`: disposable scratch files; Claude launches use it unless `CLAUDE_CODE_TMPDIR` is set.
+- `MPX_TEMP_EXTRA`: optional disposable roots on other drives, such as `D:\_temp` for large scratch
+  data; separate several with the platform path delimiter (`;` on Windows).
 
 Resolve roots from the environment, not hardcoded paths. After changing Windows user variables,
 restart the terminal host so new sessions inherit them; existing processes retain their old values.
@@ -226,7 +228,10 @@ not native harness permissions or organizational data restrictions.
 
 Pi and Claude Code own authentication, settings, and history; MPX does not copy credentials or
 conversations between accounts. Orca owns worktrees, terminals, servers, and desktop notifications.
-MPX safeguards prevent accidents; they are not a security sandbox.
+MPX safeguards prevent accidents; they are not a security sandbox. Forced recursive deletion is
+allowed for generated and cache folders, children of the system temp, `MPX_TEMP`, and
+`MPX_TEMP_EXTRA`, orphaned worktree leftovers, and `__screenshots__` folders git can restore.
+Deletion targets must be literal paths or variables assigned a literal at the start of the command.
 
 For agent Bash calls without `timeout`, MPX supplies a 120-second default through Pi's tool-call
 hook. Explicit timeouts and native execution/settings remain unchanged; choose a longer timeout

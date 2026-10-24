@@ -26,7 +26,8 @@ export async function evaluateTool(tool: ToolInput, options: FallowOptions & { s
   if (!['bash', 'Bash', 'powershell', 'PowerShell'].includes(tool.name)) return { decision: 'allow', diagnostics: [] };
   const command = tool.input.command;
   if (typeof command !== 'string') return { decision: 'block', diagnostics: ['Dangerous-command inspection failed: shell command is missing.'] };
-  const inspectedCommand = /powershell/i.test(tool.name) ? `powershell -Command ${JSON.stringify(command)}` : command;
+  // Single quotes keep PowerShell's `$true`/`$false` literal for inspection; double quotes made every `$` opaque.
+  const inspectedCommand = /powershell/i.test(tool.name) ? `powershell -Command '${command.replaceAll("'", "'\\''")}'` : command;
   let danger: PolicyResult;
   try { danger = await evaluateDangerousCommand(inspectedCommand, tool.cwd); }
   catch { return { decision: 'block', diagnostics: ['Dangerous-command inspection failed; this shell invocation is blocked.'] }; }

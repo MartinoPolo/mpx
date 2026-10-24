@@ -58,6 +58,27 @@ test('quiet shell syntax retains destructive, package-manager and index-mutation
   } finally { await rm(cwd, { recursive: true, force: true }); }
 });
 
+test('PowerShell tool commands keep automatic constants inspectable and preserve single quotes', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'mpx-powershell-'));
+  const options = { isTrusted: () => false };
+  try {
+    for (const command of [
+      'Remove-Item -Recurse -Force -Confirm:$false -LiteralPath node_modules/.vite',
+      "Remove-Item -Recurse -Force -Confirm:$false -LiteralPath 'dist','coverage'",
+      "Write-Output 'it''s fine'",
+    ]) {
+      assert.equal((await evaluateTool({ name: 'PowerShell', input: { command }, cwd }, options)).decision, 'allow', command);
+    }
+    for (const command of [
+      'Remove-Item -Recurse -Force -Confirm:$false src',
+      'Remove-Item -Recurse -Force $env:TARGET',
+      "Remove-Item -Recurse -Force 'node_modules','src'",
+    ]) {
+      assert.equal((await evaluateTool({ name: 'PowerShell', input: { command }, cwd }, options)).decision, 'block', command);
+    }
+  } finally { await rm(cwd, { recursive: true, force: true }); }
+});
+
 test('Claude native event transport preserves policy and nonblocking context fallbacks', async () => {
   const cwd = await mkdtemp(join(tmpdir(), 'mpx-claude-hooks-'));
   try {

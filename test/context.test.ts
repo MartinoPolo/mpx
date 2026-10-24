@@ -33,6 +33,7 @@ test('machineRootContext emits only the exact root allowlist and skips unset val
     MPX_AI_GENERATED: 'C:/generated',
     MPX_AI_DUMP: 'C:/dump',
     MPX_TEMP: 'C:/temp',
+    MPX_TEMP_EXTRA: 'D:/temp',
     MPX_OBSIDIAN_VAULT: 'C:/vault',
     MPX_SECRET: 'must-not-leak',
   });
@@ -45,6 +46,7 @@ test('machineRootContext emits only the exact root allowlist and skips unset val
     '- MPX_AI_GENERATED = C:/generated — saved AI-generated media and durable tutorials',
     '- MPX_AI_DUMP = C:/dump — general AI scratchpad worth keeping (plans, reports, artifacts)',
     '- MPX_TEMP = C:/temp — disposable temporary files',
+    '- MPX_TEMP_EXTRA = D:/temp — extra disposable roots on other drives, for large scratch data',
     '- MPX_OBSIDIAN_VAULT = C:/vault — Obsidian vault',
     'This snapshot supersedes earlier machine-root messages.',
     'Paths outside the working directory should be resolved from these variables.',

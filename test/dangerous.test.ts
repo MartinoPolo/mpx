@@ -35,8 +35,10 @@ void test('allows narrow and non-force cleanup but blocks unsafe, mixed, travers
         'rm --force --recursive dist/assets',
         'rm -rf packages/app/.cache/nested',
         `rm -rf "${path.join(cwd, 'scratch-child').replaceAll('\\', '/')}"`,
+        'rm -rf src/test-results',
+        'rm -rf apps/web/playwright-report',
       ], cwd),
-      ['allow', 'allow', 'allow', 'allow', 'allow', 'allow', 'allow'],
+      ['allow', 'allow', 'allow', 'allow', 'allow', 'allow', 'allow', 'allow', 'allow'],
     );
 
     for (const command of [
@@ -73,24 +75,86 @@ void test('inspects forced deletion inside compound commands and subshells', asy
   });
 });
 
-void test('allows forced deletion beneath MPX_TEMP but not of the root itself', async () => {
+void test('allows forced deletion beneath MPX_TEMP and MPX_TEMP_EXTRA roots but not of the roots themselves', async () => {
   await temporary(async cwd => {
-    // Outside the system temp, so only MPX_TEMP can make its children deletable; nothing is actually deleted.
-    const declaredTemp = path.join(path.parse(cwd).root, `mpx-declared-temp-${process.pid}`);
-    const previous = process.env.MPX_TEMP;
-    process.env.MPX_TEMP = declaredTemp;
+    // Outside the system temp, so only the declared roots can make their children deletable; nothing is actually deleted.
+    const declared = (name: string): string => path.join(path.parse(cwd).root, `mpx-${name}-${process.pid}`);
+    const [temp, firstExtra, secondExtra] = [declared('temp'), declared('extra-one'), declared('extra-two')];
+    const posix = (value: string): string => value.replaceAll('\\', '/');
+    const previous = { temp: process.env.MPX_TEMP, extra: process.env.MPX_TEMP_EXTRA };
+    process.env.MPX_TEMP = temp;
+    process.env.MPX_TEMP_EXTRA = [firstExtra, secondExtra].join(path.delimiter);
     try {
       assert.deepEqual(
         await decisions([
-          `rm -rf "${path.join(declaredTemp, 'project.task').replaceAll('\\', '/')}"`,
-          `rm -rf "${declaredTemp.replaceAll('\\', '/')}"`,
+          `rm -rf "${posix(path.join(temp, 'project.task'))}"`,
+          `rm -rf "${posix(path.join(secondExtra, 'project.task'))}"`,
+          `rm -rf "${posix(temp)}"`,
+          `rm -rf "${posix(firstExtra)}"`,
         ], cwd),
-        ['allow', 'block'],
+        ['allow', 'allow', 'block', 'block'],
       );
     } finally {
-      if (previous === undefined) delete process.env.MPX_TEMP;
-      else process.env.MPX_TEMP = previous;
+      for (const [name, value] of [['MPX_TEMP', previous.temp], ['MPX_TEMP_EXTRA', previous.extra]] as const) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
     }
+  });
+});
+
+void test('resolves only leading unconditional literal assignments in forced deletion targets', async () => {
+  await temporary(async cwd => {
+    const root = cwd.replaceAll('\\', '/');
+    assert.deepEqual(
+      await decisions([
+        `S=${root}; rm -rf $S/child`,
+        `S="${root}" && rm -rf "\${S}/child"`,
+        `set -euo pipefail; S=${root}; R=${root}/x; rm -rf "$S/child" $R/y`,
+      ], cwd),
+      ['allow', 'allow', 'allow'],
+    );
+    for (const command of [
+      `S=${root} rm -rf $S/child`,
+      `true && S=${root}; rm -rf $S/child`,
+      `(S=${root}); rm -rf $S/child`,
+      `S=${root}; for S in /; do rm -rf $S/child; done`,
+      `S=${root}; eval "export S=/"; rm -rf $S/child`,
+      `S=${root}; rm -rf \${S:-/}/child`,
+      `S=${root}/a\\ b; rm -rf $S/child`,
+      `S=~/scratch; rm -rf $S/child`,
+    ]) {
+      assert.equal((await evaluateDangerousCommand(command, cwd)).decision, 'block', command);
+    }
+  });
+});
+
+void test('allows forced deletion of snapshot folders only when git can restore them', async () => {
+  await temporary(async cwd => {
+    const create = async (relative: string, content = 'image'): Promise<void> => {
+      await mkdir(path.dirname(path.join(cwd, relative)), { recursive: true });
+      await writeFile(path.join(cwd, relative), content);
+    };
+    git(cwd, 'init', '--quiet', '--initial-branch=main');
+    await create('.gitignore', 'src/ignored/__screenshots__/\n');
+    await create('src/tracked/__screenshots__/baseline.png');
+    await create('src/modified/__screenshots__/baseline.png');
+    git(cwd, 'add', '.');
+    git(cwd, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '--quiet', '-m', 'fixture');
+    await create('src/modified/__screenshots__/baseline.png', 'changed');
+    await create('src/ignored/__screenshots__/failure.png');
+    await create('src/untracked/__screenshots__/new.png');
+
+    assert.deepEqual(
+      await decisions([
+        'rm -rf src/tracked/__screenshots__',
+        'rm -rf src/ignored/__screenshots__',
+        'rm -rf src/missing/__screenshots__',
+        'rm -rf src/modified/__screenshots__',
+        'rm -rf src/untracked/__screenshots__',
+      ], cwd),
+      ['allow', 'allow', 'allow', 'block', 'block'],
+    );
   });
 });
 

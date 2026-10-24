@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { existsSync, lstatSync, readdirSync, type Dirent } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -56,7 +56,11 @@ const GENERATED_COMPONENTS = new Set([
   '.mypy_cache',
   '.ruff_cache',
   'target',
+  'test-results',
+  'playwright-report',
 ]);
+const GIT_RECOVERABLE_COMPONENT = '__screenshots__';
+const LITERAL_VARIABLE_VALUE = /^[^\t\n\r$`(){}*?[\]<>|;&!~'"\\]+$/u;
 
 function executableName(value: string): string {
   return value.split(/[\\/]/u).at(-1)?.replace(/\.(?:exe|cmd|bat)$/iu, '').toLowerCase() ?? '';
@@ -79,7 +83,7 @@ export function isWindowsNulFileTarget(target: string): boolean {
   return /^nul(?:\..*)?$/iu.test(basename.replace(/[ .]+$/u, ''));
 }
 
-function tokenize(command: string): { tokens: Token[]; malformed: boolean } {
+function tokenize(command: string, variables: ReadonlyMap<string, string> = new Map()): { tokens: Token[]; malformed: boolean } {
   const tokens: Token[] = [];
   let value = '';
   let dynamic = false;
@@ -90,6 +94,14 @@ function tokenize(command: string): { tokens: Token[]; malformed: boolean } {
     if (value !== '' || dynamic) tokens.push({ value, dynamic });
     value = '';
     dynamic = false;
+  };
+  const expandKnownVariable = (index: number): number => {
+    const reference = /^\$(?:\{([A-Za-z_]\w*)\}|([A-Za-z_]\w*))/u.exec(command.slice(index));
+    const replacement = variables.get(reference?.[1] ?? reference?.[2] ?? '');
+    // Unquoted values with spaces would word-split, so only quoted expansions may carry them.
+    if (!reference || replacement === undefined || (quote !== '"' && /\s/u.test(replacement))) return 0;
+    value += replacement;
+    return reference[0].length;
   };
 
   for (let index = 0; index < command.length; index += 1) {
@@ -111,6 +123,11 @@ function tokenize(command: string): { tokens: Token[]; malformed: boolean } {
           value += character;
         }
       } else {
+        const expanded = character === '$' ? expandKnownVariable(index) : 0;
+        if (expanded > 0) {
+          index += expanded - 1;
+          continue;
+        }
         value += character;
         if (character === '$' || character === '`') dynamic = true;
       }
@@ -154,12 +171,51 @@ function tokenize(command: string): { tokens: Token[]; malformed: boolean } {
       tokens.push({ operator: character });
       continue;
     }
+    const expanded = character === '$' ? expandKnownVariable(index) : 0;
+    if (expanded > 0) {
+      index += expanded - 1;
+      continue;
+    }
     value += character;
     if (character === '$' || character === '`') dynamic = true;
   }
   if (quote) malformed = true;
   finishWord();
   return { tokens, malformed };
+}
+
+// Only leading, unconditional assignments are certain to hold when later words expand; any other
+// mention of the name (loops, read, export, eval, subshells) may rebind it, so it stays dynamic.
+function leadingLiteralAssignments(tokens: readonly Token[]): Map<string, string> {
+  const variables = new Map<string, string>();
+  let pending: [string, string][] = [];
+  let settingShellOptions = false;
+  let end = 0;
+  for (; end < tokens.length; end += 1) {
+    const token = tokens[end] as Token;
+    if (isOperator(token)) {
+      if (token.operator !== ';' && token.operator !== '&&') break;
+      for (const [name, value] of pending) variables.set(name, value);
+      pending = [];
+      settingShellOptions = false;
+      continue;
+    }
+    const previous = tokens[end - 1];
+    const startsCommand = previous === undefined || isOperator(previous);
+    if (startsCommand && token.value === 'set' && !token.dynamic) settingShellOptions = true;
+    if (settingShellOptions) continue;
+    const assignment = /^([A-Za-z_]\w*)=(.+)$/su.exec(token.value);
+    if (token.dynamic || !assignment || !LITERAL_VARIABLE_VALUE.test(assignment[2] ?? '')) break;
+    pending.push([assignment[1] as string, assignment[2] as string]);
+  }
+  for (const name of [...variables.keys()]) {
+    const mention = new RegExp(`(?<!\\w)${name}(?!\\w)`, 'u');
+    const reference = new RegExp(`\\$(?:\\{${name}\\}|${name}(?!\\w))`, 'gu');
+    if (tokens.slice(end).some((token) => !isOperator(token) && mention.test(token.value.replace(reference, '')))) {
+      variables.delete(name);
+    }
+  }
+  return variables;
 }
 
 function hasOpaqueCommandExpansion(command: string): boolean {
@@ -291,9 +347,30 @@ function beneathTemporaryRoot(resolved: string): boolean {
     return process.platform === 'win32' ? result.toLowerCase() : result;
   };
   const target = normalize(resolved);
-  // MPX_TEMP is the machine's declared disposable root, so its children are as safe to delete as the system temp's.
-  const roots = [tmpdir(), process.env.MPX_TEMP].filter((root): root is string => Boolean(root?.trim())).map(normalize);
+  // MPX_TEMP and MPX_TEMP_EXTRA are the machine's declared disposable roots, so their children are as safe to delete as the system temp's.
+  const roots = [tmpdir(), process.env.MPX_TEMP, ...(process.env.MPX_TEMP_EXTRA ?? '').split(path.delimiter)]
+    .filter((root): root is string => Boolean(root?.trim())).map(normalize);
   return roots.some(root => target !== root && target.startsWith(`${root}${path.sep}`));
+}
+
+// Snapshot folders may hold committed baselines, so they are deletable only when git can restore every
+// file; ignored entries inside them are regenerated test output.
+function gitRecoverable(resolved: string): boolean {
+  let directory = resolved;
+  while (!existsSync(directory)) {
+    const parent = path.dirname(directory);
+    if (parent === directory) return false;
+    directory = parent;
+  }
+  try {
+    if (!lstatSync(directory).isDirectory()) directory = path.dirname(directory);
+    const status = execFileSync('git', ['-C', directory, 'status', '--porcelain', '--ignored', '--', resolved], {
+      cwd: TRUSTED_GIT_CWD, encoding: 'utf8', timeout: GIT_TIMEOUT_MS, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    return status.split('\n').every((line) => line === '' || line.startsWith('!! '));
+  } catch {
+    return false;
+  }
 }
 
 function safeForcedDeletionTarget(target: Word, cwd: string): boolean {
@@ -305,12 +382,13 @@ function safeForcedDeletionTarget(target: Word, cwd: string): boolean {
   if (isBroadTarget(target.value)) return false;
   const cwdComponents = pathComponents(cwd).map((component) => component.toLowerCase());
   if (!path.isAbsolute(target.value) && !path.win32.isAbsolute(target.value) && cwdComponents.some((component) => GENERATED_COMPONENTS.has(component) && !SCRATCH_COMPONENTS.has(component))) return true;
-  if (components.some((component) => PROTECTED_DELETE_COMPONENTS.has(component) && !WORKTREE_CONTAINER_COMPONENTS.has(component))) return false;
   const native = /^\/([A-Za-z])(?:\/(.*))?$/u.exec(target.value);
   const literal = native ? `${native[1]?.toUpperCase()}:/${native[2] ?? ''}` : target.value;
   const resolved = path.isAbsolute(literal) || path.win32.isAbsolute(literal)
     ? path.normalize(literal)
     : path.resolve(cwd, literal);
+  if (components.includes(GIT_RECOVERABLE_COMPONENT) && !components.includes('.git') && gitRecoverable(resolved)) return true;
+  if (components.some((component) => PROTECTED_DELETE_COMPONENTS.has(component) && !WORKTREE_CONTAINER_COMPONENTS.has(component))) return false;
   if (orphanedWorktreeLeftover(resolved)) return true;
   if (components.some((component) => WORKTREE_CONTAINER_COMPONENTS.has(component))) return false;
   return beneathTemporaryRoot(resolved);
@@ -637,7 +715,8 @@ async function inspect(command: string, cwd: string, depth: number, blocks: stri
     blocks.push(block(`command exceeds the ${MAX_COMMAND_LENGTH}-byte inspection limit`));
     return;
   }
-  const parsed = tokenize(command);
+  const literal = tokenize(command);
+  const parsed = literal.malformed ? literal : tokenize(command, leadingLiteralAssignments(literal.tokens));
   if (parsed.malformed) {
     blocks.push(block('shell quoting is malformed and cannot be inspected'));
     return;

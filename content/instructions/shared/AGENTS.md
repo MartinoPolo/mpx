@@ -67,6 +67,7 @@ Project-specific plans, research, reports and demo specs belong in the owning re
 others. `MPX_AI_DUMP` only for retained non-project work.
 
 - `MPX_TEMP`: disposable files (scripts, screenshots, logs); may be deleted tomorrow.
+- `MPX_TEMP_EXTRA`: optional disposable roots on other drives, for large scratch data.
 - `MPX_AI_GENERATED`: final outputs only (rendered videos, podcasts, images), never build workspaces.
 
 Prefer grouping a task's files in one folder named `<project>.<task-or-worktree>`, or just `<task>`.
