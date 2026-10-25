@@ -3,31 +3,17 @@
 // The tasks panel only ever renders agents Claude Code still has in its payload,
 // and it evicts a terminal task 30s after it finishes — so the panel is a live
 // view, never a ledger. The main bar wants the opposite: what ran, in total,
-// long after the last agent is gone. Both read the same two files.
+// long after the last agent is gone. Both read the same file.
 //
 //   ~/.claude/subagent-statusline-state/<session>.tsv
 //       written by subagent-status-line.mts on every tick, one row per agent:
 //       id, tier, effort, tokens, elapsed, status. Terminal rows freeze, so a
-//       finished agent's numbers are final. This is the spine — it is the only
-//       source that knows an agent's *status*, and it is complete, because the
-//       panel ticks continuously for as long as any agent is running.
-//
-//   <project>/<session>/subagents/agent-<id>.meta.json
-//       written by Claude Code at spawn: {agentType, description, toolUseId,
-//       spawnDepth, model?, name?, isFork?}. This is the only place the agent's
-//       *identity* survives — the tasks payload deliberately omits agentType
-//       (see the field notes in subagent-status-line.mts), so without this file
-//       every agent is an anonymous tier and a token count.
-//
-// The meta files are read by id rather than by scanning the directory: the TSV
-// already names every agent worth showing, so a readdir would only find rows
-// this renderer has decided not to draw. They are small and immutable once
-// written, and a session's worth of them costs less than the one git call the
-// main bar already makes every tick, so they are read fresh rather than cached.
+//       finished agent's numbers are final. It is complete, because the panel
+//       ticks continuously for as long as any agent is running.
 
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 
-import { isSafeStatusIdentifier, subagentTranscriptPath } from "./compaction.mts";
+import { isSafeStatusIdentifier } from "./compaction.mts";
 import { isNonNegativeInt } from "./statusline-ansi.mts";
 import { loadPalette } from "./terminal-theme.mts";
 
@@ -45,28 +31,10 @@ export const TIER_COLORS: Readonly<Record<string, string>> = {
     fable: PALETTE.contextOrange // orange
 };
 
-/**
- * The `!` marker and its red, shared so a broken rule looks the same on both
- * renderers: the panel prefixes the cell it accuses, the main bar prefixes the
- * agent type. Amber `?` stays with the panel — it qualifies an effort level,
- * and the main bar renders none.
- */
-export const DRIFT = PALETTE.contextRed;
-export const DRIFT_MARKER = "!";
-
 export const UNKNOWN_TIER = "unknown";
 export const TIER_ORDER = [...Object.keys(TIER_COLORS), UNKNOWN_TIER];
 
-/** The one status an agent reaches by finishing the work it was given. */
-export const COMPLETED = "completed";
-
-const TERMINAL_STATUSES = [COMPLETED, "failed", "killed"];
-
-/** Agent types spelled out on the tally before the rest collapse into a count. */
-export const AGENT_TYPE_ROWS = 6;
-
-/** Agents spelled out as a row of their own before the rest collapse into a count. */
-export const AGENT_DETAIL_ROWS = 5;
+const TERMINAL_STATUSES = ["completed", "failed", "killed"];
 
 export function isTerminalStatus(status: string): boolean {
     return TERMINAL_STATUSES.includes(status);
@@ -188,69 +156,6 @@ export function readSessionRecords(stateFile: string): StateRecord[] {
     }
 }
 
-// --- Agent identity ------------------------------------------------------------
-
-export interface SubagentMeta {
-    /** The subagent_type the Agent tool was called with: "Explore", "mpx-executor", "fork". */
-    agentType: string;
-    description: string;
-    /** Set only for named background agents and teammates; "" for a plain Task spawn. */
-    name: string;
-}
-
-/** Sits beside the agent's own transcript, under the same `subagents/` directory. */
-export function subagentMetaPath(sessionTranscript: string, agentId: string): string {
-    const transcript = subagentTranscriptPath(sessionTranscript, agentId);
-    return transcript === "" ? "" : transcript.replace(/\.jsonl$/, ".meta.json");
-}
-
-export function readSubagentMeta(sessionTranscript: string, agentId: string): SubagentMeta | undefined {
-    const metaPath = subagentMetaPath(sessionTranscript, agentId);
-    if (metaPath === "") {
-        return undefined;
-    }
-    let parsed: unknown;
-    try {
-        parsed = JSON.parse(readFileSync(metaPath, "utf8"));
-    } catch {
-        return undefined;
-    }
-    const record = (parsed ?? {}) as Record<string, unknown>;
-    const agentType = typeof record.agentType === "string" ? record.agentType : "";
-    if (agentType === "") {
-        return undefined;
-    }
-    return {
-        agentType,
-        description: typeof record.description === "string" ? record.description : "",
-        name: typeof record.name === "string" ? record.name : ""
-    };
-}
-
-/**
- * The markdown file that *defines* an agent type — `.claude/agents/<type>.md`,
- * project-level first and then user-level, which is the order Claude Code
- * resolves a `subagent_type` in.
- *
- * This is what a type name on the ledger links to, rather than the transcript of
- * one run: an agent type is a thing you edit, and its frontmatter (model, effort,
- * tools) is the answer to every question the ledger raises about it. A run's own
- * transcript is still one click away — it hangs off that run's status glyph.
- *
- * Built-in types (`general-purpose`, `Plan`, `fork`) have no file unless one was
- * written to override them, and "" — no link at all — is the honest answer there.
- */
-export function agentDefinitionPath(agentType: string, projectDir: string, configDir: string): string {
-    if (agentType === "" || agentType === UNKNOWN_TIER) {
-        return "";
-    }
-    const candidates = [
-        projectDir === "" ? "" : `${projectDir}/.claude/agents/${agentType}.md`,
-        configDir === "" ? "" : `${configDir}/agents/${agentType}.md`
-    ];
-    return candidates.find((candidate) => candidate !== "" && existsSync(candidate)) ?? "";
-}
-
 // --- Grouping ------------------------------------------------------------------
 
 /**
@@ -277,7 +182,7 @@ export interface CountedGroup {
     drifted: boolean;
 }
 
-/** One agent, seen through whichever label is being tallied — its tier or its type. */
+/** One agent, seen through the label being tallied. */
 export interface GroupMember {
     label: string;
     tokens: number;
@@ -317,9 +222,6 @@ export function groupMembers(members: readonly GroupMember[]): CountedGroup[] {
         }
         existing.count += 1;
         existing.tokens += member.tokens;
-        // One drifted member marks the whole group: the tier tally already says a
-        // banned model ran, and the type tally says which agent ran on it — the
-        // pairing is the only thing that survives the panel's eviction.
         existing.drifted ||= member.drifted;
     }
     return [...groups.values()];
@@ -339,56 +241,11 @@ export function groupByOrder(members: readonly GroupMember[], order: readonly st
     return groupMembers(members).sort((left, right) => rank(left.label) - rank(right.label));
 }
 
-/** One finished agent, everything a spelled-out row draws. */
-export interface FinishedAgent {
-    id: string;
-    /** The `subagent_type` it was spawned as, or `UNKNOWN_TIER` when the meta file is gone. */
-    type: string;
-    tier: string;
-    /** The resolved effort level, `""` where the tier takes none. */
-    effort: string;
-    tokens: number;
-    elapsedMs: number;
-    /** `COMPLETED`, `failed` or `killed` — never a live status. */
-    status: string;
-    /** Broke a tier rule — see `tierDriftReasons`. */
-    drifted: boolean;
-}
-
-/**
- * Which finished agents get a row of their own.
- *
- * A failed or killed agent is always spelled out and always first, however many
- * there are: a run that broke is the one thing in this history you might still
- * act on, and a cap that could hide it would defeat the row.
- *
- * Below them the ordering depends on whether everything fits. Up to `cap` agents
- * all do, so they keep spawn order and the block reads as the session's own
- * chronology. Past that the block has to choose, and the useful choice is the
- * expensive one: the heaviest consumers, largest first.
- */
-export function selectDetailRows(agents: readonly FinishedAgent[], cap: number = AGENT_DETAIL_ROWS): FinishedAgent[] {
-    const broken = agents.filter((agent) => agent.status !== COMPLETED);
-    const completed = agents.filter((agent) => agent.status === COMPLETED);
-    if (agents.length <= cap) {
-        return [...broken, ...completed];
-    }
-    const slots = Math.max(0, cap - broken.length);
-    // Array.sort is stable, so agents that spent the same keep spawn order.
-    return [...broken, ...[...completed].sort((left, right) => right.tokens - left.tokens).slice(0, slots)];
-}
-
 export interface SubagentSummary {
     /** Finished agents only — the running ones are the tasks panel's job. */
     agents: number;
     /** Tiers in `TIER_ORDER`, each carrying its own share of the tokens. */
     tiers: CountedGroup[];
-    /** Agent types, heaviest group first; ties keep spawn order. */
-    types: CountedGroup[];
-    /** The agents spelled out as their own row, in the order they render. */
-    rows: FinishedAgent[];
-    /** Finished agents with no row of their own. */
-    hiddenRows: number;
 }
 
 /**
@@ -396,44 +253,14 @@ export interface SubagentSummary {
  * excluded on purpose — the tasks panel renders directly beneath the main bar
  * for as long as any agent is alive, and showing the same agent in both places
  * would say the same thing twice while it runs and nothing at all afterwards.
- *
- * An agent whose meta file cannot be read still counts toward the tally and its
- * tier's tokens; only its name is unknown, and dropping the row entirely would
- * make the count disagree with the panel's.
  */
-export function summarizeFinishedAgents(
-    records: StateRecord[],
-    lookupMeta: (agentId: string) => SubagentMeta | undefined
-): SubagentSummary {
-    // One pass over the finished agents, read three ways: tallied by tier, tallied
-    // by type, and spelled out one by one. All three are the same agents, so they
-    // are derived from a single list rather than three walks of the state file.
-    const agents: FinishedAgent[] = records
+export function summarizeFinishedAgents(records: StateRecord[]): SubagentSummary {
+    const members = records
         .filter((record) => isTerminalStatus(record.status))
         .map((record) => ({
-            id: record.id,
-            type: lookupMeta(record.id)?.agentType ?? UNKNOWN_TIER,
-            tier: record.tier,
-            effort: record.effort,
+            label: record.tier,
             tokens: Math.trunc(Number.parseFloat(record.tokens) || 0),
-            elapsedMs: Math.trunc(Number.parseFloat(record.elapsedMs) || 0),
-            status: record.status,
             drifted: tierDriftReasons(record.tier).length > 0
         }));
-
-    const rows = selectDetailRows(agents);
-    return {
-        agents: agents.length,
-        tiers: groupByOrder(
-            agents.map((agent) => ({ label: agent.tier, tokens: agent.tokens, drifted: agent.drifted })),
-            TIER_ORDER
-        ),
-        // First-seen order is spawn order, which is the tie-break when two types
-        // have the same count — a stable sort leaves it intact.
-        types: groupMembers(
-            agents.map((agent) => ({ label: agent.type, tokens: agent.tokens, drifted: agent.drifted }))
-        ).sort((left, right) => right.count - left.count),
-        rows,
-        hiddenRows: agents.length - rows.length
-    };
+    return { agents: members.length, tiers: groupByOrder(members, TIER_ORDER) };
 }

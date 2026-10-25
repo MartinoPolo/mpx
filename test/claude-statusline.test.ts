@@ -6,7 +6,6 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { buildQuotaLine, buildSubagentLine, resolveAccountLabel } from '../src/claude-statusline/scripts/status-line.mts';
 import { readCompactionHistory } from '../src/claude-statusline/scripts/lib/compaction.mts';
-import { effortDriftReasons } from '../src/claude-statusline/scripts/subagent-status-line.mts';
 
 const renderer = resolve('src/claude-statusline/scripts/status-line.mts');
 const subagentRenderer = resolve('src/claude-statusline/scripts/subagent-status-line.mts');
@@ -57,33 +56,37 @@ test('subagent entrypoint writes live panel state and main entrypoint renders te
     await writeFile(join(workConfig, 'subagent-statusline-state', `${sessionId}.tsv`), 'foreign\thaiku\tlow\t999\t1\tcompleted\n');
     await writeFile(join(fixture.root, 'session', 'session', 'subagents', 'agent-a.meta.json'), JSON.stringify({ agentType: 'mpx-executor', description: 'Finished fixture' }));
     const panel = invoke(subagentRenderer, { columns: 120, session_id: sessionId, transcript_path: fixture.transcript, tasks: [{ id: 'a', model: 'sonnet', effort: 'high', status: 'completed', startTime: Date.now() - 2000, tokenCount: 1200, contextWindowSize: 200000, description: 'Fixture task' }] }, fixture.env);
-    assert.match(panel, /"id":"a"/); assert.match(panel, /Fixture task/); assert.match(panel, /sonnet/i);
+    assert.deepEqual(panel.trim().split('\n').map(line => JSON.parse(line)), [{ id: 'a', content: '' }]);
     const main = invoke(renderer, { session_name: 'Ledger', session_id: sessionId, cwd: fixture.repository, transcript_path: fixture.transcript, model: { display_name: 'Sonnet' }, context_window: {} }, fixture.env);
-    assert.match(main, /Finished fixture|mpx-executor/i);
-    assert.doesNotMatch(main, /foreign|999/);
+    assert.match(main, /Σ 1 agent .*1×Sonnet 1\.2k/);
+    assert.doesNotMatch(main, /foreign|999|mpx-executor/);
   } finally { await rm(fixture.root, { recursive: true, force: true }); }
 });
 
-test('finished-agent ledger omits type counts when reviewer history overflows', () => {
-  const reviewerTypes = ['code-quality', 'best-practices', 'spec-alignment', 'test-quality', 'security', 'performance', 'error-handling'].map(name => `mpx-reviewer-${name}`);
-  const rows = reviewerTypes.slice(0, 5).map((type, index) => ({
-    id: `reviewer-${index}`, type, tier: 'sonnet', effort: 'high', tokens: 1200,
-    elapsedMs: 2000, status: 'completed', drifted: false,
-  }));
+test('subagent panel collapses running agents into one summary row and hides the rest', async () => {
+  const fixture = await isolatedFixture();
+  try {
+    const now = Date.now();
+    const panel = invoke(subagentRenderer, { session_id: 'running-session', transcript_path: fixture.transcript, tasks: [
+      { id: 'a', model: 'claude-sonnet-5-5', status: 'running', startTime: now - 65_000, tokenCount: 1000, description: 'First' },
+      { id: 'b', model: 'claude-opus-5-5', status: 'running', startTime: now - 5_000, tokenCount: 2500, description: 'Second' },
+      { id: 'c', model: 'claude-sonnet-5-5', status: 'completed', startTime: now - 9_000, tokenCount: 700, description: 'Done' },
+    ] }, fixture.env);
+    const rows = panel.trim().split('\n').map(line => JSON.parse(line) as { id: string; content: string });
+    assert.deepEqual(rows.map(row => row.id), ['a', 'b', 'c']);
+    assert.match(plain(rows[0]!.content), /^● 2 running · 1×Opus 1×Sonnet · 3\.5k tokens · 1m0\ds$/);
+    assert.deepEqual(rows.slice(1).map(row => row.content), ['', '']);
+  } finally { await rm(fixture.root, { recursive: true, force: true }); }
+});
+
+test('finished-agent ledger is a single tally row', () => {
   const lines = buildSubagentLine({
-    summary: {
-      agents: reviewerTypes.length,
-      tiers: [{ label: 'sonnet', count: reviewerTypes.length, tokens: 8400, drifted: false }],
-      types: reviewerTypes.map(label => ({ label, count: 1, tokens: 1200, drifted: false })),
-      rows, hiddenRows: reviewerTypes.length - rows.length,
-    },
-    sessionTranscript: '', agentDefinition: () => '', compactions: () => ({ auto: 0, manual: 0 }),
+    agents: 7,
+    tiers: [{ label: 'sonnet', count: 5, tokens: 6000, drifted: false }, { label: 'haiku', count: 2, tokens: 2400, drifted: false }],
   }).map(plain);
-  assert.equal(lines.length, 1 + rows.length + 1);
-  assert.match(lines[0]!, /Σ 7 agents.*7×Sonnet.*8\.4k/);
-  assert.doesNotMatch(lines.join('\n'), /\d+×mpx-reviewer-/);
-  for (const row of rows) assert.ok(lines.some(line => line.includes(`✓ ${row.type}`)));
-  assert.match(lines.at(-1)!, /\+2 more/);
+  assert.equal(lines.length, 1);
+  assert.match(lines[0]!, /Σ 7 agents.*5×Sonnet 6\.0k.*2×Haiku 2\.4k/);
+  assert.deepEqual(buildSubagentLine({ agents: 0, tiers: [] }), []);
 });
 
 test('subagent entrypoint rejects traversal identifiers without outside writes', async () => {
@@ -112,12 +115,6 @@ test('cold compaction scans advance in bounded chunks without claiming completio
     assert.equal(history.length, 1);
     assert.equal(history[0]!.trigger, 'auto');
   } finally { await rm(fixture.root, { recursive: true, force: true }); }
-});
-
-test('native effort presentation does not reintroduce the retired high ceiling', () => {
-  assert.deepEqual(effortDriftReasons('sonnet', 'xhigh', false, true), []);
-  assert.deepEqual(effortDriftReasons('haiku', 'low', false, true), []);
-  assert.deepEqual(effortDriftReasons('opus', 'max', false, true), []);
 });
 
 test('quota displays native values and explicit unknown state', () => {
