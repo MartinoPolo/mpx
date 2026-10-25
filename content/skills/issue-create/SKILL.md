@@ -4,7 +4,7 @@ description: 'Creates one Issue in the configured provider. Use when "create iss
 triggers: creating or recording an Issue
 metadata:
   author: MartinoPolo
-  version: '0.14'
+  version: '0.15'
   category: utility
   mpx:
     schemaVersion: 1
@@ -46,16 +46,7 @@ it is unclear what they want. Otherwise create it and put the open questions in 
 
 ## 3. Classify
 
-- `task` (`Implementation task`, `0E8A16`) and exactly one of `AFK` (`Can be implemented
-  autonomously`, `0E8A16`) or `HITL` (`Requires human interaction`, `FBCA04`). `AFK` when the scope
-  and acceptance criteria are clear and no question is open.
-- Relevant existing area labels.
-- `design needed` (`Requires design (mockup + refine) before/with implementation`, `5319E7`) only for
-  substantial new UI or a user-facing workflow that needs design exploration.
-
-Where the provider supports label creation, create only missing labels with these exact values.
-Where it does not, apply the labels that exist and report the rest; the HITL section alone marks an
-Issue `HITL`.
+Apply labels and assignee per the template.
 
 ## 4. Create
 
@@ -67,5 +58,5 @@ unrelated content.
 
 ## Output
 
-The immutable ID and a clickable canonical URL, the title, the labels actually applied, the open
+The immutable ID and a clickable canonical URL, the title, the labels and assignee actually applied, the open
 questions the Issue carries, and every failed or unsupported operation with a manual handoff.

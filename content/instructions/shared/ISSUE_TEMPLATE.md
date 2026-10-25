@@ -45,3 +45,22 @@ screenshot.]
   inspection, review, and QA are not HITL.
 - When the user answers a question, delete it from the HITL section and put the answer where it
   belongs in the body. Remove the section when no question remains.
+
+## Labels and assignee
+
+Every Issue receives:
+
+- One type, unless the creating skill fixes it: `bug` (`Something isn't working`, `D73A4A`) for a
+  defect, `enhancement` (`New feature or request`, `A2EEEF`) for a new capability, otherwise `task`
+  (`Implementation task`, `1D76DB`).
+- Exactly one of `AFK` (`Can be implemented autonomously`, `0E8A16`) or `HITL` (`Requires human
+  interaction`, `FBCA04`). `AFK` when the scope and acceptance criteria are clear and no question is
+  open; a cause hypothesis the executor can confirm is not a question.
+- Relevant existing area labels.
+- `design needed` (`Requires design (mockup + refine) before/with implementation`, `5319E7`) only for
+  substantial new UI or a user-facing workflow that needs design exploration.
+- The authenticated user as assignee.
+
+Where the provider supports label creation, create only missing labels with these exact values;
+never re-normalize existing ones. Where it does not, apply the labels that exist and report the
+rest; the HITL section alone marks an Issue `HITL`.

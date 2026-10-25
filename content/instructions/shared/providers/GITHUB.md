@@ -15,7 +15,7 @@ gh issue list --repo <target> --state open|closed|all --limit 100 \
 gh issue view <issue> --repo <target> --comments \
     --json number,id,title,body,state,labels,milestone,url,assignees,comments
 gh issue create --repo <target> --title <title> --body-file <file> \
-    [--label <label>] [--milestone <name>]
+    [--label <label>] [--milestone <name>] [--assignee @me]
 gh issue edit <issue> --repo <target> [--title <title>] [--body-file <file>] \
     [--add-label <label>] [--remove-label <label>] [--milestone <name>]
 gh issue comment <issue> --repo <target> --body-file <file>

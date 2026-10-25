@@ -5,7 +5,7 @@ description:
   against...'
 metadata:
   author: MartinoPolo
-  version: '0.6'
+  version: '0.7'
   category: project-management
   mpx:
     schemaVersion: 1
@@ -65,13 +65,8 @@ For each proposed issue:
 - **Body** — follow the Issue template. Put each screenshot in the section it supports.
 - **Size** — estimate `size:S` (single file / few lines), `size:M` (multi-file, contained), or
   `size:L` (cross-cutting) from complexity.
-- **AFK vs HITL** — AFK when scope is clear; HITL when a requirement question is unanswered (add the
-  `### HITL (unanswered questions)` section).
-- **Type** — infer from the note's content: a defect → `bug`, a chore/audit/refactor → `task`, and a
-  new capability or improvement → `enhancement`. The note's position on the board carries no type
-  information.
-- **Labels** — inspect the selected provider's available labels/tags and preserve their exact values.
-  Use the supported inferred type + exactly one of `AFK`/`HITL` + `size:<X>` + inferred `area:*`.
+- **Labels and assignee** — per the Issue template, plus `size:<X>`. Infer the type from the note's
+  content; its position on the board carries no type information.
 
 ## Step 5: Confirm before creating
 

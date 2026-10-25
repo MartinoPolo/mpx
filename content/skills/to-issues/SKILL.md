@@ -6,7 +6,7 @@ description:
 triggers: breaking an Epic into implementation Issues
 metadata:
   author: MartinoPolo
-  version: '0.13'
+  version: '0.14'
   category: project-management
   mpx:
     schemaVersion: 1
@@ -34,8 +34,7 @@ facade actions or switch providers.
 - Design vertical slices, not horizontal layers; each is independently implementable/testable and
   maps to Epic requirements.
 - Create nothing until the user approves the complete breakdown.
-- Every child receives `task`, exactly one of `HITL` or `AFK`, relevant area labels, and
-  `design needed` for substantial new visual workflows.
+- Every child receives labels and assignee per the Issue template, with type `task`.
 - Parent/child and dependency relationships are deterministic Markdown body links, not native
   parent/sub-Issue APIs.
 
@@ -78,19 +77,9 @@ the full dependency graph. Ask for explicit approval and revise until received.
 
 ### 6. Ensure labels and create children
 
-Use native label commands from the selected provider guide. For GitHub, list first and create only
-missing labels; do not force-normalize existing labels unless the user approves that separate
-mutation:
-
-```bash
-gh label list --repo <target> --limit 100
-gh label create task --repo <target> --description "Implementation task" --color 1D76DB
-gh label create HITL --repo <target> --description "Human decision required" --color D93F0B
-gh label create AFK --repo <target> --description "Ready for autonomous execution" --color 0E8A16
-```
-
-KanbanFlow supports label listing but not label creation. If any required label is absent, stop child
-creation and return the exact manual label handoff.
+Ensure labels with the selected provider guide's native label commands, using the Issue template's
+exact values. Where the provider cannot create labels, such as KanbanFlow, stop child creation if any
+required label is absent and return the exact manual label handoff.
 
 Build body files from the Issue template, always including `### Epic`, then
 create sequentially enough to capture every immutable ID and URL. Use the selected guide's

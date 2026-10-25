@@ -4,7 +4,7 @@ description:
   "Investigates a bug's root cause and opens an issue/task labelled bug in the..."
 metadata:
   author: MartinoPolo
-  version: '0.7'
+  version: '0.8'
   category: issue-management
   mpx:
     schemaVersion: 1
@@ -75,13 +75,12 @@ Write the title, body, and comments per
 [the Issue template]({{MPX_SHARED_INSTRUCTIONS}}/ISSUE_TEMPLATE.md). The description carries
 expected and actual behavior and where to see it, with a screenshot when the bug is visible in a UI.
 One comment carries the reproduction steps and the root cause as short pointers. Acceptance criteria
-include the regression boundary. Ensure the `bug` label exists using only the
-selected provider's supported label operation, and include relevant existing area labels discovered
-during investigation. KanbanFlow labels must already exist. If label creation is unsupported, report
-the gap truthfully.
+include the regression boundary.
 
 Omit unsupported or unknown details rather than fabricating them. Never include machine-specific
 data. Use project domain language, including `.mpx/CONTEXT.md` when present.
+
+Apply labels and assignee to every new Issue per the template, with type `bug`.
 
 Create or update only through the selected guide. Capture the immutable Issue ID and canonical URL
 from the successful response. A successful creation remains valid if a later optional label,
@@ -95,7 +94,7 @@ For each bug, report:
 - immutable Issue ID and canonical URL;
 - whether an Issue was created, updated, or identified as a duplicate;
 - one-line root-cause summary and confidence when uncertain;
-- labels actually applied;
+- labels and assignee actually applied;
 - unsupported, failed, or manually required follow-up.
 
 Never claim creation, update, duplicate linkage, or label application without provider confirmation.
