@@ -116,14 +116,18 @@ wait, never by ending the turn.
 - **AI news**: at most three items newer than the window, from different vendors: Claude Code,
   Codex and Gemini releases, Anthropic, OpenAI and Google announcements, Hacker News front-page AI
   stories. Each has a `summary`, two to four `points` with the concrete changes and a `why` sentence
-  on what it means for my setup. Read `$MPX_AI_DUMP/morning-brief/taste.md` when present and follow
-  its preferences.
+  on what it means for my setup.
+
+`$MPX_AI_DUMP/morning-brief/taste.md`, when present, holds my preferences (whose calendars are
+whose, news taste); the main session and every area follow it.
 
 Calendar, Slack and mail come from the gatherers; the main session shapes them into chapters.
 The calendar shows one column per day: earlier days the window covers (greyed as history), today,
 and all of tomorrow; a day without events gets no column, only a clause in the narration. Events are
-coloured by calendar and busy-only work blocks stay untitled. Slack leads with what still waits on
-me, shown even when empty, then what is worth knowing, then one sentence on what I already handled;
+coloured by calendar and busy-only work blocks stay untitled. A calendar that belongs to someone
+else is named after them; narrate its events only when they change my day (a clash, someone to pick
+up), saying whose they are, and never its name days, birthdays or anniversaries. Slack leads with
+what still waits on me, shown even when empty, then what is worth knowing, then one sentence on what I already handled;
 handled messages stay listed but are not narrated one by one. A problem someone else is handling
 names them (`handledBy`). Mail lists only what needs action, in a personal and a work panel;
 notifications collapse into count lines per `account`, and alerts go to merge requests. Merge
