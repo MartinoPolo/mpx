@@ -145,7 +145,7 @@ function expandPath(value: unknown, label: string, env: NodeJS.ProcessEnv): stri
   return path.normalize(expanded);
 }
 
-async function comparablePath(value: string): Promise<string> {
+export async function comparablePath(value: string): Promise<string> {
   try {
     return normalizeForComparison(await realpath(value));
   } catch {

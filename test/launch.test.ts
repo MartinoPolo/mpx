@@ -50,6 +50,22 @@ test('additive arguments and selected native roots preserve all caller argument 
   } finally { await f.cleanup(); }
 });
 
+test('a Claude account at the default config root launches without pinning CLAUDE_CONFIG_DIR', async () => {
+  const f = await fixture();
+  try {
+    const home = join(f.root, 'home');
+    const defaultRoot = join(home, '.claude');
+    await mkdir(defaultRoot, { recursive: true });
+    const config: UserConfig = { ...f.config, accounts: { ...f.config.accounts, personal: { ...f.config.accounts.personal, claude: defaultRoot } } };
+    const base = { root: f.root, cwd: join(f.root, 'personal'), harness: 'claude' as const, config, project: registered, selection: { packs: [], paths: [], warnings: [] }, args: [], env: { HOME: home, USERPROFILE: home, CLAUDE_CONFIG_DIR: 'inherited' } };
+    const personal = await createLaunchSpec({ ...base, account: 'personal' });
+    assert.equal(personal.env.CLAUDE_CONFIG_DIR, undefined);
+    assert.equal(personal.env.MPX_ACCOUNT, 'personal');
+    const work = await createLaunchSpec({ ...base, account: 'work' });
+    assert.equal(work.env.CLAUDE_CONFIG_DIR, f.config.accounts.work.claude);
+  } finally { await f.cleanup(); }
+});
+
 test('ownership and configuration warnings are typed, prioritized, deduplicated, and require confirmation unless work reaches personal', async () => {
   const f = await fixture();
   try {

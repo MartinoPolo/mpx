@@ -1,7 +1,9 @@
 import { realpath, stat } from 'node:fs/promises';
-import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { homedir } from 'node:os';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { spawn } from 'node:child_process';
 import { createInterface, type Interface, type Key } from 'node:readline';
+import { comparablePath } from './config.js';
 import type { Account, Harness, LaunchSpec, LaunchWarning, PackSelection, ProjectSelection, UserConfig } from './contracts.js';
 import { LAUNCH_WARNING_CODE, launchWarningsRequireConfirmation, sortLaunchWarnings, WARNING_SEVERITY } from './contracts.js';
 
@@ -17,6 +19,10 @@ export function cleanEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     result[retainedMpx.has(upper) ? upper : key] = value;
   }
   return result;
+}
+/** Mirrors Node's `os.homedir()` resolution as the launched child will see it. */
+function childHomeDirectory(env: NodeJS.ProcessEnv): string {
+  return (process.platform === 'win32' ? env.USERPROFILE : env.HOME) || homedir();
 }
 function inside(candidate: string, root: string): boolean {
   const rel = relative(root, candidate);
@@ -89,7 +95,10 @@ export async function createLaunchSpec(options: {
   }
   const normalizedWarnings = sortLaunchWarnings(warnings);
   const env = cleanEnvironment(sourceEnv);
-  env[harness === 'pi' ? 'PI_CODING_AGENT_DIR' : 'CLAUDE_CONFIG_DIR'] = accountRoot;
+  if (harness === 'pi') env.PI_CODING_AGENT_DIR = accountRoot;
+  // An exported CLAUDE_CONFIG_DIR moves Claude's state file into the root and changes its credential
+  // identity even when it names the default, which would split the default account from plain `claude`.
+  else if (await comparablePath(accountRoot) !== await comparablePath(join(childHomeDirectory(env), '.claude'))) env.CLAUDE_CONFIG_DIR = accountRoot;
   // Claude Code roots its session scratchpad and task output at CLAUDE_CODE_TMPDIR.
   if (harness === 'claude' && env.MPX_TEMP && !env.CLAUDE_CODE_TMPDIR) env.CLAUDE_CODE_TMPDIR = env.MPX_TEMP;
   // claude.ai connectors cost context in every session, so only explicit `--connectors` launches load them.

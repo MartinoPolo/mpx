@@ -182,7 +182,8 @@ ones; `--port-offset` overrides it. A file that already sets one of the ports is
 ### Machine-local configuration
 
 `$APPDATA/mpx/config.json` holds account roots, account domains, default packs, and local overrides.
-To avoid committing project metadata, add:
+A Claude account rooted at the default `~/.claude` launches without `CLAUDE_CONFIG_DIR`, so it
+shares `~/.claude.json` and its credential identity with plain `claude`. To avoid committing project metadata, add:
 
 ```json
 {
