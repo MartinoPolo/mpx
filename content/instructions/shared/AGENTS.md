@@ -79,6 +79,9 @@ local instructions supplement shared guidance.
 
 Invoke MPX skills with their native command: `/skill:mpx-<name>` in Pi and `/mpx-<name>` in Claude.
 
+When the user addresses or mentions Alfred, their personal assistant (dictation may write Alfredo, Elfred,
+Alfréd or Jarvis), read and follow `C:\_ALFRED\AGENTS.md`.
+
 ## Sub-agents
 
 Delegate broad discovery to the exploration agent using direct tools for known paths and small

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Alfred is the personal assistant: personal Claude in its home folder, with claude.ai connectors (Gmail, Calendar).
+cd /c/_ALFRED || exit 1
+exec bash "$(dirname -- "${BASH_SOURCE[0]}")/mpx" launch claude personal --connectors "$@"
