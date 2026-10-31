@@ -94,6 +94,7 @@ Run from Git Bash in your project:
 
 The account shortcuts require MPX's `bin/` to precede native launchers on `PATH`. Check with
 `type -a pi`; use `mpx launch pi personal` to bypass a shadowed `pi` shortcut.
+`cc.cmd` lets shell-less Windows launchers, such as Orca's chat view, start `cc`.
 Preview sync/setup before allowing writes; preserve unrelated native and project files.
 Claude Code sync owns `autoCompactWindow`; change the trigger through
 `CLAUDE_AUTO_COMPACT_TRIGGER_TOKENS` in `src/runtime-install.ts`.
