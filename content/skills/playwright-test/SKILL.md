@@ -71,7 +71,7 @@ reasoning, not routine capture. Give it these acceptance expectations:
   screenshot paths, and omitted states. Continue independent checks after individual failures.
 
 The verifier may create a temporary runner and evidence, but must not edit application source,
-create persistent tests, manage servers, or automatically commit/upload artifacts or publish CI.
+create persistent tests, manage servers, commit or upload artifacts, or publish CI.
 
 ## 4. Report
 

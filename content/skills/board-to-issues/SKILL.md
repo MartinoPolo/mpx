@@ -62,7 +62,8 @@ unsupported, report that bounded gap and require explicit confirmation before cr
 
 For each proposed issue:
 
-- **Body** — follow the Issue template. Put each screenshot in the section it supports.
+- **Body** — follow the Issue template. Put each board image in the section it supports, attached
+  from `.mpx/board-files/<filename>` through the provider guide.
 - **Size** — estimate `size:S` (single file / few lines), `size:M` (multi-file, contained), or
   `size:L` (cross-cutting) from complexity.
 - **Labels and assignee** — per the Issue template, plus `size:<X>`. Infer the type from the note's
@@ -80,7 +81,8 @@ skip.
 ## Step 6: Create issues
 
 Create each confirmed Issue using only the selected provider guide's native create operation,
-preserving the approved title, canonical body, labels/tags, and assignee when supported. Capture its
+preserving the approved title, canonical body with its attached images, labels/tags, and assignee
+when supported. Capture its
 provider-native identifier and URL. If a capability is unsupported or authentication is unavailable,
 continue independent drafting and return exact manual steps—do not fall back to another provider or
 CLI.

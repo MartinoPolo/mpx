@@ -4,8 +4,8 @@ The body of every task Issue. Keep only the sections that apply; no other headin
 
 ```markdown
 [What is wrong or wanted, and why, in one to five sentences. Where it happens: module, symbol, or
-affected page, with repo-relative paths as hints. Where to see it: URL or story, and the attached
-screenshot.]
+affected page, with repo-relative paths as hints. Where to see it: URL or story, and the screenshot
+that shows it.]
 
 ### Acceptance criteria
 
@@ -36,8 +36,9 @@ screenshot.]
 - Findings worth keeping, such as reproduction details, a cause hypothesis, or entry points, go into
   Issue comments as short pointers, one topic per comment. Never put probe results or session
   history in the body.
-- Put each link and screenshot in the section or comment it supports. Name each attached image in
-  the text when the provider cannot embed it.
+- Put each link and screenshot in the section or comment it supports, attached through the provider
+  guide. GitHub embeds images inline; where the provider cannot embed them (KanbanFlow), name each
+  attached image in the text.
 - Paths are repo-relative hints, never absolute. The code is the source of truth.
 - `### Epic` and `### Blocking relationships` hold body links for real relationships only; they do
   not create provider-native hierarchy.

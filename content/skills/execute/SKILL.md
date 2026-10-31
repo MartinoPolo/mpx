@@ -31,8 +31,9 @@ a timed-out check needs diagnosis.
 
 ## 1. Resolve
 
-- Issue reference: fetch its title, body, labels, comments, state, and URL. Extract the goal,
-  constraints, acceptance criteria, and blockers.
+- Issue reference: fetch its title, body, labels, comments, state, and URL, and download its
+  attached images per the Issue provider guide. Extract the goal, constraints, acceptance criteria,
+  and blockers.
 - Inline text: parse tasks or checklist items. Do not write back to an Issue.
 
 Before provider operations, follow [Provider Routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md)
@@ -124,6 +125,9 @@ block delivery; reporting them does not make them passes.
 Recheck acceptance and the selected endpoint. Prepare a substantive change summary, then dispatch
 `mpx-shipper` with task context, explicit intended paths, summary, and verification evidence.
 Supply its required delivery identities and authorization; preserve completed-stage evidence on retry.
+For Issue work after visual acceptance, also supply representative final screenshot paths for the
+PR body, then attach them in a comment on the Issue through the Issue provider guide. Never commit
+them.
 
 Evaluate failures, delegate accepted repairs to a fresh executor, and verify again before retrying. Give CI repairs the validated repository, PR, branch,
 commit, and failing run/job identities. A confirmed CI-only infrastructure failure may retry that

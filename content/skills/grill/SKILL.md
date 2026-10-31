@@ -35,7 +35,8 @@ grill.
 - If `the invocation input` is inline text, use as the grilling subject.
 - If `the invocation input` is a topic or plan description, use directly.
 - If `the invocation input` names an Issue, read it, its comments and attachments through
-  [Provider Routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md).
+  [Provider Routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md), downloading attached images
+  per the selected provider guide.
 - If no arguments, ask the user what to grill.
 
 ## Step 3: Grill

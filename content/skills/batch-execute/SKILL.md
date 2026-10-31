@@ -58,7 +58,7 @@ before continuing; do not switch checkouts or manipulate worktrees.
 ## Execution
 
 Sequentially invoke one fresh `mpx-executor` per Issue, providing the exact Issue/board text,
-body-linked artifacts and file pointers, relevant requirements, known failures, acceptance criteria
+attached images downloaded per the Issue provider guide, body-linked artifacts and file pointers, relevant requirements, known failures, acceptance criteria
 as REQ-1..N, a precise implementation objective, target context, exact discovered check/test
 commands, and selected test mode. Pass the selected test mode to every fresh `mpx-executor`,
 including all implementation and CI repairs. `--no-tdd` excludes creating tests during
@@ -136,8 +136,8 @@ edit that file.
 
 ## Publish
 
-Invoke `mpx-shipper` with the explicit `pr` endpoint and the selected repository provider target.
-It stages and commits intended paths, pushes as authorized, creates or updates exactly one draft PR
+Invoke `mpx-shipper` with the explicit `pr` endpoint and the selected repository provider target,
+plus representative final screenshot paths for the PR body when visual acceptance ran. It stages and commits intended paths, pushes as authorized, creates or updates exactly one draft PR
 using the shipper's title/body contract, canonical Issue links, and provider closing references
 only where valid. It monitors native CI and returns explicit PR and run identities. For a
 failure, main validates those identities, evaluates the evidence, and delegates every accepted
@@ -148,8 +148,10 @@ commit, push, PR, and CI stages without resetting during continuation. Per-item 
 not reduce this budget. Independently confirm fresh green status for the
 explicit PR before completing publication. The `pr` endpoint remains unmerged.
 For CI repairs, supply the validated repository, PR, branch, commit, and failing run/job identities.
+After publication, attach those screenshots in a comment on each Issue they verify through the Issue
+provider guide. Never commit them.
 
 Report Issue→commit mappings, skips and gate decisions, exact checks, review fixes/findings, visual
 `PASS`/`FAIL`/`BLOCKED` per requirement and state, board moves, PR ID/URL, CI, merge state, and
 blockers. When visual acceptance ran, include a small representative gallery of openable links to
-final screenshots; do not commit them or automatically upload or publish them through CI.
+final screenshots.

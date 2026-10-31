@@ -51,8 +51,8 @@ Apply labels and assignee per the template.
 ## 4. Create
 
 Skip creation when an open Issue already covers the same problem; report that Issue instead.
-Otherwise create the Issue through the selected provider guide, attaching screenshots or logs
-already on disk where the provider supports it, then add the comments. For an Epic or blocker the
+Otherwise create the Issue through the selected provider guide, attaching the screenshots, and logs
+where the provider accepts them, then add the comments. For an Epic or blocker the
 user named, write the reciprocal body link on the other Issue after re-reading it, preserving its
 unrelated content.
 

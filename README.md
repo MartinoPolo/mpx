@@ -140,7 +140,8 @@ Use `/skill:mpx-<name>` in Pi or `/mpx-<name>` in Claude Code:
 For `execute`, inline work commits locally without hosted delivery. `--no-tdd` skips creating tests,
 not running existing tests; `--full-review` adds specialist reviews; `--no-auto-merge` leaves the PR/MR open.
 Visual changes in `execute` and `batch-execute` also receive browser verification and a screenshot
-gallery, even with `--no-tdd`. Screenshots and temporary runners are not committed or uploaded automatically.
+gallery, even with `--no-tdd`. Representative screenshots are attached to the Issue and PR;
+screenshots and temporary runners are never committed.
 
 ## Project configuration
 

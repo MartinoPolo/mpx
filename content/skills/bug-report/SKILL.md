@@ -73,7 +73,8 @@ symptom, domain terms, diagnostics, and root-cause concepts. View plausible matc
 
 Write the title, body, and comments per
 [the Issue template]({{MPX_SHARED_INSTRUCTIONS}}/ISSUE_TEMPLATE.md). The description carries
-expected and actual behavior and where to see it, with a screenshot when the bug is visible in a UI.
+expected and actual behavior and where to see it, with a screenshot attached through the selected
+guide when the bug is visible in a UI.
 One comment carries the reproduction steps and the root cause as short pointers. Acceptance criteria
 include the regression boundary.
 

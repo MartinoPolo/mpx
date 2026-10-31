@@ -29,6 +29,7 @@ The caller supplies:
 - independently selected Issue provider, target, verified Issue identity, and canonical link when an
   Issue is linked;
 - immutable PR/change and CI run identities already established, if any;
+- representative final screenshot paths, when visual acceptance ran;
 - whether merge is authorized, allowed strategies or provider policy, and `no_auto_merge`.
 
 Missing or ambiguous required identity is a bounded failure. For provider-dependent endpoints,
@@ -113,8 +114,9 @@ The PR/MR description contains only the motivation/value or intended result; nec
 migration, or breaking effects, with breaking effects first; reasons for otherwise unclear decisions;
 important constraints or deliberately excluded scope; and gotchas not apparent from the diff. Omit
 implementation/file inventories, repeated ticket text, test counts, gate results, CI/review narration,
-execution history, and evidence of effort. Delete sentences that serve no reader need. Add before/after
-images only when materially useful. Do not add empty headings or satisfy a bullet quota. Use a reviewed
+execution history, and evidence of effort. Delete sentences that serve no reader need. Attach supplied
+screenshots to the PR/MR body through the provider guide, each in the section it supports; never
+stage them. Do not add empty headings or satisfy a bullet quota. Use a reviewed
 temporary body file for multiline content.
 
 ## Requested endpoint

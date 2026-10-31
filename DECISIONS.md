@@ -68,6 +68,7 @@ conventions belong in `AGENTS.md`; rollout evidence and recovery belong in `migr
   raw-Playwright check against the latest requirements and a user-facing screenshot gallery. One
   standard-class verifier captures and inspects evidence to avoid duplicate context and handoffs;
   escalate only ambiguous visual reasoning. Passing E2E tests does not establish visual acceptance.
+  Representative final screenshots are attached to the Issue and PR as evidence, never committed.
 
 ## Configuration and accounts
 
