@@ -1,10 +1,14 @@
 ---
 name: hitl
-description: Resolve human decisions blocking Issues and make confirmed work autonomous
-argument-hint: '[epic or issue reference] [lowest|most-blocking]'
+description:
+  'Re-surfaces everything unresolved that needs the user (questions, to-dos, reviews) from a long
+  session in full original context with visual evidence'
+argument-hint: '[since <message or time>] [session ID or path]'
+triggers:
+  surface all open questions; what needs my decision; full questions again
 metadata:
   author: MartinoPolo
-  version: '0.6'
+  version: '1.0'
   category: project-management
   mpx:
     schemaVersion: 1
@@ -12,43 +16,69 @@ metadata:
     defaultExposure: explicit-only
 ---
 
-# HITL to AFK
+# HITL
 
-Read [Provider Routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md) and independently resolve `issues.provider`
-and `repository.provider` from `mpxconfig.json`; this workflow uses the selected issues provider's
-native guide in `{{MPX_SHARED_INSTRUCTIONS}}/providers/`. Never invent facade actions. Parent/child relationships are
-body links, not assumed provider-native sub-Issues. Preserve the native authenticated environment, explicit provider target, and privacy.
+In long sessions with sub-agents, every relay rephrases and shortens open questions and compaction
+shortens them again, so the user returns to terse questions they cannot answer. Produce the
+opposite: every open item written so someone who never saw the thread can decide it in seconds,
+with its evidence at hand.
 
-Parameters: optional Epic or Issue reference and ordering `lowest` (default) or `most-blocking`.
-An Issue is HITL when it carries `HITL` or a `### HITL (unanswered questions)` section.
+## 1. Read the originals
 
-1. If a non-Epic Issue is supplied, fetch it natively and continue at step 5 with that Issue alone.
-   If an Epic is supplied, fetch it natively. Otherwise list open Epic-labeled Issues; ask when
-   ambiguous and stop if none. Read its body, especially implementation decisions.
-2. Broadly list open task Issues with labels and bodies. Parse the Blocking relationships section and
-   parent/child body links into a graph. Fetch blocker states as needed.
-3. An HITL Issue is eligible when every blocker is closed/finished or labeled `AFK`. Distinguish no
-   HITL, all resolved, all blocked, and dependency cycles; report instead of guessing.
-4. Sort eligible Issues by ascending provider ID for `lowest`, or descending transitive unblock
-   count for `most-blocking`, and present a useful queue, for example `1. issue:3 — Dashboard CRUD`
-   or `1. issue:3 — Dashboard CRUD (unblocks 6 downstream)`.
-5. For each Issue, extract ambiguities from the HITL section, description, and acceptance criteria;
-   remove decisions already settled by Epic context. Before asking questions, invoke named agent
-   `mpx-explorer` to inspect relevant code and report evidence. If external library facts are
-   uncertain, route to Context7.
-6. Present thematic batches of numbered questions with evidence-backed recommendations. Ask a
-   follow-up round only when prior answers materially affect it.
-7. Delete each answered question from the HITL section and put its answer where it belongs in the
-   body, usually the description or acceptance criteria. When no question remains, remove the
-   section and replace `HITL` with `AFK` using native provider commands; where the provider has
-   no `HITL` label, add `AFK`. Otherwise keep the remaining questions and `HITL`. Preserve the rest
-   of the body and its links exactly.
-8. Ask whether to continue. Recompute the graph after every update and enqueue newly unblocked HITL
-   Issues.
-9. Report concrete outcomes by category, for example `Resolved/AFK: issue:3 — Dashboard CRUD`,
-   `Partial/HITL: issue:7 — 2 experiments remain`, `Blocked: issue:9 by issue:6`, and
-   `Newly unblocked AFK: issue:4`. Include cycles when found.
+- Source: the current session up to the latest user message; with `since`, from that point; with a
+  session ID or path, that session. Read only sessions the user names.
+- Read the raw native transcript, not the compacted summary; the compaction note names its path.
+  Also read files the session wrote for the user: review indexes, question logs, plans, reports.
+- For large transcripts, `mpx-explorer` children locate candidates and return verbatim excerpts;
+  the parent classifies.
 
-Record only implementation decisions—never private conversation, credentials, personal context, or
-inferred identity. If a selected provider lacks an operation, preserve the exact proposed body/label
-change as a manual handoff and do not claim it succeeded.
+## 2. Collect and reconcile
+
+Collect every question, decision or permission request; step only the user can do; demo or file
+offered for review and not yet reviewed; unfulfilled user request; and decision the agent made on
+the user's behalf that the user should check. Start from each item's earliest full wording plus
+later expansions, never the shortest restatement.
+
+- Drop an item only with evidence: a later answer, rejection or superseding decision. Keep deferred
+  items ("later", "show me first") and the open part of partial answers.
+- Check to-dos against the current state (files, commits, renders, Issues), not the transcript.
+- Re-derive every recommendation from the current state and look at the visual results yourself
+  before recommending; a stale or unchecked recommendation is worse than none.
+
+## 3. Prepare visual aid
+
+Every decision that depends on how something looks gets a picture or clip. For a batch of similar
+results to check (for example many fixes of one kind), show a few representative examples, the
+worst case included, and state how many they stand for; never produce one capture per item.
+
+- Confirm each file exists and shows the current state. When options compare visually and no single
+  comparison exists, compose one, stacked and labelled with the option letters.
+- The user often reads on a phone through remote control, which opens local `file:///` links, so
+  link files where they lie; do not upload them. Keep each file phone-sized (compress first) and
+  within the user's known format preferences.
+
+## 4. Present
+
+Follow the active output style's `# HITL` section; restate every open item in this one message,
+never "still open from earlier". Each item:
+
+```markdown
+1. 🛑 **Short title:** the question in at most two lines, readable without the thread.
+   👉 rec: the pick and its deciding reason.
+   - Context, only what the decision needs: where (time code, screen, file), what happens now,
+     quoted original wording, a plain explanation of unfamiliar terms.
+   - **A.** every option in full with its visible consequence and cost.
+   - **B.** …
+   🖼️ [still.jpg](file:///…) · 🎬 [clip.mp4](file:///…) · 📄 [notes.md](file:///…)
+```
+
+- Every question has a recommendation and every option is written out; never point to a file
+  instead of listing the options.
+- Media icons mark only evidence links: 🖼️ image, 🎬 video, 📄 document; one evidence line per item,
+  no other new icons.
+- Decisions the agent already made go in To do as "check", with the evidence.
+- End with one FYI line listing items dropped as resolved and the answer that closed each.
+
+Done means every candidate is presented or listed as dropped with evidence, every option is written
+out, and every referenced file exists. If the transcript or a file cannot be read,
+report the path and error instead of presenting from the summary.

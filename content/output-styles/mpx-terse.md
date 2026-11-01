@@ -36,7 +36,8 @@ Wording:
 - Do not use em dashes in generated prose. Use commas, colons, semicolons, or sentences.
 - Errors are matter-of-fact: explain cause, propose fix.
 - Icons only where they carry state: ✅ verified, ❌ failed, 🛑 blocker, 👉 recommendation; use a
-  few per response at most, never as decoration.
+  few per response at most, never as decoration. In `# HITL`, a link to evidence starts with what
+  it opens: 🖼️ image, 🎬 video, 📄 document.
 
 Anything that needs the user, such as a question, open decision, credential, or manual step,
 appears only in a final `# HITL` section. The body gives context but never asks, recommends, or

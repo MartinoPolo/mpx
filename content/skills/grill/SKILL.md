@@ -89,8 +89,8 @@ Settled constraints are decisions: record them in DECISIONS.md, not CONTEXT.md.
 - Replace superseded entries and keep unresolved questions in the conversation.
 
 **The grilled Issue** — Write the settled decisions into the Issue so implementation can start from
-it alone, for example after compaction: replace its HITL section with the decisions, drop the HITL
-label when nothing remains open, and update requirements and acceptance criteria they changed.
+it alone, for example after compaction: replace its HITL section with the decisions, replace the
+`HITL` label with `AFK` when nothing remains open, and update requirements and acceptance criteria they changed.
 
 ## Report
 

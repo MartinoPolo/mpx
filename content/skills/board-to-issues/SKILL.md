@@ -100,7 +100,7 @@ its matching annotation, and no longer appears in intake.
 
 ## Step 8: Offer to resolve HITL
 
-If any HITL issues were created, offer to resolve them now by running `{{MPX_SKILL_COMMAND}}hitl` (grill the open
+If any HITL issues were created, offer to resolve them now by running `{{MPX_SKILL_COMMAND}}grill` on each (grill the open
 questions → flip `HITL`→`AFK`), which makes them batch-executable.
 
 ## Report

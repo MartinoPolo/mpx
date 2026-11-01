@@ -37,7 +37,8 @@ native rules directory; Pi uses this explicit reading instruction rather than a 
   sequences, and tables for comparisons.
 - Bold load-bearing phrases and format commands, flags, paths, and identifiers as code.
 - Do not paste whole files back to the user; point to their paths.
-- Icons only where they carry state: ✅ verified, ❌ failed, 🛑 blocker, 👉 recommendation.
+- Icons only where they carry state: ✅ verified, ❌ failed, 🛑 blocker, 👉 recommendation. In
+  `# HITL`, a link to evidence starts with what it opens: 🖼️ image, 🎬 video, 📄 document.
 
 ## HITL
 

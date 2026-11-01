@@ -45,7 +45,7 @@ While awaiting input, continue independent authorized work and retain background
 Collect their results before resuming dependent work.
 
 If the Issue has `HITL`, a HITL section, or `design needed`, ask whether to abort,
-run HITL grilling, or finish design.
+run `{{MPX_SKILL_COMMAND}}grill` on its open questions, or finish design.
 Establish the delivery endpoint before implementation:
 
 - Inline work: local `commit`, without push or PR.
