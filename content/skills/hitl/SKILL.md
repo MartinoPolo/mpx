@@ -53,9 +53,10 @@ worst case included, and state how many they stand for; never produce one captur
 
 - Confirm each file exists and shows the current state. When options compare visually and no single
   comparison exists, compose one, stacked and labelled with the option letters.
-- The user often reads on a phone through remote control, which opens local `file:///` links, so
-  link files where they lie; do not upload them. Keep each file phone-sized (compress first) and
-  within the user's known format preferences.
+- The user often reads on a phone through remote control, where a `file:///` link opens only after
+  the file was sent with the file-send tool (SendUserFile). Send each image or video the user should
+  see and also link it in its item. Keep each file phone-sized (at most 1080 px wide, big labels,
+  at most 3 stacked panels; compress first) and within the user's known format preferences.
 
 ## 4. Present
 
