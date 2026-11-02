@@ -5,7 +5,7 @@ description:
   profile...'
 metadata:
   author: MartinoPolo
-  version: '0.7'
+  version: '0.8'
   category: setup
   mpx:
     schemaVersion: 1
@@ -26,11 +26,11 @@ active pack.
 
 Scripts live in `./scripts/`:
 
-| Script           | Purpose                                                             |
-| ---------------- | ------------------------------------------------------------------- |
-| `wt-profile.mjs` | `colors`, `icons-dir`, `add` a Windows Terminal profile             |
-| `peacock.mjs`    | `used` colours across projects, `write` a project's `peacock.color` |
-| `make-icon.py`   | Render the 256×256 profile icon                                     |
+| Script             | Purpose                                                     |
+| ------------------ | ----------------------------------------------------------- |
+| `wt-profile.mjs`   | `colors`, `icons-dir`, `add` a Windows Terminal profile     |
+| `orca-project.mjs` | `groups`, `apply` icon, colour and group to an Orca project |
+| `make-icon.py`     | Render the 256×256 profile icon                             |
 
 ## Process
 
@@ -40,11 +40,10 @@ Scripts live in `./scripts/`:
 4. Choose the colour
 5. Draw the icon
 6. Add the Windows Terminal profile
-7. Write the VS Code Peacock block
-8. Report an Orca project handoff snippet
-9. Hand quicklinks to `raycast-config`
-10. Optionally register the project in the Obsidian task overview
-11. Offer the remaining setup skill
+7. Register the project in Orca
+8. Hand quicklinks to `raycast-config`
+9. Optionally register the project in the Obsidian task overview
+10. Offer the remaining setup skill
 
 ### Step 1: Gate on the Raycast export
 
@@ -65,8 +64,6 @@ Report what is already registered, so a re-run repairs rather than duplicates:
 
 ```bash
 node "./scripts/wt-profile.mjs" colors
-node "./scripts/peacock.mjs" used
-ls "<project>/.vscode/settings.json"
 ```
 
 ### Step 3: Validate or create user-owned MPX metadata
@@ -93,11 +90,11 @@ or publishing a repository.
 
 ### Step 4: Choose the colour
 
-One colour drives the Windows Terminal tab, the VS Code chrome and the icon plate, so the project
-reads the same in every window.
+One colour drives the Windows Terminal tab, the Orca project, the Obsidian tag and the icon plate,
+so the project reads the same everywhere.
 
 Propose a colour that fits what the project _is_ — read its `README.md` for the domain rather than
-reaching for the next unused hue. Check it against both lists from step 2 and pick again when it is
+reaching for the next unused hue. Check it against the colours from step 2 and pick again when it is
 close enough to an existing one to be confused at a glance; neighbouring shades of the same hue are
 the common trap.
 
@@ -148,42 +145,29 @@ depends on: keep every GUID comment-free JSON (Windows Terminal rejects trailing
 remember that the `ctrl+shift+<digit>` bindings target dropdown _positions_ — inserting into a group
 above the work section shifts every number below it, so tell the user when the numbering moves.
 
-### Step 7: Write the VS Code Peacock colour
+### Step 7: Register the project in Orca
+
+Add the project with the Orca CLI (forward-slash path), then set its icon, colour and group through
+the running Orca runtime; the CLI cannot set those, and Orca overwrites external edits to its data
+file. Orca must be running.
 
 ```bash
-node "./scripts/peacock.mjs" write '<project path>' '#RRGGBB'
+orca repo add --path '<project path>' --json
+node "./scripts/orca-project.mjs" groups
+node "./scripts/orca-project.mjs" apply --path '<project path>' \
+  --icon '<icons dir>/<project>.png' --color '#RRGGBB' --group '<Parent › Group>'
 ```
 
-This merges into any existing `.vscode/settings.json` and writes **only** `peacock.color`, set to
-the same value as the tab, which is what makes the two windows match. One property is the single
-source of truth: Peacock regenerates the activity bar, status bar, title bar and badge colours
-itself the first time VS Code opens the folder. Any stale derived keys left in
-`workbench.colorCustomizations` by an earlier colour are cleared in the same write.
+Ask which group the project belongs to with the native structured question UI, offering the paths
+`groups` prints. `apply` prints the stored record; confirm the group id, colour and `image:upload`
+icon there.
 
-### Step 8: Report the Orca handoff
-
-Orca owns checkout opening, terminal orchestration, status, labels, and development-port visibility.
-Do not edit or infer Orca configuration. Report this copyable field-value snippet for the user to
-map into Orca's current native project UI or schema:
-
-```yaml
-project:
-  path: "<absolute project path>"
-  label: "<projectId or folder name>"
-  color: "#RRGGBB"
-  icon: "<absolute accepted icon path>"
-  terminalProfile: "<folder name>"
-```
-
-When repository scripts expose development ports, list them as informational Orca labels beside the
-snippet; do not reserve, assign, persist, or manage ports.
-
-### Step 9: Hand quicklinks to `raycast-config`
+### Step 8: Hand quicklinks to `raycast-config`
 
 Propose a quicklink family, then resolve and read `../{{MPX_SKILL_PREFIX}}raycast-config/SKILL.md` and its referenced
 material. Carry out that skill in this conversation using the export (or skip) from step 1. It owns
-the export format, identifiers, aliases, and import wording. Inputs are: folder = project path; code
-= `file:///<project path>` with VS Code `openWith`; term = `wt -p "<profile name>"`; and remote
+the export format, identifiers, aliases, and import wording. Inputs are: folder = project path;
+term = `wt -p "<profile name>"`; and remote
 links are resolved independently: **repo** and **reviews/PRs** come from the selected repository
 provider's native guide, while **issues** comes from the selected Issue provider's native guide.
 Include only links each provider actually exposes when the corresponding repository or project
@@ -192,14 +176,14 @@ publish a repository. If a provider cannot return a browser URL, omit that quick
 manual handoff; do not derive Issue URLs from repository URLs, conflate PR/MR and Issue routes, or
 invent provider commands. Batch multiple projects before the import round-trip when appropriate.
 
-### Step 10: Register the project in the Obsidian task overview
+### Step 9: Register the project in the Obsidian task overview
 
 Resolve `MPX_OBSIDIAN_VAULT` from the environment. When it identifies a vault the user uses, read
 [OBSIDIAN_REGISTRATION.md](OBSIDIAN_REGISTRATION.md) and follow that branch. Do not infer or
 reconstruct the vault root from a home or sync-directory path. When the variable is unavailable or
 the user keeps no such vault, skip this surface and record why.
 
-### Step 11: Offer the remaining setup skill
+### Step 10: Offer the remaining setup skill
 
 When it applies, offer `{{MPX_SKILL_COMMAND}}design-init` (palette, fonts, `designs/tokens.css`);
 it runs only if chosen.
@@ -211,5 +195,5 @@ automatically.
 
 ## Report
 
-Close with a table of surfaces touched — Windows Terminal, VS Code, `mpxconfig.json`, Orca handoff, Raycast, and Obsidian `Tasks.md` — each with the file written and the value used. Name the Windows
+Close with a table of surfaces touched — Windows Terminal, `mpxconfig.json`, Orca, Raycast, and Obsidian `Tasks.md` — each with the file written and the value used. Name the Windows
 Terminal backup path, and state plainly which steps were skipped and why.

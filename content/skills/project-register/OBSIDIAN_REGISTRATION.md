@@ -14,7 +14,7 @@ Read this branch only when `MPX_OBSIDIAN_VAULT` resolves to a vault the user use
    folder-name tag, or an existing daily-note tag, before continuing.
 3. Following the current examples exactly, add one project section in the Projects lens, extend the
    General project registry so projectless tasks exclude the new tag, and add matching tag-pill
-   rules using the `peacock.color` written in Step 7. Preserve the ordering and heading hierarchy
+   rules using the project colour chosen in Step 4. Preserve the ordering and heading hierarchy
    documented by the vault. Before returning, verify that all three registrations appear exactly
    once and their queries and styles match the authoritative current examples.
 
