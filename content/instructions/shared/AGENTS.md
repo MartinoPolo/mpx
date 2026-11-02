@@ -60,6 +60,15 @@ verify readiness, and pass its URL to browser agents without an initial user pro
 restrictions, preserve user-owned processes, and clean up only servers started by the workflow.
 Missing optional MPX port metadata is not a startup blocker.
 
+Clean up after yourself when a task ends: stop servers, drop scratch databases, and delete temporary
+scripts and logs you created; keep only evidence the user still needs to review. Once a worktree's
+work is merged or abandoned, remove it. Prefer Orca: `orca worktree ps` shows which worktrees still
+run terminals or agents, and `orca worktree rm --worktree path:<path> --delete-branch` stops its
+sessions, deregisters it, and deletes the branch only when it is provably merged. Write `path:`
+selectors with forward slashes. Without Orca, use `git worktree remove` and `git branch -d`. Never
+remove a worktree with uncommitted changes, unmerged commits, or live sessions you did not start;
+report it instead.
+
 ## Files outside repositories
 
 Project-specific plans, research, reports and demo specs belong in the owning repository
@@ -95,6 +104,6 @@ only when needed. For external-tool implementation questions, check a relevant c
 
 ## Preferences
 
-Commands suggested for manual execution use Bash; use PowerShell for Windows-native tooling. In Bash, redirect to `/dev/null`, never `nul`. Use conventional commits when authorized. When
-workflow friction recurs, fix the immediate issue, then propose a durable rule for instructions or
-memory.
+Commands suggested for manual execution use Bash; use PowerShell for Windows-native tooling. In Bash, redirect to `/dev/null`, never `nul`. Use conventional commits when authorized. When a
+workflow step fails and you find a working solution, record that solution in the most specific
+durable place (the project's docs or AGENTS.md, or memory for machine-specific setup) and report it.
