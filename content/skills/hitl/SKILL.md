@@ -13,7 +13,7 @@ metadata:
   mpx:
     schemaVersion: 1
     skillPacks: [development]
-    defaultExposure: explicit-only
+    defaultExposure: name-only
 ---
 
 # HITL

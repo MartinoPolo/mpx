@@ -15,7 +15,7 @@ const skills = {
   'code-clean': ['development', 'name-only'],
   'components-audit': ['development', 'name-only'],
   'fallow-fix': ['development', 'name-only'],
-  hitl: ['development', 'explicit-only'],
+  hitl: ['development', 'name-only'],
   'init-github-repo': ['development', 'name-only'],
   notebooklm: ['development', 'name-only'],
   'playwright-test': ['development', 'explicit-only'],

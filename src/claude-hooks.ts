@@ -5,18 +5,21 @@ import { machineRootContext, STYLE_REINFORCEMENT } from './context.js';
 import { evaluateTool, editedPaths } from './safeguards/tools.js';
 import { repositoryRoot } from './safeguards/fallow.js';
 import { formatEditedFile } from './safeguards/format.js';
+import { claudePromptRunContext, recordClaudeStop, RUN_STATE_DIRECTORY, type ClaudeRunEvent } from './claude-run-attention.js';
 
-export interface ClaudeHookInput { hook_event_name: string; cwd?: string; tool_name?: string; tool_input?: Record<string, unknown> }
+export interface ClaudeHookInput extends ClaudeRunEvent { hook_event_name: string; cwd?: string; tool_name?: string; tool_input?: Record<string, unknown> }
 export interface ClaudeHookResult { code: number; stdout: string; stderr: string }
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 /** Claude native context/tool transport. PreCompact stdout is not an instruction channel. */
-export async function handleClaudeHook(event: ClaudeHookInput, contentRoot = root, env = process.env): Promise<ClaudeHookResult> {
+export async function handleClaudeHook(event: ClaudeHookInput, contentRoot = root, env = process.env, runStateDirectory = RUN_STATE_DIRECTORY): Promise<ClaudeHookResult> {
   const result: ClaudeHookResult = { code: 0, stdout: '', stderr: '' };
+  if (event.hook_event_name === 'Stop') { await recordClaudeStop(event, runStateDirectory); return result; }
   const cwd = event.cwd ?? process.cwd();
   const currentRoot = await repositoryRoot(cwd);
   const isTrusted = (candidate: string) => currentRoot !== undefined && path.resolve(candidate) === path.resolve(currentRoot);
   if (event.hook_event_name === 'UserPromptSubmit') {
-    result.stdout = JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: STYLE_REINFORCEMENT } });
+    const runContext = await claudePromptRunContext(event, runStateDirectory);
+    result.stdout = JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: runContext ? `${STYLE_REINFORCEMENT}\n\n${runContext}` : STYLE_REINFORCEMENT } });
 
   } else if (event.hook_event_name === 'SessionStart') {
     const roots = machineRootContext(env);

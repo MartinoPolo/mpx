@@ -113,6 +113,7 @@ function buildClaudeHookEntries(root: string, legacy = false): Record<string, un
     ['PostToolUse', 'Write|Edit|MultiEdit|NotebookEdit|apply_patch', 6],
     ['SessionStart', 'startup|resume|compact', 5],
     ['UserPromptSubmit', undefined, 5],
+    ['Stop', undefined, 5],
   ].map(([event, matcher, timeout]) => [event, [{ ...(matcher ? { matcher } : {}), hooks: [{ type: 'command', command: `${prefix} ${event}${!legacy && event === 'PreToolUse' ? ' || exit 2' : ''}`, timeout }] }]]));
 }
 export function claudeHookEntries(root: string): Record<string, unknown[]> {
