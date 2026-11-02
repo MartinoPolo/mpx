@@ -11,7 +11,6 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const contentRoot = path.join(root, 'content', 'skills');
 const skills = {
   'agent-create': ['development', 'explicit-only'],
-  'board-setup': ['development', 'explicit-only'],
   'clean-pc': ['personal', 'explicit-only'],
   'code-clean': ['development', 'name-only'],
   'components-audit': ['development', 'name-only'],
@@ -103,7 +102,6 @@ test('compiler projects pack exposure, support closure, commands, and sibling pr
   }
   assert.match(byPath.get('dist/packs/personal/pi/skills/mpx-project-register/SKILL.md')!.toString(), /\.\.\/mpx-raycast-config\/SKILL\.md/);
   assert.match(byPath.get('dist/packs/personal/claude/.claude/skills/mpx-podcast/SKILL.md')!.toString(), /\/mpx-notebooklm/);
-  assert.match(byPath.get('dist/packs/development/pi/skills/mpx-board-setup/SKILL.md')!.toString(), /\/skill:mpx-board-to-issues/);
 });
 
 test('support placeholders and template tokens are valid and bundled JavaScript parses', async () => {

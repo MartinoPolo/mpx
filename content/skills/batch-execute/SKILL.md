@@ -4,7 +4,7 @@ description: Execute a selected batch of small Issues on one shared branch and p
 argument-hint: '<range|list|label:<x>|board> [size:S|M|L] [--parallel] [--no-tdd] [--full-review|--no-review]'
 metadata:
   author: MartinoPolo
-  version: '0.11'
+  version: '0.12'
   category: project-management
   mpx:
     schemaVersion: 1
@@ -16,7 +16,8 @@ metadata:
 
 Here, PR means a GitHub pull request, GitLab merge request, or Gerrit change, as applicable.
 
-Read [REFERENCE](REFERENCE.md) and [Provider Routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md).
+Read [REFERENCE](REFERENCE.md) and [Provider Routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md);
+in board-direct mode also read [Project Inbox]({{MPX_SHARED_INSTRUCTIONS}}/PROJECT_INBOX.md).
 Independently resolve `issues.provider` and `repository.provider` from `mpxconfig.json`; load each
 selected native provider guide linked by Provider Routing. Never invent MPX facade provider actions
 or change the native authentication environment.
@@ -38,12 +39,8 @@ range/list/label. Keep `AFK`; before filtering, route `HITL`, a HITL section, or
 unless that exact label was explicitly selected. Parse the Blocking relationships section and body
 links and drop Issues with open blockers. Apply size last while preserving provider order.
 
-In board-direct mode, read `.mpx/BOARD.md` and select only unchecked top-level items beginning with
-`- [ ]` under `# To Process`; ignore checked, nested, annotated, and downstream items. Capture each
-complete original item block, including continuation lines and image wikilinks. Read each linked
-image through `.mpx/board-files/<filename>`; use the filename and ignore an optional display width
-such as `|639` in the wikilink. In Issue mode board entries live under `# Ready to implement`.
-Create a visible progress entry for every selected and skipped item using
+In board-direct mode, select the project note's eligible Inbox items, with their images, as Project
+Inbox specifies. Issue mode never reads or edits the project note. Create a visible progress entry for every selected and skipped item using
 the runtime task facility when available; mark each selected item in progress before its worker
 starts and completed only after its commit is confirmed, while skipped items retain their recorded
 reason.
@@ -57,7 +54,7 @@ before continuing; do not switch checkouts or manipulate worktrees.
 
 ## Execution
 
-Sequentially invoke one fresh `mpx-executor` per Issue, providing the exact Issue/board text,
+Sequentially invoke one fresh `mpx-executor` per Issue, providing the exact Issue or Inbox item text,
 attached images downloaded per the Issue provider guide, body-linked artifacts and file pointers, relevant requirements, known failures, acceptance criteria
 as REQ-1..N, a precise implementation objective, target context, exact discovered check/test
 commands, and selected test mode. Pass the selected test mode to every fresh `mpx-executor`,
@@ -125,14 +122,10 @@ findings to `mpx-unresolved-issue-tracker`; blockers stop publication. Re-dispat
 checks/reviewers, rerun affected visual states after local or CI repairs, regenerate stale
 screenshots, and require a fresh complete local verification before publication.
 
-## Board writeback
+## Inbox writeback
 
-Move every successful complete original item block to `# Manual testing`, creating the heading if
-needed. Preserve continuation lines and image wikilinks. Leave the checkbox unchanged as `- [ ]`.
-Only the user marks manual verification and moves verified work to `# Archive`. Match Issue-mode
-entries by the exact canonical `issue:<id>` annotation or body link and board-direct entries by exact original
-text. Edit `.mpx/BOARD.md`; if Edit or Write refuses the symlink, resolve its real vault target and
-edit that file.
+In board-direct mode, remove each item whose commit is confirmed from the Inbox as Project Inbox
+specifies, matching its exact original text; leave failed and skipped items in place.
 
 ## Publish
 
@@ -152,6 +145,6 @@ After publication, attach those screenshots in a comment on each Issue they veri
 provider guide. Never commit them.
 
 Report Issue→commit mappings, skips and gate decisions, exact checks, review fixes/findings, visual
-`PASS`/`FAIL`/`BLOCKED` per requirement and state, board moves, PR ID/URL, CI, merge state, and
+`PASS`/`FAIL`/`BLOCKED` per requirement and state, Inbox removals, PR ID/URL, CI, merge state, and
 blockers. When visual acceptance ran, include a small representative gallery of openable links to
 final screenshots.

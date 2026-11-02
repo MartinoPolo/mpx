@@ -44,7 +44,7 @@ Scripts live in `./scripts/`:
 8. Report an Orca project handoff snippet
 9. Hand quicklinks to `raycast-config`
 10. Optionally register the project in the Obsidian task overview
-11. Offer the remaining setup skills
+11. Offer the remaining setup skill
 
 ### Step 1: Gate on the Raycast export
 
@@ -199,14 +199,12 @@ Resolve `MPX_OBSIDIAN_VAULT` from the environment. When it identifies a vault th
 reconstruct the vault root from a home or sync-directory path. When the variable is unavailable or
 the user keeps no such vault, skip this surface and record why.
 
-### Step 11: Offer the remaining setup skills
+### Step 11: Offer the remaining setup skill
 
-Name the remaining setup skills that apply and let the user pick — neither runs unless chosen:
+When it applies, offer `{{MPX_SKILL_COMMAND}}design-init` (palette, fonts, `designs/tokens.css`);
+it runs only if chosen.
 
-- `{{MPX_SKILL_COMMAND}}board-setup` — Obsidian board and its `BOARD.md` symlink
-- `{{MPX_SKILL_COMMAND}}design-init` — palette, fonts, `designs/tokens.css`
-
-If the user picks one, invoke its public command and carry out its steps in this conversation. If
+If the user picks it, invoke its public command and carry out its steps in this conversation. If
 the selected command is unavailable, ask the user to include the `development` pack; never load an
 excluded `SKILL.md` directly, silently skip a selected follow-up, or broaden the selected packs
 automatically.

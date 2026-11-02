@@ -152,5 +152,8 @@ test('compiler closure resolves skill prefixes without a placeholder fallback', 
   assert.match(projected.get('dist/packs/development/claude/.claude/skills/mpx-mockup/SKILL.md')!, /\/mpx-design-refine/);
   assert.match(projected.get('dist/packs/development/pi/skills/mpx-design-init/SKILL.md')!, /mpx-design-brief/);
   assert.ok([...projected.keys()].some(item => item.endsWith('/skills/mpx-board-to-issues/references/instructions/shared/ISSUE_TEMPLATE.md')));
+  for (const skill of ['board-to-issues', 'batch-execute']) {
+    assert.ok([...projected.keys()].some(item => item.endsWith(`/skills/mpx-${skill}/references/instructions/shared/PROJECT_INBOX.md`)), skill);
+  }
   assert.ok(![...projected.keys()].some(item => item.includes('/skills/mpx-grill-voice/')));
 });

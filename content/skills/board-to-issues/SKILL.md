@@ -1,11 +1,11 @@
 ---
 name: board-to-issues
 description:
-  'Converts Obsidian board notes from the To Process lane into provider-native Issues, deduping
-  against...'
+  'Converts unchecked notes from the Obsidian project note Inbox into provider-native Issues,
+  deduping against open Issues and removing converted notes...'
 metadata:
   author: MartinoPolo
-  version: '0.7'
+  version: '0.8'
   category: project-management
   mpx:
     schemaVersion: 1
@@ -15,13 +15,14 @@ metadata:
 
 # board-to-issues
 
-Turn board notes into well-formed provider-native Issues, optionally narrowed by the invocation
+Turn Inbox notes into well-formed provider-native Issues, optionally narrowed by the invocation
 input.
 
 First:
 
-1. Read [Provider Routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md) and
-   [the Issue template]({{MPX_SHARED_INSTRUCTIONS}}/ISSUE_TEMPLATE.md).
+1. Read [Provider Routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md),
+   [the Issue template]({{MPX_SHARED_INSTRUCTIONS}}/ISSUE_TEMPLATE.md), and
+   [Project Inbox]({{MPX_SHARED_INSTRUCTIONS}}/PROJECT_INBOX.md).
 2. Resolve project configuration as specified by Provider Routing, then select `issues.provider`.
    Load its selected native guide under `{{MPX_SHARED_INSTRUCTIONS}}/providers/`. Use only that guide's native Issue
    operations; never invent an MPX facade command or substitute the repository provider.
@@ -35,77 +36,59 @@ First:
 - Classify HITL only for genuine **unanswered requirement questions**. Visual inspection, manual
   testing, and QA are not HITL reasons.
 
-## Step 1: Read the board
+## Step 1: Collect items
 
-Read `.mpx/BOARD.md`. Fresh notes live under the single `# To Process` intake lane — there is no
-section argument. The invocation input is optional free-text guidance (e.g. "only the login bug"),
-not a section selector.
+Locate the project note and collect its eligible Inbox items as Project Inbox specifies. The
+invocation input is optional free-text guidance (e.g. "only the login bug"), not a section selector.
 
-## Step 2: Collect items
-
-Only unchecked top-level items beginning with `- [ ]` under `# To Process` are eligible. Skip any
-that already carries the canonical `→ issue:<id>` annotation or legacy `→ #<N>` form, and ignore
-all checked, nested, or downstream items under `# Ready to implement`, `# Manual testing`, and
-`# Archive`. Capture each complete original item block, including continuation lines and every
-`![[...]]` image wikilink. Read each image through `.mpx/board-files/<filename>` so its visual
-context informs the Issue; in a wikilink such as `![[Pasted image.png|639]]`, use the filename and
-ignore the optional display width.
-
-## Step 3: Merge + dedup
+## Step 2: Merge + dedup
 
 Group bullets that describe the same fix into a single proposed Issue. Use the selected Issue
 provider guide's native list/search operations to check open Issues for duplicate keywords. Mark
 likely duplicates to skip, recording the provider-native Issue identifier and URL. If search is
 unsupported, report that bounded gap and require explicit confirmation before creating.
 
-## Step 4: Draft each issue
+## Step 3: Draft each issue
 
 For each proposed issue:
 
-- **Body** — follow the Issue template. Put each board image in the section it supports, attached
-  from `.mpx/board-files/<filename>` through the provider guide.
+- **Body** — follow the Issue template. Put each note image in the section it supports, attached
+  from its resolved vault file through the provider guide.
 - **Size** — estimate `size:S` (single file / few lines), `size:M` (multi-file, contained), or
   `size:L` (cross-cutting) from complexity.
 - **Labels and assignee** — per the Issue template, plus `size:<X>`. Infer the type from the note's
-  content; its position on the board carries no type information.
+  content.
 
-## Step 5: Confirm before creating
+## Step 4: Confirm before creating
 
-Present the full plan with the native structured question UI when available: each board bullet →
+Present the full plan with the native structured question UI when available: each Inbox bullet →
 proposed issue(s), labels, size, AFK/HITL, and any duplicates being skipped. Only create issues after the user confirms the plan
 (they may edit it).
 
 **Gate:** Continue only when the user has confirmed or amended the full mapping, including every
 skip.
 
-## Step 6: Create issues
+## Step 5: Create issues
 
 Create each confirmed Issue using only the selected provider guide's native create operation,
 preserving the approved title, canonical body with its attached images, labels/tags, and assignee
-when supported. Capture its
-provider-native identifier and URL. If a capability is unsupported or authentication is unavailable,
-continue independent drafting and return exact manual steps—do not fall back to another provider or
-CLI.
+when supported. Capture its provider-native identifier and URL, and verify its images uploaded. If
+a capability is unsupported or authentication is unavailable, continue independent drafting and
+return exact manual steps—do not fall back to another provider or CLI.
 
-## Step 7: Write back to the board
+## Step 6: Remove converted notes
 
-For each created Issue, move the complete original item block from `# To Process` to
-`# Ready to implement` and append the canonical ` → issue:<id>` to its top-level line using the returned
-provider-native identifier. Do not retype, reconstruct, or delete continuation lines or image
-wikilinks. Leave the checkbox marker as `- [ ]` — never write `- [x]` or `- [/]`; the checkbox is the
-user's alone. This annotation is what `batch-execute` uses to close the loop. Edit `.mpx/BOARD.md`;
-if Edit or Write refuses the symlink, resolve its real vault target and edit that file.
-Verify that every created issue's complete item appears exactly once in `# Ready to implement`, has
-its matching annotation, and no longer appears in intake.
+Once every Issue a bullet maps to exists with its images, remove that bullet from the Inbox as
+Project Inbox specifies. Leave skipped duplicates and bullets whose Issue creation failed in place.
 
-## Step 8: Offer to resolve HITL
+## Step 7: Offer to resolve HITL
 
 If any HITL issues were created, offer to resolve them now by running `{{MPX_SKILL_COMMAND}}grill` on each (grill the open
 questions → flip `HITL`→`AFK`), which makes them batch-executable.
 
 ## Report
 
-List: resolved Issue provider and configured board when applicable; created Issues (identifier, URL,
-title, labels/tags, size); merged bullets; skipped duplicates (identifier and URL); board writeback
-verification; HITL Issues awaiting resolution; unsupported provider capabilities; and authentication
-facts/gaps without exposing secret values.
+List: resolved Issue provider and configured board when applicable; project note path; created
+Issues (identifier, URL, title, labels/tags, size); merged bullets; skipped duplicates (identifier
+and URL); Inbox removal verification and bullets left in place; HITL Issues awaiting resolution;
+unsupported provider capabilities; and authentication facts/gaps without exposing secret values.
