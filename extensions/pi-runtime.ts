@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { readUserConfig } from '../src/config.js';
 import { resolveFooterRepository } from '../src/pi-footer-data.js';
 import { isMpxRuntimeSelected } from '../src/runtime-selection.js';
+import { saveUnfinished } from '../src/unfinished-command.js';
 import { createPiUiExtension } from './pi-ui.js';
 import bashTimeout from './pi-bash.js';
 import context from './pi-context.js';
@@ -19,6 +20,13 @@ export default async function mpx(pi: ExtensionAPI): Promise<void> {
   safeguards(pi);
   bashTimeout(pi);
   formatting(pi);
+  pi.registerCommand('unfinished', {
+    description: 'Save this session as unfinished for a one-click resume; "done" ticks it off',
+    handler: async (argument, ctx) => {
+      const sessionManager = ctx.sessionManager;
+      ctx.ui.notify(await saveUnfinished({ sessionId: sessionManager.getSessionId(), cwd: ctx.cwd, argument, title: sessionManager.getSessionName() }), 'info');
+    },
+  });
   const config = process.env.APPDATA ? await readUserConfig(path.join(process.env.APPDATA, 'mpx/config.json')).catch(() => undefined) : undefined;
   createPiUiExtension({
     title: config?.piTitle,

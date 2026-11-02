@@ -273,10 +273,10 @@ test('build converges inside generated roots and checkOutput reports drift witho
   assert.deepEqual(await filesBelow(path.join(root, 'dist')), before, 'checkOutput must be read-only');
 });
 
-test('excludes archived and unfinished skill trees and removes their stale outputs', async () => {
+test('excludes archived and draft skill trees and removes their stale outputs', async () => {
   const root = await fixture();
   const expected = await projectContent(root);
-  for (const category of ['archived', 'unfinished']) {
+  for (const category of ['archived', 'drafts']) {
     await put(root, `content/skills/${category}/draft/SKILL.md`, 'Incomplete {{UNKNOWN}} [missing](missing.md)\n');
     await put(root, `content/skills/${category}/draft/scripts/helper.js`, 'unfinished support\n');
     await put(root, `content/skills/${category}/notes.md`, 'category notes\n');

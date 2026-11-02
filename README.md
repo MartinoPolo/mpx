@@ -72,7 +72,7 @@ pnpm status
   `reviewer` class. A shared `thinking` value may be replaced per harness by `thinkingOverrides`; Pi
   Luna requires `high` or above. Native Pi `enabledModels` can use family patterns such as
   `openai-codex/gpt-*-luna:high`; native session defaults and history retain concrete model IDs.
-- Keep retired content in its `archived/` directory and incomplete skills in `content/skills/unfinished/`;
+- Keep retired content in its `archived/` directory and incomplete skills in `content/skills/drafts/`;
   these are excluded from the build.
 - Contributor guidance: [AGENTS.md](AGENTS.md). Design rationale: [DECISIONS.md](DECISIONS.md).
 
@@ -87,6 +87,7 @@ Run from Git Bash in your project:
 | `ccd` / `ccwd` | Same, in bypass-permissions mode (`--dangerously-skip-permissions`) |
 | `alfred` / `alf` | Start personal Claude Code with connectors in the Alfred assistant home (`C:\_ALFRED`) |
 | `mpx resume --list` | List resumable native sessions |
+| `/mpx-unfinished [note]` | Save the session as unfinished in the vault's `_Tooling/Unfinished sessions.md` with a one-click resume link, without a model turn (Pi: `/unfinished`); `done` ticks it |
 | `mpx status` | Inspect MPX resources and conflicts |
 | `mpx sync --preview` | Preview account-resource synchronization |
 | `mpx project setup . --preview` | Preview optional project setup |

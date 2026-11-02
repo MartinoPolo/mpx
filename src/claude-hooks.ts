@@ -6,8 +6,9 @@ import { evaluateTool, editedPaths } from './safeguards/tools.js';
 import { repositoryRoot } from './safeguards/fallow.js';
 import { formatEditedFile } from './safeguards/format.js';
 import { claudePromptRunContext, recordClaudeStop, RUN_STATE_DIRECTORY, type ClaudeRunEvent } from './claude-run-attention.js';
+import { CLAUDE_UNFINISHED_PROMPT, saveUnfinished } from './unfinished-command.js';
 
-export interface ClaudeHookInput extends ClaudeRunEvent { hook_event_name: string; cwd?: string; tool_name?: string; tool_input?: Record<string, unknown> }
+export interface ClaudeHookInput extends ClaudeRunEvent { hook_event_name: string; cwd?: string; transcript_path?: string; tool_name?: string; tool_input?: Record<string, unknown> }
 export interface ClaudeHookResult { code: number; stdout: string; stderr: string }
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 /** Claude native context/tool transport. PreCompact stdout is not an instruction channel. */
@@ -15,6 +16,13 @@ export async function handleClaudeHook(event: ClaudeHookInput, contentRoot = roo
   const result: ClaudeHookResult = { code: 0, stdout: '', stderr: '' };
   if (event.hook_event_name === 'Stop') { await recordClaudeStop(event, runStateDirectory); return result; }
   const cwd = event.cwd ?? process.cwd();
+  const unfinished = event.hook_event_name === 'UserPromptSubmit' && event.session_id ? event.prompt?.trim().match(CLAUDE_UNFINISHED_PROMPT) : null;
+  if (unfinished && event.session_id) {
+    // Blocking the prompt shows the reason to the user and spends no model turn.
+    const reason = await saveUnfinished({ sessionId: event.session_id, cwd, argument: unfinished[1] ?? '', transcriptPath: event.transcript_path, env });
+    result.stdout = JSON.stringify({ decision: 'block', reason });
+    return result;
+  }
   const currentRoot = await repositoryRoot(cwd);
   const isTrusted = (candidate: string) => currentRoot !== undefined && path.resolve(candidate) === path.resolve(currentRoot);
   if (event.hook_event_name === 'UserPromptSubmit') {

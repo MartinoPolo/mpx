@@ -70,8 +70,8 @@ test('inactive skills retain their sources without any build projections', async
     ['archived', 'architecture-review'],
     ['archived', 'epic-review'],
     ['archived', 'vocabulary'],
-    ['unfinished', 'harvest-decisions'],
-    ['unfinished', 'grill-voice'],
+    ['drafts', 'harvest-decisions'],
+    ['drafts', 'grill-voice'],
   ] as const) {
     const source = await readFile(path.join(skillsRoot, category, name, 'SKILL.md'), 'utf8');
     assert.equal(frontmatter(source).name, name);
