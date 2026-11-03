@@ -5,6 +5,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 import {
+  loadsConnectorsIn,
   parseRepositoryConfig,
   readUserConfig,
   resolveProject,
@@ -146,6 +147,7 @@ test('readUserConfig expands only approved variables and returns normalized path
     domains: { personal: ['${MPX_PROJECTS}'], work: ['${MPX_WORK}', '${MPX_PROJECTS}/owned'], shared: ['${MPX_AI_DUMP}', '${MPX_TEMP}'] },
     defaultPacks: { personal: ['development', 'personal'], work: [] },
     executables: { pi: '${MPX_PI_EXECUTABLE}', claude: '${MPX_CLAUDE_EXECUTABLE}' },
+    connectorFolders: ['${MPX_PROJECTS}/assistant'],
   }));
 
   const config = await readUserConfig(file, {
@@ -161,6 +163,8 @@ test('readUserConfig expands only approved variables and returns normalized path
   assert.deepEqual(config.domains.shared, [path.join(root, 'shared'), path.join(root, 'scratch')]);
   assert.equal(config.executables?.pi, path.normalize(path.join(root, 'pi')));
   assert.deepEqual(config.defaultPacks?.work, []);
+  assert.equal(await loadsConnectorsIn(path.join(projects, 'assistant', 'work'), config), true);
+  assert.equal(await loadsConnectorsIn(path.join(projects, 'assistant-other'), config), false);
 });
 
 test('readUserConfig rejects missing paths, unsupported expansion, aliases, and ambiguous domains', async () => {

@@ -169,7 +169,7 @@ export async function readUserConfig(
     throw new Error(`cannot read user config ${path.normalize(file)}: ${error instanceof Error ? error.message : String(error)}`);
   }
   const source = object(parsed, 'user config');
-  allowedKeys(source, ['accounts', 'domains', 'projectOverrides', 'defaultPacks', 'executables', 'piTitle'], 'user config');
+  allowedKeys(source, ['accounts', 'domains', 'projectOverrides', 'defaultPacks', 'executables', 'connectorFolders', 'piTitle'], 'user config');
   const accountsSource = object(source.accounts, 'accounts');
   const domainsSource = object(source.domains, 'domains');
   allowedKeys(accountsSource, ['personal', 'work'], 'accounts');
@@ -249,6 +249,10 @@ export async function readUserConfig(
       }
     }
     result.defaultPacks = defaults;
+  }
+  if (source.connectorFolders !== undefined) {
+    if (!Array.isArray(source.connectorFolders)) throw new Error('connectorFolders must be an array');
+    result.connectorFolders = source.connectorFolders.map((entry, index) => expandPath(entry, `connectorFolders[${index}]`, env));
   }
   if (source.executables !== undefined) {
     const executablesSource = object(source.executables, 'executables');
@@ -363,7 +367,13 @@ function contains(candidate: string, root: string): boolean {
   return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
 }
 
-type ProjectOverrideMatch = ProjectOverride | { path: string; invalidConfig: string };
+export async function loadsConnectorsIn(cwd: string, config: UserConfig): Promise<boolean> {
+  const folder = await comparablePath(cwd);
+  for (const root of config.connectorFolders ?? []) if (contains(folder, await comparablePath(root))) return true;
+  return false;
+}
+
+type ProjectOverrideMatch =ProjectOverride | { path: string; invalidConfig: string };
 async function matchingOverride(
   target: string,
   gitRepository: boolean,

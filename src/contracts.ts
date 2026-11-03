@@ -77,6 +77,8 @@ export interface UserConfig {
   projectOverrideDiagnostics?: { path: string; message: string }[];
   defaultPacks?: Partial<Record<Account, string[]>>;
   executables?: Partial<Record<Harness, string>>;
+  /** Claude launches inside these folders load claude.ai connectors without `--connectors`. */
+  connectorFolders?: string[];
   piTitle?: { provider: string; model: string; thinking: Thinking };
 }
 export interface ProjectSelection {

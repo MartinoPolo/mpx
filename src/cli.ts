@@ -6,7 +6,7 @@ import { mirrorOrcaHooks } from './orca.js';
 import { scanStagedSecrets } from './safeguards/staged-secrets.js';
 import { evaluatePackageManager } from './safeguards/package-manager.js';
 import { build, checkOutput } from './compiler.js';
-import { readUserConfig, resolveProject, selectPacks } from './config.js';
+import { loadsConnectorsIn, readUserConfig, resolveProject, selectPacks } from './config.js';
 import { createLaunchSpec, confirmLaunch, formatLaunchWarning, runLaunch } from './launch.js';
 import { sortLaunchWarnings, type Account, type Harness } from './contracts.js';
 import { resumeCommand } from './resume-cli.js';
@@ -94,13 +94,14 @@ async function main(): Promise<number> {
       if (!['pi', 'claude', 'xpi'].includes(harnessName ?? '') || !['personal', 'work'].includes(accountName ?? '')) {
         throw new Error('Usage: mpx launch[-preview] <pi|claude|xpi> <personal|work> [--connectors] [native arguments...]');
       }
-      // A standalone `--connectors` is MPX-owned wherever it appears, because launchers such as Orca automations
-      // add their own arguments first; a prompt that merely contains the word is a different argument.
-      const connectors = launchArgs.includes('--connectors');
+      // A standalone `--connectors` is MPX-owned wherever it appears, because wrappers add their own arguments
+      // first; a prompt that merely contains the word is a different argument.
       const callerArgs = launchArgs.filter(argument => argument !== '--connectors');
       const harness: Harness = harnessName === 'claude' ? 'claude' : 'pi';
       const account = accountName as Account;
       const config = await readUserConfig(userConfigPath());
+      // Orca automations cannot pass `--connectors`, so folders such as the assistant home turn connectors on.
+      const connectors = launchArgs.includes('--connectors') || (harness === 'claude' && await loadsConnectorsIn(process.cwd(), config));
       const project = await resolveProject(process.cwd(), config);
       const selection = await selectPacks(root, harness, account, project, config);
       const spec = await createLaunchSpec({ root, cwd: process.cwd(), harness, account, config, project, selection, args: callerArgs, native: harnessName === 'xpi', connectors });

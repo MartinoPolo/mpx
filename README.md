@@ -216,6 +216,9 @@ accept missing project metadata, use a matching `projectOverrides` entry with `o
 as above; shared domains do not suppress project configuration warnings. Inspect the result with
 `mpx project config <directory>`.
 
+Claude loads claude.ai connectors only when launched with `--connectors`, or inside a folder listed in
+`"connectorFolders": ["C:\\_ALFRED"]`. Use the folder list where the flag cannot be passed, such as Orca automations.
+
 ### Generated outputs
 
 - `MPX_AI_GENERATED`: saved media and the durable tutorial library.
