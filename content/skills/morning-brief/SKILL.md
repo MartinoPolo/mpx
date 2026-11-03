@@ -101,8 +101,8 @@ wait, never by ending the turn.
   did nothing, and the brief's own runs.
 - **Obsidian triage**: daily notes in `$MPX_OBSIDIAN_VAULT/Daily/` from the window and today, and
   changes to `Ideas.md`. Unchecked dump bullets and tasks not yet under a capture heading become
-  items with a proposed project, heading and priority per `_Tooling/TaskGenius/task-system.md` and
-  the project registry. Link each to its note with `obsidian://open?vault=<vault>&file=<path>`.
+  items with a proposed destination (a `## Inbox`, `## Ideas` or `## Tasks` section of
+  `_Projekty/<project>/<project>.md`, or a daily capture heading) and priority. Link each to its note with `obsidian://open?vault=<vault>&file=<path>`.
 - **AI retro** (`sessions.json`): problems in sessions of both accounts and harnesses: tool errors,
   hook blocks, my corrections, repeated attempts at one step. At most five, ranked by cost, each with
   the transcript lines that show it, a concrete fix, the file it belongs in, and a prompt for a

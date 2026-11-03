@@ -121,10 +121,10 @@ gh api --hostname github.com "repos/<owner>/<repo>/branches/<branch>/protection"
 EOF
 ```
 
-If protection fails with HTTP 403, warn and continue with protection explicitly marked **not
-applied**. When the response identifies a private-repository plan limitation, suggest upgrading to a
-supporting plan or explicitly choosing public visibility later; never change visibility
-automatically. Do not mislabel permission failures as plan limitations. Report other errors as
+If protection fails with HTTP 403, continue with protection marked **not applied**. When the
+response identifies a private-repository plan limitation, the user accepts that: record it in the
+report table only, with no warning, upgrade suggestion or follow-up item, and never change
+visibility. Warn about other 403s. Do not mislabel permission failures as plan limitations. Report other errors as
 blockers. The required status check `checks` is a placeholder; the actual CI workflow is added
 separately.
 

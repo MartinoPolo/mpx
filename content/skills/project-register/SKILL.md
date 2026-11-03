@@ -42,7 +42,7 @@ Scripts live in `./scripts/`:
 6. Add the Windows Terminal profile
 7. Register the project in Orca
 8. Hand quicklinks to `raycast-config`
-9. Optionally register the project in the Obsidian task overview
+9. Optionally register the project in the Obsidian vault
 10. Offer the remaining setup skill
 
 ### Step 1: Gate on the Raycast export
@@ -177,7 +177,7 @@ publish a repository. If a provider cannot return a browser URL, omit that quick
 manual handoff; do not derive Issue URLs from repository URLs, conflate PR/MR and Issue routes, or
 invent provider commands. Batch multiple projects before the import round-trip when appropriate.
 
-### Step 9: Register the project in the Obsidian task overview
+### Step 9: Register the project in the Obsidian vault
 
 Resolve `MPX_OBSIDIAN_VAULT` from the environment. When it identifies a vault the user uses, read
 [OBSIDIAN_REGISTRATION.md](OBSIDIAN_REGISTRATION.md) and follow that branch. Do not infer or
@@ -196,5 +196,5 @@ automatically.
 
 ## Report
 
-Close with a table of surfaces touched — Windows Terminal, `mpxconfig.json`, Orca, Raycast, and Obsidian `Tasks.md` — each with the file written and the value used. Name the Windows
+Close with a table of surfaces touched — Windows Terminal, `mpxconfig.json`, Orca, Raycast, and the Obsidian project note — each with the file written and the value used. Name the Windows
 Terminal backup path, and state plainly which steps were skipped and why.
