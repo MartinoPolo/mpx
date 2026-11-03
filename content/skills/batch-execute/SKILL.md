@@ -1,10 +1,10 @@
 ---
 name: batch-execute
 description: Execute a selected batch of small Issues on one shared branch and publish one PR
-argument-hint: '<range|list|label:<x>|board> [size:S|M|L] [--parallel] [--no-tdd] [--full-review|--no-review]'
+argument-hint: '<range|list|label:<x>|board> [size:S|M|L] [--parallel] [--no-tdd] [--full-review|--no-review] [--no-auto-merge]'
 metadata:
   author: MartinoPolo
-  version: '0.12'
+  version: '0.13'
   category: project-management
   mpx:
     schemaVersion: 1
@@ -29,6 +29,12 @@ checkout. `--parallel` requires separate checkouts created by the user; this ski
 create, switch, remove, or orchestrate worktrees. Gate `HITL` and `design needed`. Never alter a
 correct test merely to pass. Commands come from repository policy/check discovery and are propagated
 exactly.
+
+Establish the delivery endpoint before selection, as `{{MPX_SKILL_COMMAND}}execute` does: a personal
+repository uses `merge`, requiring confirmed merge; a work repository, `--no-auto-merge`, or a user
+request to wait before merging uses `pr`, stopping at green CI with the PR open. Resolve personal/work
+ownership from account/domain context, not the Git host; ask if unclear. Invocation authorizes that
+endpoint.
 
 ## Selection
 
@@ -129,7 +135,7 @@ specifies, matching its exact original text; leave failed and skipped items in p
 
 ## Publish
 
-Invoke `mpx-shipper` with the explicit `pr` endpoint and the selected repository provider target,
+Invoke `mpx-shipper` with the established endpoint and the selected repository provider target,
 plus representative final screenshot paths for the PR body when visual acceptance ran. It stages and commits intended paths, pushes as authorized, creates or updates exactly one draft PR
 using the shipper's title/body contract, canonical Issue links, and provider closing references
 only where valid. It monitors native CI and returns explicit PR and run identities. For a
@@ -139,7 +145,8 @@ locally, then invoke the shipper again so it reconciles completed stages. Final 
 own three shipping attempts total—the initial attempt plus two repair/retry attempts—covering its
 commit, push, PR, and CI stages without resetting during continuation. Per-item commit attempts do
 not reduce this budget. Independently confirm fresh green status for the
-explicit PR before completing publication. The `pr` endpoint remains unmerged.
+explicit PR before completing publication. The `merge` endpoint then requires a confirmed merge;
+the `pr` endpoint leaves the PR open.
 For CI repairs, supply the validated repository, PR, branch, commit, and failing run/job identities.
 After publication, attach those screenshots in a comment on each Issue they verify through the Issue
 provider guide. Never commit them.
