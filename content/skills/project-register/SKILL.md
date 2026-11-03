@@ -26,11 +26,11 @@ active pack.
 
 Scripts live in `./scripts/`:
 
-| Script             | Purpose                                                     |
-| ------------------ | ----------------------------------------------------------- |
-| `wt-profile.mjs`   | `colors`, `icons-dir`, `add` a Windows Terminal profile     |
-| `orca-project.mjs` | `groups`, `apply` icon, colour and group to an Orca project |
-| `make-icon.py`     | Render the 256×256 profile icon                             |
+| Script             | Purpose                                                           |
+| ------------------ | ----------------------------------------------------------------- |
+| `wt-profile.mjs`   | `colors`, `icons-dir`, `add` a Windows Terminal profile           |
+| `orca-project.mjs` | `groups`, `apply` name, icon, colour and group to an Orca project |
+| `make-icon.py`     | Render the 256×256 profile icon                                   |
 
 ## Process
 
@@ -147,20 +147,21 @@ above the work section shifts every number below it, so tell the user when the n
 
 ### Step 7: Register the project in Orca
 
-Add the project with the Orca CLI (forward-slash path), then set its icon, colour and group through
-the running Orca runtime; the CLI cannot set those, and Orca overwrites external edits to its data
-file. Orca must be running.
+Add the project with the Orca CLI (forward-slash path), then set its display name, icon, colour and
+group through the running Orca runtime; the CLI cannot set those, and Orca overwrites external edits
+to its data file. Orca must be running.
 
 ```bash
 orca repo add --path '<project path>' --json
 node "./scripts/orca-project.mjs" groups
-node "./scripts/orca-project.mjs" apply --path '<project path>' \
+node "./scripts/orca-project.mjs" apply --path '<project path>' --name '<Project>' \
   --icon '<icons dir>/<project>.png' --color '#RRGGBB' --group '<Parent › Group>'
 ```
 
-Ask which group the project belongs to with the native structured question UI, offering the paths
-`groups` prints. `apply` prints the stored record; confirm the group id, colour and `image:upload`
-icon there.
+The display name is the folder name with its first letter capitalized, because the user wants
+displayed project names to start with a capital letter. Ask which group the project belongs to with
+the native structured question UI, offering the paths `groups` prints. `apply` prints the stored
+record; confirm the display name, group id, colour and `image:upload` icon there.
 
 ### Step 8: Hand quicklinks to `raycast-config`
 

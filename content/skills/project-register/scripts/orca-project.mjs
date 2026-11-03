@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Set an Orca project's group, icon and colour through the running Orca runtime.
+// Set an Orca project's display name, group, icon and colour through the running Orca runtime.
 //
 // The Orca CLI cannot set these, and Orca rewrites its data file while running, so the
 // runtime's own RPC is the only safe route: newline-delimited JSON over the named pipe
@@ -81,7 +81,7 @@ async function listGroups(runtime) {
   }));
 }
 
-async function apply(runtime, { path, icon, color, group }) {
+async function apply(runtime, { path, name, icon, color, group }) {
   if (!path) {
     throw new Error('--path is required');
   }
@@ -92,6 +92,9 @@ async function apply(runtime, { path, icon, color, group }) {
   }
 
   const updates = {};
+  if (name) {
+    updates.displayName = name;
+  }
   if (icon) {
     const label = icon.split(/[\\/]/).pop();
     updates.repoIcon = {
@@ -134,7 +137,7 @@ try {
   } else if (command === 'apply') {
     console.log(JSON.stringify(await apply(runtime, parseOptions(rest)), null, 2));
   } else {
-    console.error('Usage: orca-project.mjs groups | apply --path <dir> [--icon <png>] [--color <#RRGGBB>] [--group <id or "Parent › Name">]');
+    console.error('Usage: orca-project.mjs groups | apply --path <dir> [--name <display name>] [--icon <png>] [--color <#RRGGBB>] [--group <id or "Parent › Name">]');
     process.exit(2);
   }
 } catch (error) {
