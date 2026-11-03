@@ -94,9 +94,10 @@ async function main(): Promise<number> {
       if (!['pi', 'claude', 'xpi'].includes(harnessName ?? '') || !['personal', 'work'].includes(accountName ?? '')) {
         throw new Error('Usage: mpx launch[-preview] <pi|claude|xpi> <personal|work> [--connectors] [native arguments...]');
       }
-      // Only the leading position is MPX-owned, so a prompt containing the word is never rewritten.
-      const connectors = launchArgs[0] === '--connectors';
-      const callerArgs = connectors ? launchArgs.slice(1) : launchArgs;
+      // A standalone `--connectors` is MPX-owned wherever it appears, because launchers such as Orca automations
+      // add their own arguments first; a prompt that merely contains the word is a different argument.
+      const connectors = launchArgs.includes('--connectors');
+      const callerArgs = launchArgs.filter(argument => argument !== '--connectors');
       const harness: Harness = harnessName === 'claude' ? 'claude' : 'pi';
       const account = accountName as Account;
       const config = await readUserConfig(userConfigPath());

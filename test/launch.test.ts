@@ -256,6 +256,10 @@ test('all Git Bash wrapper entrypoints forward account and hostile-looking argum
       cwd: launchDirectories.work, env: { ...process.env, APPDATA: appdata, FIXTURE_CAPTURE: capture }, timeout: 20_000,
     });
     assert.deepEqual(JSON.parse(bypassWithConnectors.stdout.trim()).args, ['--dangerously-skip-permissions', '-p', 'hi'], 'bypass launchers keep --connectors MPX-owned');
+    const trailingConnectors = await exec('bash', ['--noprofile', '--norc', '-c', 'bash "$1" -p hi --connectors', 'test', fileURLToPath(new URL('../bin/ccwd', import.meta.url))], {
+      cwd: launchDirectories.work, env: { ...process.env, APPDATA: appdata, FIXTURE_CAPTURE: capture }, timeout: 20_000,
+    });
+    assert.deepEqual(JSON.parse(trailingConnectors.stdout.trim()).args, ['--dangerously-skip-permissions', '-p', 'hi'], 'appended --connectors stays MPX-owned');
     const { stdout } = await exec('bash', ['--noprofile', '--norc', '-c', 'bash "$1" launch-preview claude work /mpx-skill', 'test', fileURLToPath(new URL('../bin/mpx', import.meta.url))], {
       cwd: launchDirectories.work, env: { ...process.env, APPDATA: appdata, MSYS2_ARG_CONV_EXCL: '' }, timeout: 20_000,
     });
