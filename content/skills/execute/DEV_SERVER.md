@@ -1,8 +1,8 @@
 # Development server
 
 Main owns server startup and cleanup. Prepare a server only when verification needs one.
-Resolve `MPX_AI_DUMP` and `MPX_TEMP` from the environment. Keep logs and verification evidence in
-`<MPX_AI_DUMP>/_VERIFICATION/<run>` for a unique run; disposable runners and scratch belong under
+Resolve `MPX_AI_RETAINED` and `MPX_TEMP` from the environment. Keep logs and verification evidence in
+`<MPX_AI_RETAINED>/_VERIFICATION/<run>` for a unique run; disposable runners and scratch belong under
 `MPX_TEMP`. If a required root is unset, relative, or unwritable, report a blocker; never guess a
 fallback.
 

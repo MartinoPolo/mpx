@@ -73,7 +73,7 @@ report it instead.
 
 Project-specific plans, research, reports and demo specs belong in the owning repository
 (`docs/plans` when no layout exists); for cross-repo work, pick one coordinating repo and link the
-others. `MPX_AI_DUMP` only for retained non-project work.
+others. `MPX_AI_RETAINED` only for retained non-project work.
 
 - `MPX_TEMP`: disposable files (scripts, screenshots, logs); may be deleted tomorrow.
 - `MPX_TEMP_EXTRA`: optional disposable roots on other drives, for large scratch data.

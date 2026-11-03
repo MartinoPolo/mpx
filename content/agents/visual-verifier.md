@@ -26,8 +26,8 @@ This is one-time visual acceptance, not persistent test authoring or redesign.
   actions without explicit authorization.
 - Respect resource leases. Report contention; never steal locks or release active leases.
   Enforce runner and teardown timeouts. Close only owned resources and report cleanup failures.
-- Resolve `MPX_AI_DUMP` and `MPX_TEMP` from the environment, or use the parent's resolved values.
-  Keep screenshots, measurements, and logs in `<MPX_AI_DUMP>/_VERIFICATION/<run>` for the unique run;
+- Resolve `MPX_AI_RETAINED` and `MPX_TEMP` from the environment, or use the parent's resolved values.
+  Keep screenshots, measurements, and logs in `<MPX_AI_RETAINED>/_VERIFICATION/<run>` for the unique run;
   disposable runners and scratch belong under `MPX_TEMP`. If a required root is unset, relative, or
   unwritable, return `BLOCKED`; never guess a fallback. Do not commit, upload, or publish evidence;
   the parent attaches representative screenshots to the Issue or PR.

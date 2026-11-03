@@ -16,7 +16,7 @@ const verificationDocuments = [
 for (const documentPath of verificationDocuments) {
   test(`${documentPath} separates inspectable evidence from disposable runners`, async () => {
     const content = await readContent(documentPath);
-    assert.ok(content.includes('<MPX_AI_DUMP>/_VERIFICATION/<run>'));
+    assert.ok(content.includes('<MPX_AI_RETAINED>/_VERIFICATION/<run>'));
     assert.match(content, /MPX_TEMP/);
     assert.match(content, /unset, relative, or/);
     assert.match(content, /never guess|no guessed fallback/i);
@@ -26,7 +26,7 @@ for (const documentPath of verificationDocuments) {
 
 test('walkthrough staging leaves the repository and preserves artifact delivery', async () => {
   const content = await readContent('skills/code-walkthrough/SKILL.md');
-  assert.ok(content.includes('<MPX_AI_DUMP>/_WALKTHROUGHS/<run>/<slug>-walkthrough.html'));
+  assert.ok(content.includes('<MPX_AI_RETAINED>/_WALKTHROUGHS/<run>/<slug>-walkthrough.html'));
   assert.match(content, /unset, relative, or/);
   assert.match(content, /never guess|no guessed fallback/i);
   assert.match(content, /then publish it/);
@@ -36,7 +36,7 @@ test('walkthrough staging leaves the repository and preserves artifact delivery'
 
 test('component audit reports are findings-only machine outputs', async () => {
   const content = await readContent('skills/components-audit/SKILL.md');
-  assert.ok(content.includes('<MPX_AI_DUMP>/_COMPONENT_AUDITS/<run>/COMPONENT-AUDIT.md'));
+  assert.ok(content.includes('<MPX_AI_RETAINED>/_COMPONENT_AUDITS/<run>/COMPONENT-AUDIT.md'));
   assert.match(content, /only (?:when|if) findings exist/);
   assert.match(content, /unset, relative, or/);
   assert.match(content, /never guess|no guessed fallback/i);
@@ -44,7 +44,7 @@ test('component audit reports are findings-only machine outputs', async () => {
 
 test('cleanup separates handoff artifacts from scratch without moving recovery data', async () => {
   const content = await readContent('skills/clean-pc/SKILL.md');
-  assert.ok(content.includes('<MPX_AI_DUMP>/_CLEAN_PC/<run>'));
+  assert.ok(content.includes('<MPX_AI_RETAINED>/_CLEAN_PC/<run>'));
   assert.ok(content.includes('<MPX_TEMP>/_CLEAN_PC/<run>'));
   assert.ok(content.includes('<MPX_ONEDRIVE>/.mpx/clean-pc/state.json'));
   assert.match(content, /unset, relative, or/);
@@ -55,7 +55,7 @@ test('cleanup separates handoff artifacts from scratch without moving recovery d
   assert.match(domains, /Quarantine roots and both resolved run directories are excluded/);
   const windows = await readContent('skills/clean-pc/WINDOWS.md');
   assert.match(windows, /<scratch>.*MPX_TEMP/);
-  assert.match(windows, /<reports>.*MPX_AI_DUMP/);
+  assert.match(windows, /<reports>.*MPX_AI_RETAINED/);
   assert.doesNotMatch(windows, /export="\$env:TEMP/);
   assert.ok(windows.includes('<drive>:\\_cleanup_quarantine'));
 });

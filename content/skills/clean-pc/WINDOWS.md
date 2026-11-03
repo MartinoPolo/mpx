@@ -4,7 +4,7 @@ The verified platform path. Domain rules live in [DOMAINS.md](DOMAINS.md).
 
 Resolve output roots as required by [SKILL.md](SKILL.md) before running commands:
 `<scratch>` is `<MPX_TEMP>/_CLEAN_PC/<run>` for disposable scans and staging;
-`<reports>` is `<MPX_AI_DUMP>/_CLEAN_PC/<run>` for the dashboard, removal logs, and elevated handoff.
+`<reports>` is `<MPX_AI_RETAINED>/_CLEAN_PC/<run>` for the dashboard, removal logs, and elevated handoff.
 Pass these resolved paths explicitly to the bundled scripts.
 
 ## Two rules that govern everything here

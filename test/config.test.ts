@@ -144,7 +144,7 @@ test('readUserConfig expands only approved variables and returns normalized path
         claude: '${MPX_WORK}/../accounts/work-claude',
       },
     },
-    domains: { personal: ['${MPX_PROJECTS}'], work: ['${MPX_WORK}', '${MPX_PROJECTS}/owned'], shared: ['${MPX_AI_DUMP}', '${MPX_TEMP}'] },
+    domains: { personal: ['${MPX_PROJECTS}'], work: ['${MPX_WORK}', '${MPX_PROJECTS}/owned'], shared: ['${MPX_AI_RETAINED}', '${MPX_TEMP}'] },
     defaultPacks: { personal: ['development', 'personal'], work: [] },
     executables: { pi: '${MPX_PI_EXECUTABLE}', claude: '${MPX_CLAUDE_EXECUTABLE}' },
     connectorFolders: ['${MPX_PROJECTS}/assistant'],
@@ -153,7 +153,7 @@ test('readUserConfig expands only approved variables and returns normalized path
   const config = await readUserConfig(file, {
     MPX_PROJECTS: projects,
     MPX_WORK: work,
-    MPX_AI_DUMP: path.join(root, 'apps', '..', 'shared'),
+    MPX_AI_RETAINED: path.join(root, 'apps', '..', 'shared'),
     MPX_TEMP: path.join(root, 'scratch'),
     MPX_PI_EXECUTABLE: path.join(root, 'bin', '..', 'pi'),
     MPX_CLAUDE_EXECUTABLE: path.join(root, 'bin', 'claude'),

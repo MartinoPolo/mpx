@@ -194,7 +194,7 @@ shares `~/.claude.json` and its credential identity with plain `claude`. To avoi
 {
   "projectOverrides": [
     { "path": "${MPX_WORK}/example", "config": { "projectId": "example" } },
-    { "path": "${MPX_AI_DUMP}", "omitConfig": true }
+    { "path": "${MPX_AI_RETAINED}", "omitConfig": true }
   ]
 }
 ```
@@ -207,7 +207,7 @@ For locations usable by either account, add an optional shared domain alongside 
 `domains.personal` and `domains.work` arrays:
 
 ```json
-{ "domains": { "personal": ["${MPX_PROJECTS}"], "work": ["${MPX_WORK}"], "shared": ["${MPX_AI_DUMP}"] } }
+{ "domains": { "personal": ["${MPX_PROJECTS}"], "work": ["${MPX_WORK}"], "shared": ["${MPX_AI_RETAINED}"] } }
 ```
 
 Shared roots accept absolute paths or approved `MPX_*` expansions. They suppress only ownership
@@ -223,7 +223,7 @@ Claude loads claude.ai connectors only when launched with `--connectors`, or ins
 ### Generated outputs
 
 - `MPX_AI_GENERATED`: saved media and the durable tutorial library.
-- `MPX_AI_DUMP`: retained non-project AI work, such as verification, backups, and imports; project plans and reports stay in their repository.
+- `MPX_AI_RETAINED`: retained non-project AI work, such as verification, backups, and imports; project plans and reports stay in their repository.
 - `MPX_TEMP`: disposable scratch files; Claude launches use it unless `CLAUDE_CODE_TMPDIR` is set.
 - `MPX_TEMP_EXTRA`: optional disposable roots on other drives, such as `D:\_temp` for large scratch
   data; separate several with the platform path delimiter (`;` on Windows).

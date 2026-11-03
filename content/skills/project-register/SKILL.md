@@ -127,8 +127,8 @@ node "./scripts/wt-profile.mjs" add \
   --name '<project>' --dir '<project path>' --icon '<icons dir>/<project>.png' --color '#RRGGBB'
 ```
 
-Require an absolute `MPX_AI_DUMP` before adding a profile. The script backs the settings file up in a
-unique folder under `MPX_AI_DUMP/_PROJECT_REGISTER/` and aborts if the backup fails. It copies the
+Require an absolute `MPX_AI_RETAINED` before adding a profile. The script backs the settings file up in a
+unique folder under `MPX_AI_RETAINED/_PROJECT_REGISTER/` and aborts if the backup fails. It copies the
 shell commandline from the profiles already there, generates the GUID, and re-parses the result
 before writing, so a malformed edit never reaches Windows Terminal. Report the returned backup path.
 Windows Terminal picks the profile up on its own — no restart.

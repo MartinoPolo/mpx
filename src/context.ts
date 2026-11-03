@@ -10,7 +10,7 @@ const MACHINE_ROOTS = [
   ['MPX_APPS', 'local apps'],
   ['MPX_ONEDRIVE', 'OneDrive root'],
   ['MPX_AI_GENERATED', 'saved AI-generated media and durable tutorials'],
-  ['MPX_AI_DUMP', 'general AI scratchpad worth keeping (plans, reports, artifacts)'],
+  ['MPX_AI_RETAINED', 'general AI scratchpad worth keeping (plans, reports, artifacts)'],
   ['MPX_TEMP', 'disposable temporary files'],
   ['MPX_TEMP_EXTRA', 'extra disposable roots on other drives, for large scratch data'],
   ['MPX_OBSIDIAN_VAULT', 'Obsidian vault'],

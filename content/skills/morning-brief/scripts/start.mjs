@@ -5,12 +5,12 @@ import { isAbsolute, join } from 'node:path';
 
 const MAXIMUM_WINDOW_DAYS = 7;
 
-const dump = process.env.MPX_AI_DUMP;
-if (!dump || !isAbsolute(dump)) {
-  console.error('MPX_AI_DUMP must be set to an absolute path.');
+const retainedRoot = process.env.MPX_AI_RETAINED;
+if (!retainedRoot || !isAbsolute(retainedRoot)) {
+  console.error('MPX_AI_RETAINED must be set to an absolute path.');
   process.exit(1);
 }
-const home = join(dump, 'morning-brief');
+const home = join(retainedRoot, 'morning-brief');
 const now = new Date();
 const startOfDay = (offsetDays) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + offsetDays);
 

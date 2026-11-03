@@ -23,7 +23,7 @@ test('additive arguments and selected native roots preserve all caller argument 
   try {
     const args = ['--settings', '{"a":"b c"}', '--', 'line one\nline two', '$(touch nope)', '', 'C:\\a b\\'];
     const packs = { packs: ['development'], paths: [join(f.root, 'pack space')], warnings: [] };
-    const spec = await createLaunchSpec({ root: f.root, cwd: join(f.root, 'personal'), harness: 'pi', account: 'personal', config: f.config, project: registered, selection: packs, args, env: { MPX_PROJECTS: 'preserved', MPX_AI_GENERATED: 'saved', MPX_AI_DUMP: 'inspectable', MPX_TEMP: 'disposable', MPX_SESSION_ID: 'obsolete', MPX_OWNER: 'old', PI_MODEL: 'parent-only' } });
+    const spec = await createLaunchSpec({ root: f.root, cwd: join(f.root, 'personal'), harness: 'pi', account: 'personal', config: f.config, project: registered, selection: packs, args, env: { MPX_PROJECTS: 'preserved', MPX_AI_GENERATED: 'saved', MPX_AI_RETAINED: 'inspectable', MPX_TEMP: 'disposable', MPX_SESSION_ID: 'obsolete', MPX_OWNER: 'old', PI_MODEL: 'parent-only' } });
     assert.deepEqual(spec.args, ['--skill', packs.paths[0], ...args]);
     const verbose = await createLaunchSpec({ root: f.root, cwd: join(f.root, 'personal'), harness: 'pi', account: 'personal', config: f.config, project: registered, selection: packs, args: ['--verbose'] });
     assert.deepEqual(verbose.args, ['--skill', packs.paths[0], '--verbose']);
@@ -32,7 +32,7 @@ test('additive arguments and selected native roots preserve all caller argument 
     assert.equal(spec.env.MPX_ACTIVE_CONTENT_ROOT, f.root);
     assert.equal(spec.env.MPX_PROJECTS, 'preserved');
     assert.equal(spec.env.MPX_AI_GENERATED, 'saved');
-    assert.equal(spec.env.MPX_AI_DUMP, 'inspectable');
+    assert.equal(spec.env.MPX_AI_RETAINED, 'inspectable');
     assert.equal(spec.env.MPX_TEMP, 'disposable');
     assert.equal(spec.env.MPX_SESSION_ID, undefined);
     assert.equal(spec.env.MPX_OWNER, undefined);

@@ -66,7 +66,7 @@ Resolve only `MPX_AI_GENERATED` from the process environment before writing — 
 `$MPX_AI_GENERATED` written in prose is literal text, not one. Read
 [`reference/SOURCE_FORMAT.md`](reference/SOURCE_FORMAT.md), then write `<slug>.source.md` directly
 into `$MPX_AI_GENERATED\_TUTORIALS\<category>\`. This is a durable tutorial library with a
-stable index, not a temporary report under `MPX_AI_DUMP`; keep existing tutorials in place.
+stable index, not a temporary report under `MPX_AI_RETAINED`; keep existing tutorials in place.
 
 Authoring rules:
 

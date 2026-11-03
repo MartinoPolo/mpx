@@ -30,7 +30,7 @@ re-renders an existing `brief.json`.
 
 ## Requirements
 
-Launched through `ccw` (or `cc`) so `MPX_ACTIVE_CONTENT_ROOT` is set; `MPX_AI_DUMP` absolute; `node`,
+Launched through `ccw` (or `cc`) so `MPX_ACTIVE_CONTENT_ROOT` is set; `MPX_AI_RETAINED` absolute; `node`,
 `bash` and `git` on PATH. Optional: `gh`, `glab`, `kf`, `orca`, and a VoiceStudio checkout with
 `uv` for narration. A missing optional tool makes only its part unavailable.
 
@@ -118,7 +118,7 @@ wait, never by ending the turn.
   stories. Each has a `summary`, two to four `points` with the concrete changes and a `why` sentence
   on what it means for my setup.
 
-`$MPX_AI_DUMP/morning-brief/taste.md`, when present, holds my preferences (whose calendars are
+`$MPX_AI_RETAINED/morning-brief/taste.md`, when present, holds my preferences (whose calendars are
 whose, news taste); the main session and every area follow it.
 
 Calendar, Slack and mail come from the gatherers; the main session shapes them into chapters.

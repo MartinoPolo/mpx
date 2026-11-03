@@ -56,8 +56,8 @@
       "data": {
         "away": { "from": "Thu 22:40", "to": "Fri 07:55" },
         "runs": [
-          { "id": "run-tests", "project": "prejemesi", "outcome": "ok", "result": "Merged", "app": "claude", "title": "Wishlist tests", "detail": "42 tests added, 3 commits", "when": "22:35", "duration": "1 h 20 min", "url": "file:///C:/AI_DUMP/afk/prejemesi-tests.md" },
-          { "id": "run-render", "project": "videoLab", "outcome": "fail", "result": "Render failed", "app": "claude", "title": "4K render", "detail": "Timed out at scene 7", "when": "23:10", "duration": "3 h 4 min", "url": "file:///C:/AI_DUMP/afk/render.log" }
+          { "id": "run-tests", "project": "prejemesi", "outcome": "ok", "result": "Merged", "app": "claude", "title": "Wishlist tests", "detail": "42 tests added, 3 commits", "when": "22:35", "duration": "1 h 20 min", "url": "file:///C:/_ALFRED/work/afk/prejemesi-tests.md" },
+          { "id": "run-render", "project": "videoLab", "outcome": "fail", "result": "Render failed", "app": "claude", "title": "4K render", "detail": "Timed out at scene 7", "when": "23:10", "duration": "3 h 4 min", "url": "file:///C:/_ALFRED/work/afk/render.log" }
         ]
       },
       "beats": [
@@ -273,7 +273,7 @@
           { "id": "action-merge", "project": "ui-components", "text": "Merge !318", "detail": "Approved and green", "app": "gitlab", "url": "https://example.com/mr/318", "chapter": "work", "source": "card-mr-318" },
           { "id": "action-move-t102", "project": "ui-components", "text": "Move T-102 to Approved", "detail": "Still in review; !318 is approved and green", "app": "kanbanflow", "url": "https://kanbanflow.com/", "chapter": "issues", "source": "issue-T-102" },
           { "id": "action-close-470", "project": "prejemesi", "text": "Close #470", "detail": "Its pull request #487 merged yesterday", "app": "github", "url": "https://github.com/MartinoPolo/prejemesi/issues/470", "chapter": "issues", "source": "issue-gh-470" },
-          { "id": "action-render", "project": "videoLab", "text": "Rerun the 4K render", "detail": "Overnight run timed out at scene 7", "app": "claude", "url": "file:///C:/AI_DUMP/afk/render.log", "chapter": "overnight", "source": "run-render" },
+          { "id": "action-render", "project": "videoLab", "text": "Rerun the 4K render", "detail": "Overnight run timed out at scene 7", "app": "claude", "url": "file:///C:/_ALFRED/work/afk/render.log", "chapter": "overnight", "source": "run-render" },
           { "id": "action-file", "project": "personal", "text": "File the three captures as set", "detail": "Project, heading and priority per capture", "app": "obsidian", "chapter": "triage" },
           { "id": "action-fix-substitution", "project": "mpx", "text": "Fix the arithmetic hook", "detail": "Fix session: Claude Code in mpx", "app": "claude", "chapter": "retro", "source": "retro-substitution" },
           { "id": "action-fix-commit", "project": "mpx", "text": "Fix the commit skill", "detail": "Fix session: Claude Code in mpx", "app": "claude", "chapter": "retro", "source": "retro-commit" },

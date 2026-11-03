@@ -94,8 +94,8 @@ author/executor; request fresh review of changed scope when the reviewed diff ch
 
 When live verification is needed, main discovers the relevant app and command from repository
 instructions and project configuration, reuses only a URL confirmed for this checkout, or starts and
-verifies the server. Resolve `MPX_AI_DUMP` and `MPX_TEMP` from the environment: keep logs and evidence
-in `<MPX_AI_DUMP>/_VERIFICATION/<run>` for a unique run, and disposable runners and scratch under
+verifies the server. Resolve `MPX_AI_RETAINED` and `MPX_TEMP` from the environment: keep logs and evidence
+in `<MPX_AI_RETAINED>/_VERIFICATION/<run>` for a unique run, and disposable runners and scratch under
 `MPX_TEMP`. If a required root is unset, relative, or unwritable, report a blocker; never guess a
 fallback.
 Main owns the server lifecycle, stops only processes it started, and preserves user-owned processes.

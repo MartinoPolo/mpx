@@ -97,9 +97,9 @@ function listColors() {
 }
 
 function addProfile({ name, directory, icon, color }) {
-  const backupRoot = process.env.MPX_AI_DUMP?.trim();
+  const backupRoot = process.env.MPX_AI_RETAINED?.trim();
   if (!backupRoot || !isAbsolute(backupRoot)) {
-    throw new Error('MPX_AI_DUMP must be set to an absolute path for Windows Terminal backups.');
+    throw new Error('MPX_AI_RETAINED must be set to an absolute path for Windows Terminal backups.');
   }
   const path = settingsPath();
   const raw = readFileSync(path, 'utf8');

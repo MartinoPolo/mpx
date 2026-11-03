@@ -14,7 +14,7 @@ it predates the decisions below.
 - Obsidian `Ideas (conflict 2026-09-28-14-04-57).md`: loop-engineering refactor, AGENTS.md reviews.
 - Obsidian `_Tooling/TaskGenius/task-system.md` and `TaskGenius Projects.md`: the task convention the
   triage must follow.
-- Claude session `0b8660a4` (`C--AI-DUMP`): trigger and connector research; handoff
+- Claude session `0b8660a4` (`C---ALFRED-work`): trigger and connector research; handoff
   `C:\_temp\mpx.morning-brief\handoff-from-0b8660a4.md`.
 - Claude session `d79d88c2` (`C---MP-github-cloned-orca`): Orca automation patch, mpx fix `cd31df4`.
 - Pi sessions: "morning skills should be grouped" (Orca, 2026-09-16); overnight AFK execution
@@ -22,7 +22,7 @@ it predates the decisions below.
 
 ## Decided
 
-- Trigger: the Orca automation "Morning" in `MPX_AI_DUMP`, daily at 06:00 Europe/Prague, `ccw`
+- Trigger: the Orca automation "Morning" in `MPX_AI_RETAINED`, daily at 06:00 Europe/Prague, `ccw`
   profile. Missed runs execute once when Orca starts within the grace window
   (`missedRunGraceMinutes`, 720 by default). The automation sets model and effort.
 - Not Cloud Routines (no local files, Obsidian or mpx skills) and not Desktop scheduled tasks (no mpx
@@ -41,7 +41,7 @@ it predates the decisions below.
 - Window: from the last successful brief, but never later than the start of the previous calendar
   day. The header states the covered range.
 - The brief only reports and collects choices. Choices are saved from the page and applied by a
-  second skill in a new Orca session in `MPX_AI_DUMP`, which also spawns fix sessions through Orca
+  second skill in a new Orca session in `MPX_AI_RETAINED`, which also spawns fix sessions through Orca
   and mpx (`ccw`).
 - Quiet areas get a short slide with one sentence and advance within seconds; the outline marks them
   as quiet.
@@ -71,7 +71,7 @@ it predates the decisions below.
   apply session starts the approved ones, grouped when they touch the same repo.
 - Each source runs as a parallel subagent with a time limit; a failed source shows "unavailable:
   reason" on its slide and the brief still publishes.
-- History: `MPX_AI_DUMP/morning-brief/<date>/` per day, plus `state.json` with the last successful
+- History: `MPX_AI_RETAINED/morning-brief/<date>/` per day, plus `state.json` with the last successful
   brief time. Day folders are disposable once read.
 - AI news: at most three items, newer than the window. Claude Code, Anthropic and Codex first, then
   Hacker News and major releases. Each item has up/down votes; the apply session asks why and keeps
@@ -136,7 +136,7 @@ Authoritative: `_Tooling/TaskGenius/task-system.md`.
   Child `claude -p` sessions must not inherit `ORCA_*` variables, and the orchestrator must not end
   its turn before the page is built.
 - Unattended runs cannot answer prompts: launch warnings, permission prompts, and the approval before
-  publishing a new artifact. `MPX_AI_DUMP` is a shared domain with `omitConfig`, so launches there
+  publishing a new artifact. `MPX_AI_RETAINED` is a shared domain with `omitConfig`, so launches there
   raise no warnings.
 - Return path: a claude.ai page cannot run local commands. The page can store choices (`db`
   capability) and send a comment to a Claude session watching the artifact

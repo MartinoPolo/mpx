@@ -49,8 +49,8 @@ context; authentication should be programmatic unless login itself is the change
 
 ## 3. Delegate visual acceptance
 
-Resolve `MPX_AI_DUMP` and `MPX_TEMP` from the environment. Keep screenshots, measurements, and
-logs in `<MPX_AI_DUMP>/_VERIFICATION/<run>` for a unique run; disposable runners and scratch belong
+Resolve `MPX_AI_RETAINED` and `MPX_TEMP` from the environment. Keep screenshots, measurements, and
+logs in `<MPX_AI_RETAINED>/_VERIFICATION/<run>` for a unique run; disposable runners and scratch belong
 under `MPX_TEMP`. If a required root is unset, relative, or unwritable, report `BLOCKED`; never guess
 a fallback.
 

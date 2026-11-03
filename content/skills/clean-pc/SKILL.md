@@ -50,8 +50,8 @@ Resolve project roots with `$env:MPX_PROJECTS`, `$env:MPX_WORK`, `$env:MPX_CLONE
 these up themselves, so they need the literal resolved value, not the variable name. An unset
 variable means that root is unavailable — ask rather than guessing a path.
 
-Resolve `MPX_AI_DUMP` and `MPX_TEMP` from the environment. For a unique run, keep the dashboard,
-results, and elevated handoff script in `<MPX_AI_DUMP>/_CLEAN_PC/<run>`; disposable scan CSVs and
+Resolve `MPX_AI_RETAINED` and `MPX_TEMP` from the environment. For a unique run, keep the dashboard,
+results, and elevated handoff script in `<MPX_AI_RETAINED>/_CLEAN_PC/<run>`; disposable scan CSVs and
 staging scratch belong in `<MPX_TEMP>/_CLEAN_PC/<run>`. If a required root is unset, relative, or
 unwritable, report a blocker; never guess a fallback. Exclude both run directories from scans and
 deletion candidates. Keep persistent state and same-volume quarantine at their existing locations.

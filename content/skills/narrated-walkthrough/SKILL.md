@@ -26,7 +26,7 @@ say and how to structure it; the engine only renders what `script.json` describe
 ## Requirements
 
 `node`, `git`, and `ffmpeg` with `ffprobe` on PATH. `GEMINI_API_KEY` or another TTS provider.
-`MPX_TEMP` (the shared engine install) and `MPX_AI_DUMP` (run folders) must be set and absolute; if
+`MPX_TEMP` (the shared engine install) and `MPX_AI_RETAINED` (run folders) must be set and absolute; if
 either is unset or problematic, ask the user where to work and generate.
 
 `--autonomous` runs without the user: make every choice the steps below would ask about yourself,
@@ -36,7 +36,7 @@ missing requirement or an exhausted TTS quota.
 ## Engine
 
 `node "<skill-dir>/scripts/setup.mjs"` installs the engine once and prints its path, `<engine>`. Work
-in a run folder `<MPX_AI_DUMP>/_WALKTHROUGHS/<project>.<slug>/` and call the tools from there:
+in a run folder `<MPX_AI_RETAINED>/_WALKTHROUGHS/<project>.<slug>/` and call the tools from there:
 
 - `node <engine>/tools/demo-record.mjs [--round=<n>]`: visible changes only; records the round's
   demo from its recipe into `cache/demo/`, or `cache/demo-<n>/` for an update.

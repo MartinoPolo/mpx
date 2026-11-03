@@ -28,21 +28,21 @@ async function profileFixture(root: string) {
   await writeFile(settingsPath, original);
   const icon = join(root, 'icon.png');
   await writeFile(icon, 'fixture');
-  const add = (name: string, dumpRoot: string) => exec(process.execPath, [
+  const add = (name: string, retainedRoot: string) => exec(process.execPath, [
     profileHelper, 'add', '--name', name, '--dir', root, '--icon', icon, '--color', '#123456',
-  ], { env: { ...process.env, LOCALAPPDATA: localAppData, MPX_AI_DUMP: dumpRoot }, timeout: 10_000 });
+  ], { env: { ...process.env, LOCALAPPDATA: localAppData, MPX_AI_RETAINED: retainedRoot }, timeout: 10_000 });
   return { settingsPath, original, add };
 }
 
-test('terminal backups use unique MPX_AI_DUMP folders and preserve original settings', async () => {
+test('terminal backups use unique MPX_AI_RETAINED folders and preserve original settings', async () => {
   await withFixture(async root => {
     const fixture = await profileFixture(root);
-    const dumpRoot = join(root, 'inspection dump');
-    const first = JSON.parse((await fixture.add('First', dumpRoot)).stdout);
+    const retainedRoot = join(root, 'inspection retained');
+    const first = JSON.parse((await fixture.add('First', retainedRoot)).stdout);
     const afterFirst = await readFile(fixture.settingsPath, 'utf8');
-    const second = JSON.parse((await fixture.add('Second', dumpRoot)).stdout);
-    assert.equal(dirname(dirname(first.backup)), join(dumpRoot, '_PROJECT_REGISTER'));
-    assert.equal(dirname(dirname(second.backup)), join(dumpRoot, '_PROJECT_REGISTER'));
+    const second = JSON.parse((await fixture.add('Second', retainedRoot)).stdout);
+    assert.equal(dirname(dirname(first.backup)), join(retainedRoot, '_PROJECT_REGISTER'));
+    assert.equal(dirname(dirname(second.backup)), join(retainedRoot, '_PROJECT_REGISTER'));
     assert.notEqual(dirname(first.backup), dirname(second.backup));
     assert.equal(await readFile(first.backup, 'utf8'), fixture.original);
     assert.equal(await readFile(second.backup, 'utf8'), afterFirst);
@@ -53,17 +53,17 @@ test('terminal backups use unique MPX_AI_DUMP folders and preserve original sett
   });
 });
 
-test('terminal changes abort for missing or relative MPX_AI_DUMP and backup failures', async () => {
+test('terminal changes abort for missing or relative MPX_AI_RETAINED and backup failures', async () => {
   await withFixture(async root => {
     const fixture = await profileFixture(root);
-    for (const invalid of ['', 'relative-dump']) {
-      await assert.rejects(fixture.add('Invalid', invalid), /MPX_AI_DUMP/);
+    for (const invalid of ['', 'relative-retained']) {
+      await assert.rejects(fixture.add('Invalid', invalid), /MPX_AI_RETAINED/);
       assert.equal(await readFile(fixture.settingsPath, 'utf8'), fixture.original);
     }
-    const dumpRoot = join(root, 'blocked dump');
-    await mkdir(dumpRoot);
-    await writeFile(join(dumpRoot, '_PROJECT_REGISTER'), 'not a directory');
-    await assert.rejects(fixture.add('Blocked', dumpRoot));
+    const retainedRoot = join(root, 'blocked retained');
+    await mkdir(retainedRoot);
+    await writeFile(join(retainedRoot, '_PROJECT_REGISTER'), 'not a directory');
+    await assert.rejects(fixture.add('Blocked', retainedRoot));
     assert.equal(await readFile(fixture.settingsPath, 'utf8'), fixture.original);
     assert.deepEqual(await readdir(dirname(fixture.settingsPath)), ['settings.json']);
   });
