@@ -1,5 +1,16 @@
 {
   "schemaVersion": 1,
+  "mcpServers": {
+    "browser": {
+      "chrome-devtools": {
+        "type": "stdio",
+        "command": "npx",
+        "args": [
+          "chrome-devtools-mcp@1.4.0"
+        ]
+      }
+    }
+  },
   "models": {
     "claude": {
       "mechanical": "sonnet",

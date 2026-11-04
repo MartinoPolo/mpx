@@ -207,6 +207,19 @@ test('projects harness-specific thinking overrides before the shared default', a
   assert.equal(projected.get('dist/claude/agents/mpx-explorer.md')?.effort, 'medium');
 });
 
+test('projects capability MCP servers into Claude agent frontmatter only', async () => {
+  const root = await fixture();
+  const profiles = path.join(root, 'content/runtime-profiles.json');
+  const server = { type: 'stdio', command: 'npx', args: ['search-server'] };
+  const parsed = JSON.parse(await readFile(profiles, 'utf8'));
+  await writeFile(profiles, JSON.stringify({ ...parsed, mcpServers: { search: { 'search-server': server } } }));
+  const projected = new Map((await projectContent(root))
+    .filter(item => item.path.endsWith('/agents/mpx-explorer.md'))
+    .map(item => [item.path, frontmatter(item.content)]));
+  assert.deepEqual(projected.get('dist/claude/agents/mpx-explorer.md')?.mcpServers, [{ 'search-server': server }]);
+  assert.equal(projected.get('dist/pi/agents/mpx-explorer.md')?.mcpServers, undefined);
+});
+
 test('rejects invalid thinking overrides and Pi Luna effort below high', async (t) => {
   for (const [name, override, expected] of [
     ['unknown harness', '{ codex: high }', /thinkingOverrides.*unknown field.*codex/],

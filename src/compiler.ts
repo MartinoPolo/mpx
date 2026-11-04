@@ -187,7 +187,7 @@ function runtimeProfiles(content: Buffer, where: string): RuntimeProfiles {
     throw new Error(`${where} is invalid JSON: ${String(error)}`);
   }
   const root = requireMapping(value, where);
-  assertExactKeys(root, ['schemaVersion', 'models', 'tools'], where);
+  assertExactKeys(root, ['schemaVersion', 'models', 'tools', 'mcpServers'], where);
   if (root.schemaVersion !== 1) throw new Error(`${where} schemaVersion must be 1`);
   const models = requireMapping(root.models, `${where} models`);
   const tools = requireMapping(root.tools, `${where} tools`);
@@ -207,6 +207,15 @@ function runtimeProfiles(content: Buffer, where: string): RuntimeProfiles {
       const names = harnessTools[capability];
       if (!Array.isArray(names) || names.some((name) => typeof name !== 'string' || name.trim() === '')) {
         throw new Error(`${where} tools.${harness}.${capability} must be a string array`);
+      }
+    }
+  }
+  if (root.mcpServers !== undefined) {
+    const serversByCapability = requireMapping(root.mcpServers, `${where} mcpServers`);
+    assertExactKeys(serversByCapability, CAPABILITIES, `${where} mcpServers`);
+    for (const [capability, servers] of Object.entries(serversByCapability)) {
+      for (const [name, server] of Object.entries(requireMapping(servers, `${where} mcpServers.${capability}`))) {
+        requireMapping(server, `${where} mcpServers.${capability}.${name}`);
       }
     }
   }
@@ -603,6 +612,10 @@ function nativeAgent(data: Mapping, metadata: AgentMetadata, profiles: RuntimePr
   native[harness === 'pi' ? 'thinking' : 'effort'] = thinking;
   const tools = metadata.capabilities.flatMap((capability) => profiles.tools[harness][capability]);
   native.tools = [...new Set(tools)].join(', ');
+  if (harness === 'claude') {
+    const servers = metadata.capabilities.flatMap((capability) => Object.entries(profiles.mcpServers?.[capability] ?? {}));
+    if (servers.length > 0) native.mcpServers = servers.map(([name, server]) => ({ [name]: server }));
+  }
   return native;
 }
 
