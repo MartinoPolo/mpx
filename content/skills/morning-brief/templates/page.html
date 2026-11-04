@@ -88,6 +88,14 @@ svg { flex: none; display: block; }
 .sheet-head .kicker { font-size: 14px; font-weight: 600; color: var(--ink-soft); }
 .sheet-head h1 { margin: 0; font: 600 26px/1.15 var(--font-head); text-wrap: balance; }
 .sheet-head .position { margin-left: auto; font: 500 13px var(--font-mono); color: var(--ink-soft); align-self: flex-start; padding-top: 4px; }
+/* Process now sits in the head of every chapter, so decisions can go out at any point. Its status
+   hangs under the button, so it never takes width or height from the chapter title. */
+.process-area { position: relative; display: flex; align-items: center; gap: var(--space-2); align-self: flex-start; }
+.process-area .text-button { padding: 5px 12px; font-size: 14px; white-space: nowrap; }
+.sheet-head .position { white-space: nowrap; }
+.process-status { position: absolute; top: calc(100% + 2px); right: 0; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 1.3; color: var(--ink-soft); }
+.process-status.problem { position: static; white-space: normal; text-align: right; font-size: 13px; color: var(--ink); background: var(--fill-progress); border-radius: var(--radius-button); padding: 3px 8px; }
+.inline-link { font-weight: 650; text-decoration: underline; text-underline-offset: 2px; }
 .sheet-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: var(--space-3) var(--space-6) var(--space-6); }
 .sheet::after { content: ''; position: absolute; inset: auto 0 0; height: 56px; background: linear-gradient(color-mix(in srgb, var(--paper) 0%, transparent), var(--paper) 85%); opacity: 0; pointer-events: none; transition: opacity var(--duration-fast); }
 .sheet.more-below::after { opacity: 1; }
@@ -127,22 +135,32 @@ a.icon-link:hover, button.icon-link:hover { background: color-mix(in srgb, var(-
 select.small-select { appearance: none; font-size: 14px; padding: 3px 26px 3px 8px; border-radius: var(--radius-button); border: 1.5px solid color-mix(in srgb, var(--ink) 30%, transparent); background: var(--paper) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2316385c' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 6px center / 14px; cursor: pointer; }
 select.small-select:hover { border-color: var(--ink); }
 
-/* Decisions: every action point is approved or dismissed on its own slide or in the action points;
+/* Decisions: every action point is accepted or skipped on its own slide or in the action points;
    until then it stays open. */
 .decision { display: inline-flex; flex: none; padding: 2px; gap: 2px; border-radius: 9px; background: var(--fill-draft); }
 .decision button { padding: 2px 10px; border-radius: 7px; font-size: 13px; font-weight: 650; line-height: 22px; color: var(--ink-soft); transition: background var(--duration-fast); }
 .decision button:hover { color: var(--ink); background: color-mix(in srgb, var(--paper) 70%, transparent); }
 .decision button[aria-pressed="true"] { color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--ink); }
-.decision button[aria-pressed="true"][data-value="approve"] { background: var(--fill-ready); }
-.decision button[aria-pressed="true"][data-value="dismiss"] { background: var(--paper); color: var(--ink-soft); box-shadow: inset 0 0 0 1.5px var(--ink-soft); }
+.decision button[aria-pressed="true"][data-value="accept"] { background: var(--fill-ready); }
+.decision button[aria-pressed="true"][data-value="skip"] { background: var(--paper); color: var(--ink-soft); box-shadow: inset 0 0 0 1.5px var(--ink-soft); }
+.sent-chip { flex: none; font: 600 12px/20px var(--font-mono); padding: 0 7px; color: var(--ink-soft); background: none; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 22%, transparent); }
 .manual-chip { background: var(--sticky); color: var(--on-sticky); }
+/* Parameters: what an agent needs from me for an action, beside its decision. */
+.parameters { display: flex; flex-wrap: wrap; gap: 6px 12px; flex-basis: 100%; margin-top: 4px; }
+.parameter { display: flex; flex-direction: column; gap: 2px; min-width: 160px; font-size: 13px; font-weight: 650; color: var(--ink-soft); }
+.parameter.wide { flex: 1 1 100%; }
+.parameter input, .parameter textarea { padding: 4px 8px; border-radius: var(--radius-button); border: 1.5px solid color-mix(in srgb, var(--ink) 30%, transparent); background: var(--paper); color: var(--ink); font: 400 14px/1.4 var(--font-body); }
+.parameter textarea { min-height: 52px; resize: vertical; }
+.parameter input:hover, .parameter textarea:hover { border-color: var(--ink); }
+.parameter select.small-select { color: var(--ink); font-weight: 400; }
 .inline-decision { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin-top: 8px; padding: 4px 4px 4px 10px; border-radius: 10px; background: color-mix(in srgb, var(--paper) 78%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 14%, transparent); }
 .inline-decision .decision-text { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 14px; font-weight: 650; }
 .inline-decision .decision-text span { min-width: 0; }
 .inline-decision .decision-detail { font-weight: 400; color: var(--ink-soft); }
 .inline-decision .decision { margin-left: auto; }
-.inline-decision.dismiss .decision-text { color: var(--ink-soft); text-decoration: line-through; }
-.inline-decision.approve { background: color-mix(in srgb, var(--fill-ready) 70%, white); }
+.inline-decision.skip .decision-text { color: var(--ink-soft); text-decoration: line-through; }
+.inline-decision.accept { background: color-mix(in srgb, var(--fill-ready) 70%, white); }
+.inline-decision .parameters { padding-right: 6px; }
 .decide-strip { margin-top: var(--space-5); }
 .decide-strip .inline-decision { margin-top: 0; min-height: 44px; background: var(--fill-review); box-shadow: none; }
 
@@ -203,10 +221,10 @@ select.small-select:hover { border-color: var(--ink); }
 .board-cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(230px, 100%), 1fr)); gap: var(--row-gap); }
 /* A proposed move: a dashed ghost where the card would go and an arrow from the card to it. */
 .ghost-card { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 64px; border-radius: 10px; border: 2px dashed var(--brand-deep); background: color-mix(in srgb, var(--paper) 70%, transparent); font: 650 14px var(--font-mono); color: var(--brand-deep); }
-.ghost-card.approve { border-color: var(--done); color: color-mix(in srgb, var(--done) 70%, var(--ink)); background: var(--fill-merged); }
+.ghost-card.accept { border-color: var(--done); color: color-mix(in srgb, var(--done) 70%, var(--ink)); background: var(--fill-merged); }
 .move-arrows { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 3; }
 .move-arrows path { fill: none; stroke: var(--brand-deep); stroke-width: 3; stroke-dasharray: 8 6; stroke-linecap: round; }
-.move-arrows path.approve { stroke: var(--done); stroke-dasharray: none; }
+.move-arrows path.accept { stroke: var(--done); stroke-dasharray: none; }
 .move-suggestion { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; font-size: 14px; font-weight: 700; color: var(--brand-deep); }
 .move-suggestion .reason { font-weight: 400; color: var(--ink-soft); }
 .work-card { display: flex; flex-direction: column; gap: 4px; padding: 8px 6px 4px 10px; border-radius: 10px; background: var(--state-fill); box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 12%, transparent); }
@@ -333,26 +351,25 @@ details.project-group:not([open]) > .project-head { border-radius: 14px; }
 .diff .line { white-space: pre-wrap; padding: 0 6px; border-radius: 4px; }
 .diff .line.plus { background: var(--fill-ready); }
 .diff .line.minus { background: var(--fill-failing); }
-.retro-item.dismiss { background: color-mix(in srgb, var(--ink) 4%, white); }
-.retro-item.dismiss .title { color: var(--ink-soft); }
+.retro-item.skip { background: color-mix(in srgb, var(--ink) 4%, white); }
+.retro-item.skip .title { color: var(--ink-soft); }
 .head-decision { display: flex; border-radius: 11px; }
 .session-line { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 10px; background: var(--paper); font-size: 14px; }
 .session-line .prompt { font: 400 13px var(--font-mono); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* Instructions: global first, then project instructions, then skills. */
-.change-section + .change-section { margin-top: var(--space-5); }
-.change { display: grid; grid-template-columns: minmax(0, 1fr) auto 34px; gap: var(--space-3); align-items: center; padding: 8px 6px 8px 14px; border-radius: 12px; }
-.change.final { background: var(--fill-ready); }
-.change.watch { background: var(--fill-progress); }
-.change.attention { background: var(--fill-failing); }
-.change .scope-line { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.change .scope { font: 600 14px var(--font-mono); }
-.change .head-decision { margin-left: auto; }
-.change .summary { font-size: 15px; font-weight: 600; line-height: 1.35; }
-.change .opinion { font-size: 14px; line-height: 1.35; color: var(--ink-soft); }
-.state-chips { display: flex; flex-direction: column; gap: 3px; align-items: stretch; }
-.state-chips .chip { justify-content: flex-start; }
-.state-chips .chip.no { background: color-mix(in srgb, var(--paper) 55%, transparent); box-shadow: inset 0 0 0 1.5px var(--ink); }
+/* Instructions: one line of skill chips, at most two changes in words, the rest as counts. */
+.instruction-block + .instruction-block { margin-top: var(--space-4); }
+.skill-chips { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.skill-chip { gap: 6px; padding: 3px 10px; font: 600 14px var(--font-mono); color: var(--ink); text-decoration: none; background: var(--fill-draft); }
+.skill-chip.added { background: var(--fill-ready); }
+.skill-chip .kind { font: 650 12px var(--font-body); color: var(--ink-soft); }
+a.skill-chip:hover { box-shadow: inset 0 0 0 1.5px var(--ink); }
+.change { display: grid; grid-template-columns: minmax(0, 1fr) 34px; gap: var(--space-3); align-items: center; padding: 6px 6px 6px 14px; border-radius: 12px; background: var(--fill-review); }
+.change .scope { font: 600 13px var(--font-mono); color: var(--ink-soft); }
+.change .summary { font-size: 16px; font-weight: 600; line-height: 1.35; }
+.count-lines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font: 400 14px/1.5 var(--font-mono); }
+.count-lines li { padding: 1px 8px; border-radius: 6px; }
+.count-lines .scope { font-weight: 650; color: var(--ink); }
 
 /* AI news. */
 .news-item { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: var(--space-3); align-items: start; padding: 12px 6px 12px 14px; border-radius: 12px; background: var(--fill-draft); }
@@ -372,17 +389,7 @@ details.project-group:not([open]) > .project-head { border-radius: 14px; }
 .vote[aria-pressed="true"].up { background: var(--fill-ready); box-shadow: inset 0 0 0 1.5px var(--ink); }
 .vote[aria-pressed="true"].down { background: var(--fill-failing); box-shadow: inset 0 0 0 1.5px var(--ink); }
 
-/* Brain teasers: the answer stays folded until I open it. */
-.teaser { padding: 12px 14px; border-radius: 12px; background: var(--fill-review); }
-.teaser .question { margin: 4px 0 0; font: 600 18px/1.35 var(--font-head); }
-.teaser-answer { margin-top: 8px; }
-.teaser-answer summary { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px; font-weight: 650; color: var(--ink-soft); list-style: none; border-radius: var(--radius-button); }
-.teaser-answer summary::-webkit-details-marker { display: none; }
-.teaser-answer summary svg { transition: transform var(--duration-normal) var(--ease-spring); }
-.teaser-answer[open] summary svg { transform: rotate(90deg); }
-.teaser-answer p { margin: 6px 0 0; padding: 6px 10px; border-radius: 8px; background: var(--paper); font-size: 16px; font-weight: 600; }
-
-/* Action points: one per line, grouped by project; the head of each group decides the follow-up agents. */
+/* Action points: one per line, grouped by project. */
 .action-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .action { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; column-gap: 10px; align-items: center; padding: 7px 7px 7px 8px; border-radius: 12px; background: var(--paper); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ink) 10%, transparent); }
 .action > .source-app { align-self: start; display: flex; }
@@ -391,19 +398,16 @@ details.project-group:not([open]) > .project-head { border-radius: 14px; }
 .action .text { font-size: 16px; font-weight: 650; line-height: 1.3; }
 .action .detail { font-size: 14px; color: var(--ink-soft); line-height: 1.35; }
 .action .side { display: flex; align-items: center; gap: 8px; }
-.action.approve { background: color-mix(in srgb, var(--fill-ready) 65%, white); }
-.action.dismiss { background: color-mix(in srgb, var(--ink) 3%, white); }
-.action.dismiss .text { color: var(--ink-soft); text-decoration: line-through; }
+.action.accept { background: color-mix(in srgb, var(--fill-ready) 65%, white); }
+.action.skip { background: color-mix(in srgb, var(--ink) 3%, white); }
+.action.skip .text { color: var(--ink-soft); text-decoration: line-through; }
 .action .manual-chip { margin-left: 6px; vertical-align: 2px; }
-.project-head .spawn { margin-left: auto; font: 400 14px var(--font-body); }
-.project-head .segmented { background: color-mix(in srgb, var(--paper) 55%, transparent); }
-.project-head .segmented button { color: var(--ink); }
-.project-head .approve-all { padding: 5px 12px; border-radius: var(--radius-button); background: var(--paper); color: var(--ink); font: 650 14px var(--font-body); box-shadow: inset 0 0 0 1.5px var(--ink); }
-.project-head .approve-all:hover { background: var(--fill-ready); }
+.action .parameters { margin-top: 6px; }
 .action .from { font-size: 13px; font-weight: 600; color: var(--ink-soft); background: none; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 20%, transparent); }
 .action .from:hover { color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--ink); }
 .save-area { display: flex; justify-content: flex-end; align-items: center; gap: var(--space-4); margin-top: var(--space-3); }
 .save-area .summary { font-size: 14px; color: var(--ink-soft); text-align: right; }
+.text-button.secondary { background: var(--paper); color: var(--ink); box-shadow: var(--shadow-compact); }
 .feedback { display: flex; flex-direction: column; gap: 6px; margin-top: var(--space-5); }
 .feedback label { font-size: 14px; font-weight: 650; color: var(--ink-soft); }
 .feedback textarea { min-height: 88px; padding: 8px 10px; resize: vertical; border-radius: var(--radius-button); border: 1.5px solid color-mix(in srgb, var(--ink) 30%, transparent); background: var(--paper); color: var(--ink); font: 400 15px/1.4 var(--font-body); }
@@ -462,7 +466,9 @@ details.project-group:not([open]) > .project-head { border-radius: 14px; }
 	.sheet-body, .sheet-head { padding-inline: var(--space-4); }
 	.transport { flex-wrap: wrap; justify-content: center; border-radius: 22px; bottom: var(--space-2); height: auto; padding: 6px 10px; }
 	.progress { order: 10; flex-basis: 100%; margin: 2px 4px 0; }
-	.capture, .change, .news-item { grid-template-columns: minmax(0, 1fr) auto; }
+	.capture, .news-item { grid-template-columns: minmax(0, 1fr) auto; }
+	.sheet-head { flex-wrap: wrap; }
+	.process-area { flex-basis: 100%; justify-content: flex-end; }
 	.board { grid-template-columns: minmax(0, 1fr); }
 	.board-column.empty { display: none; }
 	.action { grid-template-columns: 30px minmax(0, 1fr); }
@@ -472,7 +478,6 @@ details.project-group:not([open]) > .project-head { border-radius: 14px; }
 	.capture .box, .news-item > svg, .run .mono, .time { display: none; }
 	.capture .selects { grid-column: 1 / -1; flex-wrap: wrap; }
 	.run { grid-template-columns: auto minmax(0, 1fr) 34px; }
-	.state-chips { flex-direction: row; grid-column: 1 / -1; grid-row: 2; }
 	.event-popover { position: static; width: auto; margin-top: var(--space-3); }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -494,6 +499,10 @@ details.project-group:not([open]) > .project-head { border-radius: 14px; }
 				<span id="chapter-icon"></span>
 				<div><div class="kicker" id="chapter-kicker"></div><h1 id="chapter-title"></h1></div>
 				<span class="position" id="chapter-position"></span>
+				<div class="process-area" id="process-area">
+					<span class="process-status" id="process-status" aria-live="polite"></span>
+					<button class="text-button" id="process-now" type="button" title="Send the decided action points and the feedback to a processing session"></button>
+				</div>
 			</header>
 			<div class="sheet-body" id="stage"></div>
 		</article>
@@ -564,7 +573,7 @@ const UI_ICONS = {
 	arrowUp: '<path d="M12 19V5M6.5 10.5L12 5l5.5 5.5"/>',
 	download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
 	thread: '<path d="M4.5 5.5h15v10h-8l-4.5 3.5v-3.5H4.5z"/>',
-	bulb: '<path d="M9.5 18h5M10.5 21h3"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.7.5 1.1 1.3 1.1 2.1v.1h5v-.1c0-.8.4-1.6 1.1-2.1A6 6 0 0 0 12 3z"/>',
+	send: '<path d="M20.5 3.5L3.5 10.5l7 3 3 7z"/><path d="M10.5 13.5l10-10"/>',
 };
 function icon(name, size = 20, label = '') {
 	const labelled = label ? `role="img" aria-label="${escapeHtml(label)}"` : 'aria-hidden="true"';
@@ -582,7 +591,7 @@ function iconLink(url, label, iconName = 'external', className = '') {
 	return `<a class="icon-link ${className}" href="${escapeHtml(href)}" target="_blank" rel="noopener" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">${graphic}</a>`;
 }
 
-const CHAPTER_ICONS = { calendar: 'googlecalendar', work: 'gitlab', issues: 'ticket', overnight: 'moon', slack: 'slack', mail: 'gmail', triage: 'obsidian', retro: 'claude', instructions: 'github', news: 'news', teasers: 'bulb', actions: 'checklist' };
+const CHAPTER_ICONS = { calendar: 'googlecalendar', work: 'gitlab', issues: 'ticket', overnight: 'moon', slack: 'slack', mail: 'gmail', triage: 'obsidian', retro: 'claude', instructions: 'github', news: 'news', actions: 'checklist' };
 const QUIET_HOLD_SECONDS = 2;
 const chapters = brief.chapters.map((chapter) => chapter.status === 'quiet' || chapter.status === 'unavailable' || !chapter.beats?.length
 	? { ...chapter, beats: chapter.beats?.length ? chapter.beats : [{ say: chapter.title, note: chapter.status === 'unavailable' ? 'Unavailable' : 'Quiet', targets: [], hold: QUIET_HOLD_SECONDS }] }
@@ -610,50 +619,163 @@ function byProject(items) {
 	return [...groups.values()];
 }
 
-/* Choices live in memory and download as choices.json from the action points. Each action point is
-   open until approved or dismissed, on its source slide or at the end. Approved agent points of one
-   project go to the follow-up agents its spawn choice sets: one for the project, one per point, or none. */
+/* Choices: each action point stays open until accepted or skipped, on its source slide or at the end.
+   Every decision, parameter and the feedback is kept in this browser per brief as it is made, so a reload
+   keeps it. Process now sends the decided points to a processing session through an agent-launch link;
+   Save choices downloads the same payload. */
 const actionItems = chapterOfType('actions')?.data?.items ?? [];
-const choices = { news: {}, triage: {}, decisions: {}, autoHandled: {}, spawn: {}, feedback: '' };
+const STORAGE_KEY = `morning-brief/${brief.date}`;
+// Windows caps a command line near 32767 characters and the link reaches launch.ps1 as one argument;
+// launch.ps1 rejects a longer payload with the same limit.
+const MAXIMUM_PAYLOAD_LENGTH = 30000;
+const TRIAGE_FIELDS = ['project', 'heading', 'priority'];
+const NEWS_VOTES = ['up', 'down'];
+const DECISION_LABELS = { accept: 'Accept', skip: 'Skip' };
+const choices = { decisions: {}, feedback: '', news: {}, triage: {}, autoHandled: {}, sent: {}, lastSentAt: undefined, unchangedSinceSend: false };
 for (const group of chapterOfType('triage')?.data?.groups ?? []) for (const item of group.items) choices.triage[item.id] = { project: item.project ?? '', heading: item.heading ?? '', priority: item.priority ?? '' };
 for (const item of chapterOfType('work')?.data?.autoHandled ?? []) choices.autoHandled[item.id] = true;
-for (const group of byProject(actionItems)) choices.spawn[group.project.id] = 'one';
+restoreChoices();
+// Stored state is only trusted for this brief's token, and only for ids and values the brief still has.
+function restoreChoices() {
+	let stored;
+	try { stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null'); } catch { return; }
+	if (!isRecord(stored) || stored.token !== brief.process?.token) return;
+	for (const item of actionItems) {
+		const decision = stored.decisions?.[item.id];
+		if (!isRecord(decision)) continue;
+		const parameters = {};
+		for (const parameter of item.parameters ?? []) {
+			const value = decision.parameters?.[parameter.id];
+			const allowed = parameter.type === 'select' ? (parameter.options ?? []).some((option) => String(option.value) === String(value)) : typeof value === 'string';
+			if (value !== undefined && allowed) parameters[parameter.id] = value;
+		}
+		choices.decisions[item.id] = {
+			...(Object.keys(DECISION_LABELS).includes(decision.decision) && { decision: decision.decision }),
+			...(typeof decision.decidedAt === 'string' && { decidedAt: decision.decidedAt }),
+			parameters,
+		};
+		if (typeof stored.sent?.[item.id] === 'string') choices.sent[item.id] = stored.sent[item.id];
+	}
+	if (typeof stored.feedback === 'string') choices.feedback = stored.feedback;
+	for (const item of chapterOfType('news')?.data?.items ?? []) if (NEWS_VOTES.includes(stored.news?.[item.id])) choices.news[item.id] = stored.news[item.id];
+	for (const [id, defaults] of Object.entries(choices.triage)) {
+		const entry = stored.triage?.[id];
+		if (isRecord(entry)) choices.triage[id] = { ...defaults, ...Object.fromEntries(TRIAGE_FIELDS.filter((field) => typeof entry[field] === 'string').map((field) => [field, entry[field]])) };
+	}
+	for (const id of Object.keys(choices.autoHandled)) if (typeof stored.autoHandled?.[id] === 'boolean') choices.autoHandled[id] = stored.autoHandled[id];
+	if (typeof stored.lastSentAt === 'string') choices.lastSentAt = stored.lastSentAt;
+	choices.unchangedSinceSend = stored.unchangedSinceSend === true;
+}
+function isRecord(value) {
+	return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+// Without writable storage the page still works for this visit.
+function saveChoices() {
+	try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ token: brief.process?.token, ...choices })); } catch {}
+	renderProcess();
+}
+function recordChange() {
+	choices.unchangedSinceSend = false;
+	saveChoices();
+}
 const isManual = (item) => item.agent === false;
-const approvedAgentPoints = (items) => items.filter((item) => !isManual(item) && choices.decisions[item.id] === 'approve');
-function exportedChoices() {
-	const retroItems = chapterOfType('retro')?.data?.items ?? [];
+const decisionOf = (id) => choices.decisions[id]?.decision;
+// A parameter shows what I set, else the brief's default; a select without a default takes its first option.
+const parameterValue = (item, parameter) => choices.decisions[item.id]?.parameters?.[parameter.id] ?? parameter.value ?? (parameter.type === 'select' ? parameter.options?.[0]?.value : undefined) ?? '';
+const parameterValues = (item) => Object.fromEntries((item.parameters ?? []).map((parameter) => [parameter.id, parameterValue(item, parameter)]));
+// Changing a decision or its parameters clears its Sent chip until the next Process now.
+function updateDecision(id, change) {
+	choices.decisions[id] = { ...choices.decisions[id], ...change };
+	delete choices.sent[id];
+}
+const decidedItems = () => actionItems.filter((item) => decisionOf(item.id));
+const hasChoicesToSend = () => decidedItems().length > 0 || choices.feedback.trim() !== '';
+function processPayload() {
+	const triageItems = (chapterOfType('triage')?.data?.groups ?? []).flatMap((group) => group.items);
+	const votes = Object.fromEntries(Object.entries(choices.news).filter(([, vote]) => vote));
 	return {
+		token: brief.process?.token,
 		date: brief.date,
-		exported: new Date().toISOString(),
-		actions: actionItems.map((item) => ({
-			id: item.id, text: item.text, project: item.project, chapter: item.chapter, source: item.source, url: item.url,
-			manual: isManual(item), decision: choices.decisions[item.id] ?? 'open',
-			session: retroItems.find((retroItem) => `retro-${retroItem.id}` === item.source)?.session,
-		})),
-		agents: byProject(actionItems).map(({ project, items }) => ({ project: project.id, spawn: choices.spawn[project.id], actions: approvedAgentPoints(items).map((item) => item.id) }))
-			.filter((group) => group.actions.length && group.spawn !== 'none'),
-		triage: (chapterOfType('triage')?.data?.groups ?? []).flatMap((group) => group.items.map((item) => ({ id: item.id, note: group.note, text: item.text, ...choices.triage[item.id] }))),
-		news: (chapterOfType('news')?.data?.items ?? []).filter((item) => choices.news[item.id]).map((item) => ({ id: item.id, title: item.title, url: item.url, vote: choices.news[item.id] })),
-		autoHandled: (chapterOfType('work')?.data?.autoHandled ?? []).map((item) => ({ id: item.id, text: item.text, proposal: item.proposal, enabled: choices.autoHandled[item.id] })),
+		sent: new Date().toISOString(),
+		decisions: decidedItems().map((item) => ({ id: item.id, decision: decisionOf(item.id), parameters: parameterValues(item) })),
 		feedback: choices.feedback.trim(),
+		...(triageItems.length && { triage: Object.fromEntries(triageItems.map((item) => [item.id, choices.triage[item.id]])) }),
+		...(Object.keys(votes).length && { news: votes }),
+		...(Object.keys(choices.autoHandled).length && { autoHandled: choices.autoHandled }),
 	};
 }
-function agentCount() {
-	return byProject(actionItems).reduce((total, { project, items }) => {
-		const approved = approvedAgentPoints(items).length;
-		return total + (choices.spawn[project.id] === 'none' ? 0 : choices.spawn[project.id] === 'each' ? approved : Math.min(approved, 1));
-	}, 0);
-}
 function choiceSummary() {
-	const count = (value) => actionItems.filter((item) => (choices.decisions[item.id] ?? 'open') === value).length;
+	const count = (value) => actionItems.filter((item) => (decisionOf(item.id) ?? 'open') === value).length;
 	const votes = Object.values(choices.news).filter(Boolean).length;
-	const agents = agentCount();
-	return [`${count('approve')} approved`, `${count('dismiss')} dismissed`, `${count('open')} open`, `${agents} agent${agents === 1 ? '' : 's'} to start`, votes && `${votes} news vote${votes === 1 ? '' : 's'}`, choices.feedback.trim() && 'feedback written'].filter(Boolean).join(' · ');
+	return [`${count('accept')} accepted`, `${count('skip')} skipped`, `${count('open')} open`, votes && `${votes} news vote${votes === 1 ? '' : 's'}`, choices.feedback.trim() && 'feedback written'].filter(Boolean).join(' · ');
 }
 
-const DECISION_LABELS = { approve: 'Approve', dismiss: 'Dismiss' };
+const clockTime = (isoTime) => new Date(isoTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+async function encodedPayload(payload) {
+	const compressed = new Blob([JSON.stringify(payload)]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+	const bytes = new Uint8Array(await new Response(compressed).arrayBuffer());
+	let binary = '';
+	for (const byte of bytes) binary += String.fromCharCode(byte);
+	return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+let processProblem = '';
+async function processNow() {
+	const payload = processPayload();
+	let encoded = '';
+	try {
+		encoded = await encodedPayload(payload);
+	} catch {}
+	processProblem = !encoded ? 'This browser cannot pack the choices into a link.' : encoded.length > MAXIMUM_PAYLOAD_LENGTH ? 'Too many choices for one link.' : '';
+	if (processProblem) return renderProcess();
+	followLink(`agent-launch:brief/${brief.date}/${encoded}`);
+	// The page cannot see whether the handler ran (a cancelled prompt or a failure is invisible), so it
+	// records only that the link was opened; the apply session's processed.json is the real record.
+	for (const decision of payload.decisions) choices.sent[decision.id] = payload.sent;
+	choices.lastSentAt = payload.sent;
+	choices.unchangedSinceSend = true;
+	saveChoices();
+	renderStage();
+}
+// The host's agent-launch handler receives the link; following one opens no window here.
+function followLink(href) {
+	const anchor = document.createElement('a');
+	anchor.href = href;
+	document.body.append(anchor);
+	anchor.click();
+	anchor.remove();
+}
+function renderProcess() {
+	const button = byId('process-now');
+	button.innerHTML = `${icon('send', 16)} ${choices.unchangedSinceSend ? 'Send again' : 'Process now'}`;
+	button.disabled = !hasChoicesToSend();
+	const status = byId('process-status');
+	const sentExplanation = choices.lastSentAt ? `Link opened at ${clockTime(choices.lastSentAt)}; Orca opens the processing session` : '';
+	status.classList.toggle('problem', Boolean(processProblem));
+	status.title = processProblem ? '' : sentExplanation;
+	status.innerHTML = processProblem
+		? `${escapeHtml(processProblem)} <button class="inline-link" type="button" data-action="save">Save choices</button> instead.`
+		: sentExplanation ? `<span aria-hidden="true">${escapeHtml(`Link opened ${clockTime(choices.lastSentAt)}`)}</span><span class="visually-hidden">${escapeHtml(sentExplanation)}</span>` : '';
+}
+
 function decisionControl(item) {
-	return `<span class="decision" role="group" aria-label="${escapeHtml(`Decide: ${item.text}`)}">${Object.entries(DECISION_LABELS).map(([value, label]) => `<button type="button" data-decide="${escapeHtml(item.id)}" data-value="${value}" aria-pressed="${choices.decisions[item.id] === value}">${label}</button>`).join('')}</span>`;
+	const sentAt = decisionOf(item.id) && choices.sent[item.id];
+	const buttons = Object.entries(DECISION_LABELS).map(([value, label]) => `<button type="button" data-decide="${escapeHtml(item.id)}" data-value="${value}" aria-pressed="${decisionOf(item.id) === value}" aria-label="${escapeHtml(`${label}: ${item.text}`)}">${label}</button>`).join('');
+	const sentChip = sentAt ? `<span class="chip sent-chip" data-sent-for="${escapeHtml(item.id)}" title="${escapeHtml(`Processing link opened at ${clockTime(sentAt)}`)}">${icon('send', 12)}Sent</span>` : '';
+	return `<span class="decision" role="group" aria-label="${escapeHtml(`Decide: ${item.text}`)}">${buttons}</span>${sentChip}`;
+}
+function parameterFields(item) {
+	if (!item.parameters?.length) return '';
+	const field = (parameter) => {
+		const value = parameterValue(item, parameter);
+		const attributes = `data-parameter-for="${escapeHtml(item.id)}" data-parameter="${escapeHtml(parameter.id)}"`;
+		const control = parameter.type === 'select'
+			? `<select class="small-select" ${attributes}>${(parameter.options ?? []).map((option) => `<option value="${escapeHtml(option.value)}" ${String(option.value) === String(value) ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}</select>`
+			: parameter.type === 'textarea'
+				? `<textarea rows="2" ${attributes}>${escapeHtml(value)}</textarea>`
+				: `<input type="text" value="${escapeHtml(value)}" ${attributes}>`;
+		return `<label class="parameter ${parameter.type === 'textarea' ? 'wide' : ''}"><span>${escapeHtml(parameter.label)}</span>${control}</label>`;
+	};
+	return `<div class="parameters">${item.parameters.map(field).join('')}</div>`;
 }
 const manualChip = (item) => isManual(item) ? `<span class="chip manual-chip" title="${escapeHtml(item.why ?? 'Only you can do this')}">Manual</span>` : '';
 // Renderers place a point's control beside its source; points without a source gather at the chapter's
@@ -661,9 +783,10 @@ const manualChip = (item) => isManual(item) ? `<span class="chip manual-chip" ti
 const placedDecisions = new Set();
 function decisionRow(item, withDetail = false) {
 	placedDecisions.add(item.id);
-	return `<div class="inline-decision ${choices.decisions[item.id] ?? 'open'}" ${target(item.id)}>
+	return `<div class="inline-decision ${decisionOf(item.id) ?? 'open'}" ${target(item.id)}>
 		<span class="decision-text">${icon('checklist', 16)}<span>${escapeHtml(item.text)}${manualChip(item)}${withDetail && item.detail ? ` <span class="decision-detail">· ${escapeHtml(item.detail)}</span>` : ''}</span></span>
 		${decisionControl(item)}
+		${parameterFields(item)}
 	</div>`;
 }
 const inlineDecision = (source) => actionItems.filter((item) => item.source === source).map((item) => decisionRow(item)).join('');
@@ -679,15 +802,15 @@ function remainingDecisions(chapter) {
 	return remaining.length ? `<section class="decide-strip" aria-label="Decisions"><div class="row-list">${remaining.map((item) => decisionRow(item, true)).join('')}</div></section>` : '';
 }
 function downloadChoices() {
-	const blob = new Blob([JSON.stringify(exportedChoices(), null, 2)], { type: 'application/json' });
+	const blob = new Blob([JSON.stringify(processPayload(), null, 2)], { type: 'application/json' });
 	const anchor = document.createElement('a');
 	anchor.href = URL.createObjectURL(blob);
-	anchor.download = `morning-brief-choices-${brief.date}.json`;
+	anchor.download = `morning-brief-decisions-${brief.date}.json`;
 	document.body.append(anchor);
 	anchor.click();
 	anchor.remove();
 	setTimeout(() => URL.revokeObjectURL(anchor.href), 1000);
-	const button = stage.querySelector('[data-action="save"]');
+	const button = stage.querySelector('.text-button[data-action="save"]');
 	if (button) { button.classList.add('done'); button.innerHTML = `${icon('check', 18)} Saved`; }
 }
 
@@ -932,8 +1055,8 @@ const RENDERERS = {
 			const attributes = `class="chip link-chip" style="--state-fill:${STATE_FILLS[link.state] ?? 'var(--paper)'}" title="${escapeHtml(`${link.ref}: ${stateNames[link.state] ?? link.state ?? ''}`)}"`;
 			return href ? `<a ${attributes} href="${escapeHtml(href)}" target="_blank" rel="noopener">${escapeHtml(link.ref)}</a>` : `<span ${attributes}>${escapeHtml(link.ref)}</span>`;
 		};
-		// A proposed move is decided by the point whose source is the issue; a dismissed one drops its ghost and arrow.
-		const moveDecision = (issue) => choices.decisions[actionItems.find((item) => item.source === `issue-${issue.id}`)?.id];
+		// A proposed move is decided by the point whose source is the issue; a skipped one drops its ghost and arrow.
+		const moveDecision = (issue) => decisionOf(actionItems.find((item) => item.source === `issue-${issue.id}`)?.id);
 		const issueCard = (issue) => `
 			<li class="work-card" ${target(`issue-${issue.id}`)} ${issue.move ? `data-move-from="${escapeHtml(issue.id)}"` : ''} style="--state-fill:${issue.move ? 'var(--fill-progress)' : 'var(--paper)'}">
 				<div class="ref">${appIcon(current.app, 15)}<span>${escapeHtml(issue.ref)}</span></div>
@@ -946,7 +1069,7 @@ const RENDERERS = {
 		const ghostCard = (issue) => `<li class="ghost-card ${moveDecision(issue) ?? ''}" data-move-to="${escapeHtml(issue.id)}">${icon('goto', 16)}${escapeHtml(issue.ref)} moves here</li>`;
 		const columns = (current.columns ?? []).map((name) => {
 			const issues = current.issues.filter((issue) => issue.column === name);
-			const arriving = current.issues.filter((issue) => issue.move?.to === name && moveDecision(issue) !== 'dismiss');
+			const arriving = current.issues.filter((issue) => issue.move?.to === name && moveDecision(issue) !== 'skip');
 			return { id: slug(name), name, count: issues.length, cards: [...issues.map(issueCard), ...arriving.map(ghostCard)] };
 		});
 		return `
@@ -1055,7 +1178,7 @@ const RENDERERS = {
 				const open = item.id === chapter.openItem;
 				const decision = actionItems.find((entry) => entry.source === `retro-${item.id}`);
 				return `
-				<section class="retro-item ${decision ? choices.decisions[decision.id] ?? '' : ''}" ${target(`retro-${item.id}`)}>
+				<section class="retro-item ${decision ? decisionOf(decision.id) ?? '' : ''}" ${target(`retro-${item.id}`)}>
 					<div class="retro-head">
 						<button class="retro-toggle" type="button" data-retro-open="${escapeHtml(item.id)}" aria-expanded="${open}" aria-controls="retro-body-${escapeHtml(item.id)}">
 							${icon('chevron', 16).replace('<svg', '<svg class="chevron"')}${harnessIcon(item.harness)}<span><span class="title">${escapeHtml(item.title)}</span><span class="cost">${escapeHtml(item.cost)}</span></span>
@@ -1075,25 +1198,28 @@ const RENDERERS = {
 	},
 
 	instructions(data) {
-		const VERDICTS = { final: 'Final', watch: 'Watch', attention: 'Needs attention' };
-		const KINDS = [['global', 'Global instructions'], ['project', 'Project instructions'], ['skill', 'Skills']];
-		const change = (change) => {
-			const states = Object.entries(change.state ?? {});
-			return `
-			<li class="change ${escapeHtml(change.verdict)}" ${target(`change-${change.id}`)}>
-				<div>
-					<div class="scope-line"><span class="scope">${escapeHtml(change.scope)}</span>${change.kind === 'skill' ? `<span class="chip">${change.added ? 'New' : 'Updated'}</span>` : ''}<span class="chip">${escapeHtml(VERDICTS[change.verdict] ?? change.verdict)}</span>${headDecision(`change-${change.id}`)}</div>
-					<div class="summary">${escapeHtml(change.summary)}</div>
-					<div class="opinion">${escapeHtml(change.opinion)}</div>
-				</div>
-				<div class="state-chips">${states.map(([key, value]) => `<span class="chip ${value ? '' : 'no'}" title="${escapeHtml(`${value ? '' : 'Not '}${key}`)}">${icon(value ? 'check' : 'cross', 14, value ? 'yes' : 'no')}${escapeHtml(key)}</span>`).join('')}</div>
-				${iconLink(change.url, `Open ${change.scope} change`, /github\.com/.test(change.url ?? '') ? 'github' : /gitlab/.test(change.url ?? '') ? 'gitlab' : 'external') || '<span></span>'}
-			</li>`;
+		// Skills as one line of chips, the crucial changes in words, everything else as counts.
+		const { skills = [], highlights = [], counts = [] } = data;
+		const hostIcon = (url) => /github\.com/.test(url ?? '') ? 'github' : /gitlab/.test(url ?? '') ? 'gitlab' : 'external';
+		const decisionsFor = (entries) => entries.map((entry) => inlineDecision(`change-${entry.id}`)).join('');
+		const skillChip = (skill) => {
+			const href = safeUrl(skill.url);
+			const content = `<span class="kind">${skill.added ? 'New' : 'Updated'}</span>${escapeHtml(skill.name)}`;
+			const attributes = `class="chip skill-chip ${skill.added ? 'added' : ''}" ${target(`change-${skill.id}`)}`;
+			return href ? `<a ${attributes} href="${escapeHtml(href)}" target="_blank" rel="noopener">${content}</a>` : `<span ${attributes}>${content}</span>`;
 		};
-		return KINDS.map(([kind, title]) => {
-			const changes = (data.changes ?? []).filter((item) => (item.kind ?? 'project') === kind);
-			return changes.length ? `<section class="change-section"><h2 class="group-title">${title}</h2><ul class="row-list">${changes.map(change).join('')}</ul></section>` : '';
-		}).join('');
+		const countScope = (count) => {
+			const href = safeUrl(count.url);
+			return href ? `<a class="scope" href="${escapeHtml(href)}" target="_blank" rel="noopener">${escapeHtml(count.scope)}</a>` : `<span class="scope">${escapeHtml(count.scope)}</span>`;
+		};
+		return `
+			${skills.length ? `<section class="instruction-block" aria-label="Skills"><div class="skill-chips">${skills.map(skillChip).join('')}</div>${decisionsFor(skills)}</section>` : ''}
+			${highlights.length ? `<section class="instruction-block" aria-label="Changes that matter"><ul class="row-list">${highlights.map((highlight) => `
+				<li class="change" ${target(`change-${highlight.id}`)}>
+					<div><div class="scope">${escapeHtml(highlight.scope)}</div><div class="summary">${escapeHtml(highlight.summary)}</div>${inlineDecision(`change-${highlight.id}`)}</div>
+					${iconLink(highlight.url, `Open ${highlight.scope} change`, hostIcon(highlight.url)) || '<span></span>'}
+				</li>`).join('')}</ul></section>` : ''}
+			${counts.length ? `<section class="instruction-block" aria-label="Other changes"><ul class="count-lines">${counts.map((count) => `<li ${target(`change-${count.id}`)}>${countScope(count)}: ${escapeHtml(count.text)}</li>`).join('')}</ul>${decisionsFor(counts)}</section>` : ''}`;
 	},
 
 	news(data, chapter) {
@@ -1122,28 +1248,16 @@ const RENDERERS = {
 			</li>`; }).join('')}</ul>`;
 	},
 
-	teasers(data, chapter) {
-		return `<ul class="row-list">${(data.items ?? []).map((item) => `
-			<li class="teaser" ${target(`teaser-${item.id}`)}>
-				<span class="chip">${escapeHtml(item.kind)}</span>
-				<p class="question">${escapeHtml(item.question)}</p>
-				<details class="teaser-answer" data-disclosure="teaser-${escapeHtml(item.id)}" ${disclosureOpen(chapter, `teaser-${item.id}`, false) ? 'open' : ''}>
-					<summary>${icon('chevron', 16)}Show answer</summary>
-					<p>${escapeHtml(item.answer)}</p>
-				</details>
-			</li>`).join('')}</ul>`;
-	},
-
 	actions(data, chapter) {
-		const SPAWN_LABELS = { one: 'One agent', each: 'Agent per point', none: 'No agent' };
 		const action = (item) => {
 			const destination = chapters.find((entry) => entry.id === item.chapter);
 			return `
-				<li class="action ${choices.decisions[item.id] ?? 'open'}" ${target(item.id)}>
+				<li class="action ${decisionOf(item.id) ?? 'open'}" ${target(item.id)}>
 					<span class="source-app">${iconLink(item.url, `Open in ${APP_NAMES[item.app] ?? 'app'}`, appIcon(item.app)) || `<span class="icon-link">${appIcon(item.app)}</span>`}</span>
 					<div class="body">
 						<div class="text">${escapeHtml(item.text)}${manualChip(item)}</div>
 						${item.detail || item.why ? `<div class="detail">${escapeHtml([item.detail, isManual(item) && item.why && `Manual: ${item.why}`].filter(Boolean).join(' · '))}</div>` : ''}
+						${parameterFields(item)}
 					</div>
 					<span class="side">
 						${destination ? `<button class="chip from" type="button" data-goto="${escapeHtml(destination.id)}" title="${escapeHtml(`Back to ${destination.name}`)}">${escapeHtml(destination.name)}</button>` : ''}
@@ -1154,23 +1268,19 @@ const RENDERERS = {
 		// Agent points come first; manual ones follow with the reason no agent can do them.
 		return `
 			${byProject(data.items ?? []).map(({ project, items }) => {
-				const agentPoints = items.filter((item) => !isManual(item));
-				const approved = approvedAgentPoints(items).length;
+				const decided = items.filter((item) => decisionOf(item.id)).length;
 				return `
 				<details class="project-group" style="${projectStyle(project)}" data-disclosure="project-${escapeHtml(project.id)}" ${disclosureOpen(chapter, `project-${project.id}`, true) ? 'open' : ''} ${target(`project-${project.id}`)}>
-					<summary class="project-head">${icon('chevron', 18)}<span>${escapeHtml(project.name)}</span><span class="project-count">${agentPoints.length ? `${approved}/${agentPoints.length} for agents` : 'only you'}</span>
-						${agentPoints.length ? `<span class="spawn segmented" role="group" aria-label="${escapeHtml(`Follow-up agents for ${project.name}`)}">${Object.entries(SPAWN_LABELS).map(([value, label]) => `<button type="button" data-spawn="${escapeHtml(project.id)}" data-value="${value}" aria-pressed="${choices.spawn[project.id] === value}">${label}</button>`).join('')}</span>
-						<button class="approve-all" type="button" data-approve-all="${escapeHtml(project.id)}">Approve all</button>` : ''}
-					</summary>
-					<div class="project-body"><ul class="action-list">${[...agentPoints, ...items.filter(isManual)].map(action).join('')}</ul></div>
+					<summary class="project-head">${icon('chevron', 18)}<span>${escapeHtml(project.name)}</span><span class="project-count">${decided}/${items.length} decided</span></summary>
+					<div class="project-body"><ul class="action-list">${[...items.filter((item) => !isManual(item)), ...items.filter(isManual)].map(action).join('')}</ul></div>
 				</details>`; }).join('')}
-			<section class="feedback">
-				<label for="feedback-text">Notes for the AI and ideas to improve the brief</label>
+			<section class="feedback" ${target('feedback')}>
+				<label for="feedback-text">What did you like or dislike about this brief?</label>
 				<textarea id="feedback-text" data-feedback rows="3">${escapeHtml(choices.feedback)}</textarea>
 			</section>
 			<div class="save-area">
 				<span class="summary" id="choice-summary">${escapeHtml(choiceSummary())}</span>
-				<button class="text-button" type="button" data-action="save">${icon('download', 18)} Save choices</button>
+				<button class="text-button secondary" type="button" data-action="save" title="Download the same payload Process now sends">${icon('download', 18)} Save choices</button>
 			</div>`;
 	},
 };
@@ -1208,13 +1318,22 @@ const maximumBeats = Math.max(...chapters.map((chapter) => chapter.beats.length)
 // Highlight classes go on before anything reads layout: new elements then start in their final state
 // instead of animating into it, which flashed every day column on each click.
 function renderStage(scrollTop = stage.scrollTop) {
+	const focusedControl = equivalentControlSelector(document.activeElement);
 	stage.innerHTML = renderBody(currentChapter());
+	if (focusedControl) stage.querySelector(focusedControl)?.focus({ preventScroll: true });
 	byId('app').style.setProperty('--sheet-width', `${requestedWidth}px`);
 	const lit = markTargets();
 	stage.scrollTop = scrollTop;
 	scrollTargetsIntoView(lit);
 	showScrollHint();
 	followLayout();
+}
+// A re-render replaces every control in the stage; focus moves to the new copy of the focused one so
+// keyboard users keep their place.
+const CONTROL_ATTRIBUTES = ['data-decide', 'data-value', 'data-news', 'data-vote', 'data-scope', 'data-event', 'data-retro-open', 'data-action', 'data-goto'];
+function equivalentControlSelector(element) {
+	if (!element || !stage.contains(element)) return '';
+	return CONTROL_ATTRIBUTES.filter((name) => element.hasAttribute(name)).map((name) => `[${name}="${CSS.escape(element.getAttribute(name))}"]`).join('');
 }
 /* Parts drawn against other elements' positions follow them every frame, so they stay attached while
    the sheet width animates or the stage scrolls. */
@@ -1254,9 +1373,9 @@ function drawMoveArrows() {
 			const endY = to.top + to.height / 2 - board.top;
 			const bend = (endX - startX) / 2;
 			const head = forward ? -1 : 1;
-			const approved = ghost.classList.contains('approve') ? 'approve' : '';
-			return `<path class="${approved}" d="M${startX} ${startY} C${startX + bend} ${startY}, ${endX - bend} ${endY}, ${endX} ${endY}"/>
-				<path class="${approved}" style="stroke-dasharray:none" d="M${endX + head * 10} ${endY - 7} L${endX} ${endY} L${endX + head * 10} ${endY + 7}"/>`;
+			const accepted = ghost.classList.contains('accept') ? 'accept' : '';
+			return `<path class="${accepted}" d="M${startX} ${startY} C${startX + bend} ${startY}, ${endX - bend} ${endY}, ${endX} ${endY}"/>
+				<path class="${accepted}" style="stroke-dasharray:none" d="M${endX + head * 10} ${endY - 7} L${endX} ${endY} L${endX + head * 10} ${endY + 7}"/>`;
 		}).join('');
 		if (layer.drawn !== markup) { layer.innerHTML = markup; layer.drawn = markup; }
 	}
@@ -1505,7 +1624,7 @@ byId('beat-panel').addEventListener('click', (event) => {
 });
 stage.addEventListener('click', (event) => {
 	const chapter = currentChapter();
-	const element = event.target.closest('[data-goto], [data-event], [data-scope], [data-retro-open], [data-news], [data-decide], [data-spawn], [data-approve-all], [data-action]');
+	const element = event.target.closest('[data-goto], [data-event], [data-scope], [data-retro-open], [data-news], [data-decide], [data-action]');
 	if (!element) return;
 	// Controls in a group's head must not fold the group.
 	if (element.closest('summary') && !element.matches('summary')) event.preventDefault();
@@ -1513,15 +1632,15 @@ stage.addEventListener('click', (event) => {
 	if (element.dataset.event) { chapter.selected = element.dataset.event; return renderStage(); }
 	if (element.dataset.scope) { chapter.scope = element.dataset.scope; return renderStage(); }
 	if (element.dataset.retroOpen) { chapter.openItem = chapter.openItem === element.dataset.retroOpen ? undefined : element.dataset.retroOpen; return renderStage(); }
-	if (element.dataset.news) { choices.news[element.dataset.news] = choices.news[element.dataset.news] === element.dataset.vote ? undefined : element.dataset.vote; return renderStage(); }
-	if (element.dataset.decide) {
-		const id = element.dataset.decide;
-		choices.decisions[id] = choices.decisions[id] === element.dataset.value ? undefined : element.dataset.value;
+	if (element.dataset.news) {
+		choices.news[element.dataset.news] = choices.news[element.dataset.news] === element.dataset.vote ? undefined : element.dataset.vote;
+		recordChange();
 		return renderStage();
 	}
-	if (element.dataset.spawn) { choices.spawn[element.dataset.spawn] = element.dataset.value; return renderStage(); }
-	if (element.dataset.approveAll) {
-		for (const item of actionItems) if ((item.project ?? 'other') === element.dataset.approveAll && !isManual(item)) choices.decisions[item.id] = 'approve';
+	if (element.dataset.decide) {
+		const id = element.dataset.decide;
+		updateDecision(id, { decision: decisionOf(id) === element.dataset.value ? undefined : element.dataset.value, decidedAt: new Date().toISOString() });
+		recordChange();
 		return renderStage();
 	}
 	if (element.dataset.action === 'close-event') { chapter.selected = undefined; return renderStage(); }
@@ -1529,15 +1648,30 @@ stage.addEventListener('click', (event) => {
 });
 stage.addEventListener('change', (event) => {
 	const element = event.target;
-	if (element.dataset.triage) choices.triage[element.dataset.triage][element.dataset.field] = element.value;
-	if (element.dataset.auto) choices.autoHandled[element.dataset.auto] = element.checked;
+	const triageChoice = choices.triage[element.dataset.triage];
+	if (element.dataset.triage) {
+		if (!triageChoice || !TRIAGE_FIELDS.includes(element.dataset.field)) return;
+		triageChoice[element.dataset.field] = element.value;
+	} else if (element.dataset.auto) choices.autoHandled[element.dataset.auto] = element.checked;
+	else return;
+	recordChange();
 });
-// Typing updates the summary in place; a re-render would drop the caret.
+// Typing saves and updates in place; a re-render would drop the caret.
 stage.addEventListener('input', (event) => {
-	if (!('feedback' in event.target.dataset)) return;
-	choices.feedback = event.target.value;
+	const element = event.target;
+	if ('feedback' in element.dataset) choices.feedback = element.value;
+	else if (element.dataset.parameterFor) {
+		const id = element.dataset.parameterFor;
+		updateDecision(id, { parameters: { ...choices.decisions[id]?.parameters, [element.dataset.parameter]: element.value } });
+		stage.querySelectorAll('[data-sent-for]').forEach((chip) => { if (chip.dataset.sentFor === id) chip.remove(); });
+	} else return;
+	recordChange();
 	const summary = byId('choice-summary');
 	if (summary) summary.textContent = choiceSummary();
+});
+byId('process-area').addEventListener('click', (event) => {
+	if (event.target.closest('#process-now')) processNow();
+	else if (event.target.closest('[data-action="save"]')) downloadChoices();
 });
 stage.addEventListener('toggle', (event) => {
 	const key = event.target.dataset?.disclosure;
@@ -1565,6 +1699,7 @@ const since = new Date(brief.window?.since ?? '');
 byId('rail-window').textContent = Number.isNaN(since.getTime()) ? '' : `since ${since.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`;
 byId('rail-window').title = brief.window?.label ?? '';
 buildProgress();
+renderProcess();
 setChapter(0);
 // The first chapter opens at its own width; only later changes animate.
 getComputedStyle(byId('app')).getPropertyValue('--sheet-width');

@@ -1,15 +1,20 @@
 #!/usr/bin/env node
-// Renders <day>/brief.json into a self-contained <day>/index.html. With --commit-state, records the
+// Renders <day>/brief.json into a self-contained <day>/index.html. Gives the brief a process token and
+// account on the first build and writes them back into brief.json, so rebuilds keep them, and on every
+// build writes them to <day>/process.json for the agent-launch handler. With --commit-state, records the
 // brief as the last successful one so the next window starts here.
 // Usage: build.mjs <day-directory> [--commit-state] [--out <file>]
+import { randomUUID } from 'node:crypto';
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 
-const CHAPTER_TYPES = ['calendar', 'overnight', 'work', 'issues', 'slack', 'mail', 'triage', 'retro', 'instructions', 'news', 'teasers', 'actions'];
-const TEASER_COUNT = 3;
-const CHANGE_KINDS = ['global', 'project', 'skill'];
+const CHAPTER_TYPES = ['calendar', 'overnight', 'work', 'issues', 'slack', 'mail', 'triage', 'retro', 'instructions', 'news', 'actions'];
+const PARAMETER_TYPES = ['select', 'text', 'textarea'];
+const PROCESS_ACCOUNTS = ['personal', 'work'];
+const DEFAULT_PROCESS_ACCOUNT = PROCESS_ACCOUNTS[1];
+const MAXIMUM_INSTRUCTION_HIGHLIGHTS = 2;
 const STATUSES = ['needs', 'fyi', 'quiet', 'unavailable'];
 const NOTE_MAXIMUM_WORDS = 4;
 // simple-icons ship paths without colour; these are the brands' own.
@@ -26,7 +31,8 @@ if (!dayDirectory || !isAbsolute(dayDirectory)) {
   process.exit(1);
 }
 
-const brief = JSON.parse(await readFile(join(dayDirectory, 'brief.json'), 'utf8'));
+const briefPath = join(dayDirectory, 'brief.json');
+const brief = JSON.parse(await readFile(briefPath, 'utf8'));
 const problems = [];
 if (!brief.date || !brief.window?.since || !brief.window?.until) problems.push('date and window.since/until are required');
 if (!Array.isArray(brief.chapters) || brief.chapters.length === 0) problems.push('chapters must be a non-empty array');
@@ -55,9 +61,41 @@ for (const item of brief.chapters?.find((chapter) => chapter.type === 'actions')
   if (!chapterIds.has(item.chapter)) problems.push(`action "${item.id}": chapter "${item.chapter}" is not a chapter id; its decision shows on that slide`);
   if (!item.project) problems.push(`action "${item.id}": project is required; action points are grouped by it`);
   if (item.agent === false && !item.why) problems.push(`action "${item.id}": a manual point needs why no agent can do it`);
+  if (item.parameters !== undefined && !Array.isArray(item.parameters)) problems.push(`action "${item.id}": parameters must be an array`);
+  const parameterIds = new Set();
+  for (const [index, parameter] of (Array.isArray(item.parameters) ? item.parameters : []).entries()) {
+    if (typeof parameter !== 'object' || parameter === null) {
+      problems.push(`action "${item.id}" parameters[${index}]: must be an object`);
+      continue;
+    }
+    const where = `action "${item.id}" parameter "${parameter.id ?? 'no id'}"`;
+    if (!parameter.id || !parameter.label) problems.push(`${where}: id and label are required`);
+    if (parameter.id && parameterIds.has(parameter.id)) problems.push(`${where}: id must be unique within the action`);
+    parameterIds.add(parameter.id);
+    if (!PARAMETER_TYPES.includes(parameter.type)) problems.push(`${where}: type must be one of ${PARAMETER_TYPES.join(', ')}`);
+    if (parameter.type !== 'select') continue;
+    const options = Array.isArray(parameter.options) ? parameter.options : [];
+    const hasOptions = options.length > 0 && options.every((option) => typeof option === 'object' && option !== null && option.value !== undefined && option.label);
+    if (!hasOptions) {
+      problems.push(`${where}: a select needs options, each with value and label`);
+      continue;
+    }
+    const optionValues = options.map((option) => String(option.value));
+    if (new Set(optionValues).size !== optionValues.length) problems.push(`${where}: option values must be unique`);
+    if (parameter.value !== undefined && !optionValues.includes(String(parameter.value))) problems.push(`${where}: value "${parameter.value}" must be one of its options`);
+  }
 }
-for (const change of brief.chapters?.find((chapter) => chapter.type === 'instructions')?.data?.changes ?? []) {
-  if (!CHANGE_KINDS.includes(change.kind)) problems.push(`instruction change "${change.id}": kind must be one of ${CHANGE_KINDS.join(', ')}`);
+const instructions = brief.chapters?.find((chapter) => chapter.type === 'instructions')?.data ?? {};
+if ((instructions.highlights ?? []).length > MAXIMUM_INSTRUCTION_HIGHLIGHTS) problems.push(`instructions: at most ${MAXIMUM_INSTRUCTION_HIGHLIGHTS} highlights; give the rest as counts`);
+for (const entry of [...(instructions.skills ?? []), ...(instructions.highlights ?? []), ...(instructions.counts ?? [])]) {
+  if (!entry?.id) problems.push('instructions: every skill, highlight and count needs an id; beats target change-<id>');
+}
+if (brief.process !== undefined) {
+  if (typeof brief.process !== 'object' || brief.process === null) problems.push('process must be an object with token and account');
+  else {
+    if (brief.process.token !== undefined && (typeof brief.process.token !== 'string' || !brief.process.token)) problems.push('process.token must be a non-empty string');
+    if (brief.process.account !== undefined && !PROCESS_ACCOUNTS.includes(brief.process.account)) problems.push(`process.account must be one of ${PROCESS_ACCOUNTS.join(', ')}`);
+  }
 }
 const calendarChapter = brief.chapters?.find((chapter) => chapter.type === 'calendar' && isNarrated(chapter));
 if (calendarChapter) {
@@ -71,26 +109,18 @@ if (calendarChapter) {
     if (isMyMeetingToday && !narratedTargets.has(`event-${event.id}`)) problems.push(`calendar event "${event.id}" (${event.title}): a meeting today on my calendar needs a beat targeting event-${event.id}`);
   }
 }
-const teaserChapter = brief.chapters?.find((chapter) => chapter.type === 'teasers' && isNarrated(chapter));
-if (teaserChapter) {
-  const teasers = teaserChapter.data?.items ?? [];
-  if (teasers.length !== TEASER_COUNT) problems.push(`teasers: exactly ${TEASER_COUNT} items are required, found ${teasers.length}`);
-  for (const teaser of teasers) {
-    if (!teaser.id || !teaser.kind || !teaser.question || !teaser.answer) problems.push(`teaser "${teaser.id ?? 'no id'}": id, kind, question and answer are required`);
-  }
-  if (new Set(teasers.map((teaser) => teaser.id)).size !== teasers.length) problems.push('teasers: each item needs a different id');
-  if (new Set(teasers.map((teaser) => normalisedText(teaser.kind))).size !== teasers.length) problems.push('teasers: each item needs a different kind');
-  if (new Set(teasers.map((teaser) => normalisedText(teaser.question))).size !== teasers.length) problems.push('teasers: each item needs a different question');
-  const earlierQuestions = await earlierTeaserQuestions(join(dayDirectory, '..'), brief.date);
-  for (const teaser of teasers) {
-    const earlierDate = earlierQuestions.get(normalisedText(teaser.question));
-    if (earlierDate) problems.push(`teaser "${teaser.id}": the question already ran on ${earlierDate}; write a new one`);
-  }
-}
 if (problems.length) {
   console.error(`brief.json is invalid:\n- ${problems.join('\n- ')}`);
   process.exit(1);
 }
+
+// The token ties decisions sent from the page to this brief; the processing session ignores any other.
+if (!brief.process?.token || !brief.process?.account) {
+  brief.process = { token: brief.process?.token ?? randomUUID(), account: brief.process?.account ?? DEFAULT_PROCESS_ACCOUNT };
+  await writeFile(briefPath, `${JSON.stringify(brief, null, 2)}\n`);
+}
+// The handler reads this small file because Windows PowerShell 5.1 cannot parse a brief.json over 2 MB.
+await writeFile(join(dayDirectory, 'process.json'), `${JSON.stringify({ token: brief.process.token, account: brief.process.account }, null, 2)}\n`);
 
 const templates = join(dirname(fileURLToPath(import.meta.url)), '..', 'templates');
 const icons = {};
@@ -118,36 +148,4 @@ console.log(pathToFileURL(output).href);
 
 function isNarrated(chapter) {
   return !['quiet', 'unavailable'].includes(chapter.status);
-}
-
-// Strips only sentence punctuation: math symbols, digits and decimal points tell "1.5 + 7" from "15 × 7".
-function normalisedText(text) {
-  return String(text ?? '').toLowerCase().replace(/[.,;:!?]+(?=\s|$)|['"‘’“”()]/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-// Maps each normalised teaser question from day folders dated before the brief to the latest day it ran.
-async function earlierTeaserQuestions(briefsDirectory, date) {
-  const questions = new Map();
-  const entries = await readdir(briefsDirectory, { withFileTypes: true }).catch((error) => {
-    if (error.code === 'ENOENT') return [];
-    throw error;
-  });
-  const earlierDays = entries
-    .filter((entry) => entry.isDirectory() && /^\d{4}-\d{2}-\d{2}$/.test(entry.name) && entry.name < date)
-    .map((entry) => entry.name)
-    .sort();
-  for (const day of earlierDays) {
-    let earlierBrief;
-    try {
-      earlierBrief = JSON.parse(await readFile(join(briefsDirectory, day, 'brief.json'), 'utf8'));
-    } catch (error) {
-      if (error.code !== 'ENOENT') console.error(`warning: teasers from ${day} were not checked for repeats; its brief.json is unreadable (${error.message})`);
-      continue;
-    }
-    for (const chapter of earlierBrief.chapters ?? []) {
-      if (chapter.type !== 'teasers') continue;
-      for (const teaser of chapter.data?.items ?? []) questions.set(normalisedText(teaser.question), day);
-    }
-  }
-  return questions;
 }

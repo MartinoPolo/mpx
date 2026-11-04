@@ -2,6 +2,7 @@
   "date": "2026-10-16",
   "window": { "since": "2026-10-15T06:05:00+02:00", "until": "2026-10-16T06:00:00+02:00", "label": "Thu 15 Oct 06:05 → Fri 16 Oct 06:00" },
   "now": "2026-10-16T06:00:00+02:00",
+  "process": { "account": "work" },
   "sources": [
     { "name": "Personal Google", "status": "ok", "chapters": ["calendar", "mail"] },
     { "name": "Work Slack and mail", "status": "ok", "chapters": ["slack", "mail"] },
@@ -139,7 +140,7 @@
       },
       "beats": [
         { "say": "On GitHub, four seventy is still open, though its pull request merged yesterday.", "note": "#470 still open", "targets": ["issue-gh-470"], "scope": "personal" },
-        { "say": "On the team board, T one oh two still sits in review, although three eighteen is approved and green. Approve the move here.", "note": "T-102 behind", "targets": ["issue-T-102", "action-move-t102"], "scope": "work" },
+        { "say": "On the team board, T one oh two still sits in review, although three eighteen is approved and green. Accept the move here.", "note": "T-102 behind", "targets": ["issue-T-102", "action-move-t102"], "scope": "work" },
         { "say": "The other tickets match their merge requests.", "note": "In sync", "targets": ["issue-T-110", "issue-T-108", "issue-T-099"], "scope": "work" }
       ]
     },
@@ -234,22 +235,29 @@
       "beats": [
         { "say": "The shell hook blocks plain arithmetic as if it were command substitution; about forty calls this week.", "note": "Arithmetic blocked", "targets": ["retro-substitution"] },
         { "say": "Commits also fail when staging shares the call; a one-line skill fix would stop it.", "note": "Split commits", "targets": ["retro-commit"] },
-        { "say": "Each comes with a fix session ready to start.", "note": "Fix sessions", "targets": ["action-fix-substitution", "action-fix-commit"] }
+        { "say": "The hook fix has a session ready to start.", "note": "Fix session", "targets": ["action-fix-substitution"] }
       ]
     },
     {
-      "id": "instructions", "type": "instructions", "name": "Instructions", "title": "Three changes, one unbuilt", "status": "fyi", "count": 3,
+      "id": "instructions", "type": "instructions", "name": "Instructions", "title": "One new skill, one rule that matters", "status": "fyi", "count": 6,
       "data": {
-        "changes": [
-          { "id": "c1", "kind": "global", "scope": "mpx output style", "summary": "Everything that needs you moves to one final HITL section.", "opinion": "Looks final. Answers are easier to scan; nothing to do.", "verdict": "final", "state": { "committed": true, "pushed": true, "built": true }, "url": "https://github.com/MartinoPolo/mpx/commit/d7584c2" },
-          { "id": "c2", "kind": "skill", "added": true, "scope": "mpx morning-brief", "summary": "New skill, plus launcher fixes for slash prompts.", "opinion": "Still moving. Not committed, and dist is a day old.", "verdict": "attention", "state": { "committed": false, "pushed": false, "built": false }, "url": "https://github.com/MartinoPolo/mpx" },
-          { "id": "c3", "kind": "project", "scope": "videoLab AGENTS.md", "summary": "Reality first: build scenes only from trusted sources.", "opinion": "Good rule; watch that it does not block quick drafts.", "verdict": "watch", "state": { "committed": true, "pushed": false }, "url": "https://github.com/MartinoPolo/videoLab" }
+        "skills": [
+          { "id": "skill-brief", "name": "morning-brief", "added": true, "url": "https://github.com/MartinoPolo/mpx" },
+          { "id": "skill-hitl", "name": "mpx-hitl", "added": false, "url": "https://github.com/MartinoPolo/mpx/commit/d7584c2" }
+        ],
+        "highlights": [
+          { "id": "hitl-section", "scope": "mpx output style", "summary": "Everything that needs you moves to one final HITL section.", "url": "https://github.com/MartinoPolo/mpx/commit/d7584c2" }
+        ],
+        "counts": [
+          { "id": "count-prejemesi", "scope": "prejemesi", "text": "5 new decisions, 2 stale removed", "url": "https://github.com/MartinoPolo/prejemesi" },
+          { "id": "count-hitl", "scope": "mpx-hitl", "text": "+7 lines replacing 3", "url": "https://github.com/MartinoPolo/mpx/commit/d7584c2" },
+          { "id": "count-videolab", "scope": "videoLab AGENTS.md", "text": "1 rule added", "url": "https://github.com/MartinoPolo/videoLab" }
         ]
       },
       "beats": [
-        { "say": "The HITL output style looks final; nothing to do.", "note": "Output style", "targets": ["change-c1"] },
-        { "say": "videoLab now insists on trusted sources; fine, but it may slow drafts.", "note": "videoLab", "targets": ["change-c3"] },
-        { "say": "The new morning brief skill is not committed and the build is stale.", "note": "Not committed", "targets": ["change-c2"] }
+        { "say": "One new skill, the morning brief, and an updated HITL skill.", "note": "Skills", "targets": ["change-skill-brief", "change-skill-hitl"] },
+        { "say": "The change that matters: everything that needs you now lands in one final section.", "note": "HITL section", "targets": ["change-hitl-section"] },
+        { "say": "The rest is small: five new prejemesi decisions and a few lines elsewhere.", "note": "Small changes", "targets": ["change-count-prejemesi", "change-count-hitl", "change-count-videolab"] }
       ]
     },
     {
@@ -267,41 +275,28 @@
       ]
     },
     {
-      "id": "teasers", "type": "teasers", "name": "Brain teasers", "title": "Three to wake up with", "status": "fyi", "count": 3,
-      "data": {
-        "items": [
-          { "id": "bat-ball", "kind": "math", "question": "A bat and a ball cost 1.10 euros together. The bat costs one euro more than the ball. What does the ball cost?", "answer": "5 cents. The bat costs 1.05 euros." },
-          { "id": "boxes", "kind": "logic", "question": "Three boxes are labelled apples, oranges and mixed, and every label is wrong. You may take one fruit from one box. Which box do you pick from to fix all three labels?", "answer": "The box labelled mixed. Its fruit names its true content, and the other two labels follow." },
-          { "id": "footsteps", "kind": "riddle", "question": "The more you take, the more you leave behind. What are they?", "answer": "Footsteps." }
-        ]
-      },
-      "beats": [
-        { "say": "A bat and a ball cost one euro ten together, and the bat costs one euro more than the ball. What does the ball cost?", "note": "Math", "targets": ["teaser-bat-ball"] },
-        { "say": "Three fruit boxes all carry the wrong label, and you may take one fruit from one box. Which box fixes every label?", "note": "Logic", "targets": ["teaser-boxes"] },
-        { "say": "And a riddle: the more you take, the more you leave behind. What are they?", "note": "Riddle", "targets": ["teaser-footsteps"] }
-      ]
-    },
-    {
-      "id": "actions", "type": "actions", "name": "Action points", "title": "Ten action points", "status": "needs", "count": 10,
+      "id": "actions", "type": "actions", "name": "Action points", "title": "Six actions to decide", "status": "needs", "count": 6,
       "data": {
         "items": [
           { "id": "action-review", "project": "ui-components", "text": "Review !321", "detail": "Alex asked in #team-ui, wants it before Monday", "app": "gitlab", "url": "https://example.com/mr/321", "chapter": "slack", "source": "message-s1", "agent": false, "why": "Alex asked for your judgement" },
-          { "id": "action-token", "project": "work", "text": "Renew the GitLab token", "detail": "Workflow token expires 21 Oct · GitLab email, 15 Oct", "app": "gmail", "url": "https://mail.google.com/", "chapter": "mail", "source": "mail-token", "agent": false, "why": "Needs your GitLab login" },
+          {
+            "id": "action-reply-alex", "project": "ui-components", "text": "Reply to Alex on Slack", "detail": "Tells Alex when the review of !321 happens", "app": "slack", "url": "https://example.slack.com/archives/C1/p1", "chapter": "slack", "source": "message-s1",
+            "parameters": [
+              { "id": "channel", "label": "Post to", "type": "select", "value": "thread", "options": [{ "value": "thread", "label": "Thread in #team-ui" }, { "value": "dm-alex", "label": "Direct message to Alex" }, { "value": "ui-reviews", "label": "#ui-reviews" }] },
+              { "id": "message", "label": "Message", "type": "textarea", "value": "Thanks, I will review !321 on Monday morning." }
+            ]
+          },
           { "id": "action-merge", "project": "ui-components", "text": "Merge !318", "detail": "Approved and green", "app": "gitlab", "url": "https://example.com/mr/318", "chapter": "work", "source": "card-mr-318" },
           { "id": "action-move-t102", "project": "ui-components", "text": "Move T-102 to Approved", "detail": "Still in review; !318 is approved and green", "app": "kanbanflow", "url": "https://kanbanflow.com/", "chapter": "issues", "source": "issue-T-102" },
-          { "id": "action-close-470", "project": "prejemesi", "text": "Close #470", "detail": "Its pull request #487 merged yesterday", "app": "github", "url": "https://github.com/MartinoPolo/prejemesi/issues/470", "chapter": "issues", "source": "issue-gh-470" },
-          { "id": "action-render", "project": "videoLab", "text": "Rerun the 4K render", "detail": "Overnight run timed out at scene 7", "app": "claude", "url": "file:///C:/_ALFRED/work/afk/render.log", "chapter": "overnight", "source": "run-render" },
           { "id": "action-file", "project": "personal", "text": "File the three captures as set", "detail": "Project, heading and priority per capture", "app": "obsidian", "chapter": "triage" },
-          { "id": "action-fix-substitution", "project": "mpx", "text": "Fix the arithmetic hook", "detail": "Fix session: Claude Code in mpx", "app": "claude", "chapter": "retro", "source": "retro-substitution" },
-          { "id": "action-fix-commit", "project": "mpx", "text": "Fix the commit skill", "detail": "Fix session: Claude Code in mpx", "app": "claude", "chapter": "retro", "source": "retro-commit" },
-          { "id": "action-commit-brief", "project": "mpx", "text": "Commit the brief skill", "detail": "Uncommitted, dist a day old", "app": "github", "url": "https://github.com/MartinoPolo/mpx", "chapter": "instructions", "source": "change-c2" }
+          { "id": "action-fix-substitution", "project": "mpx", "text": "Fix the arithmetic hook", "detail": "Fix session: Claude Code in mpx", "app": "claude", "chapter": "retro", "source": "retro-substitution" }
         ]
       },
       "beats": [
-        { "say": "Ten points. Two need you: Alex's review before Monday, and the GitLab token that GitLab emailed about yesterday.", "note": "Manual steps", "targets": ["action-review", "action-token"] },
-        { "say": "For ui-components, one agent merges three eighteen and moves T one oh two to Approved.", "note": "ui-components", "targets": ["project-ui-components"] },
-        { "say": "mpx gets one agent for both hook fixes and the brief commit; videoLab reruns the render.", "note": "mpx, videoLab", "targets": ["project-mpx", "project-videoLab"] },
-        { "say": "Approve or dismiss what is still open, then save.", "note": "Save", "targets": ["action-close-470", "action-file"] }
+        { "say": "Six actions. One needs you: Alex's review before Monday.", "note": "Your review", "targets": ["action-review"] },
+        { "say": "An agent can reply to Alex in his thread; pick another channel or change the words first.", "note": "Reply to Alex", "targets": ["action-reply-alex"] },
+        { "say": "Agents merge three eighteen, move T one oh two, file the captures and fix the arithmetic hook.", "note": "Agent work", "targets": ["project-ui-components", "project-personal", "project-mpx"] },
+        { "say": "Accept or skip each, tell me what you thought of this brief, then press Process now.", "note": "Decide and send", "targets": ["feedback"] }
       ]
     }
   ]
