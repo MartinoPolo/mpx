@@ -101,7 +101,7 @@ export async function createLaunchSpec(options: {
   else if (await comparablePath(accountRoot) !== await comparablePath(join(childHomeDirectory(env), '.claude'))) env.CLAUDE_CONFIG_DIR = accountRoot;
   // Claude Code roots its session scratchpad and task output at CLAUDE_CODE_TMPDIR.
   if (harness === 'claude' && env.MPX_TEMP && !env.CLAUDE_CODE_TMPDIR) env.CLAUDE_CODE_TMPDIR = env.MPX_TEMP;
-  // claude.ai connectors cost context in every session, so only explicit `--connectors` launches load them.
+  // claude.ai connectors cost context in every session, so only `--connectors` launches and opted-in projects load them.
   if (connectors) env.ENABLE_CLAUDEAI_MCP_SERVERS = 'true';
   else if (harness === 'claude' && env.ENABLE_CLAUDEAI_MCP_SERVERS === undefined) env.ENABLE_CLAUDEAI_MCP_SERVERS = 'false';
   if (!native) {

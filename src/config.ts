@@ -84,7 +84,7 @@ function packNames(value: unknown, label: string): string[] {
 
 export function parseRepositoryConfig(value: unknown): RepositoryConfig {
   const source = object(value, 'repository config');
-  allowedKeys(source, ['projectId', 'repository', 'issues', 'packageManager', 'packs', 'fast_checks', 'full_checks'], 'repository config');
+  allowedKeys(source, ['projectId', 'repository', 'issues', 'packageManager', 'packs', 'fast_checks', 'full_checks', 'connectors'], 'repository config');
   const projectId = nonemptyString(source.projectId, 'projectId');
 
   let repository: RepositoryConfig['repository'];
@@ -129,6 +129,10 @@ export function parseRepositoryConfig(value: unknown): RepositoryConfig {
   if (source.packs !== undefined) result.packs = packNames(source.packs, 'packs');
   if (source.fast_checks !== undefined) result.fast_checks = checkCommands(source.fast_checks, 'fast_checks');
   if (source.full_checks !== undefined) result.full_checks = checkCommands(source.full_checks, 'full_checks');
+  if (source.connectors !== undefined) {
+    if (typeof source.connectors !== 'boolean') throw new Error('connectors must be a boolean');
+    result.connectors = source.connectors;
+  }
   return result;
 }
 
@@ -169,7 +173,7 @@ export async function readUserConfig(
     throw new Error(`cannot read user config ${path.normalize(file)}: ${error instanceof Error ? error.message : String(error)}`);
   }
   const source = object(parsed, 'user config');
-  allowedKeys(source, ['accounts', 'domains', 'projectOverrides', 'defaultPacks', 'executables', 'connectorFolders', 'piTitle'], 'user config');
+  allowedKeys(source, ['accounts', 'domains', 'projectOverrides', 'defaultPacks', 'executables', 'piTitle'], 'user config');
   const accountsSource = object(source.accounts, 'accounts');
   const domainsSource = object(source.domains, 'domains');
   allowedKeys(accountsSource, ['personal', 'work'], 'accounts');
@@ -249,10 +253,6 @@ export async function readUserConfig(
       }
     }
     result.defaultPacks = defaults;
-  }
-  if (source.connectorFolders !== undefined) {
-    if (!Array.isArray(source.connectorFolders)) throw new Error('connectorFolders must be an array');
-    result.connectorFolders = source.connectorFolders.map((entry, index) => expandPath(entry, `connectorFolders[${index}]`, env));
   }
   if (source.executables !== undefined) {
     const executablesSource = object(source.executables, 'executables');
@@ -365,12 +365,6 @@ async function discoverGit(cwd: string, options: ResolveProjectOptions): Promise
 function contains(candidate: string, root: string): boolean {
   const relative = path.relative(root, candidate);
   return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
-}
-
-export async function loadsConnectorsIn(cwd: string, config: UserConfig): Promise<boolean> {
-  const folder = await comparablePath(cwd);
-  for (const root of config.connectorFolders ?? []) if (contains(folder, await comparablePath(root))) return true;
-  return false;
 }
 
 type ProjectOverrideMatch =ProjectOverride | { path: string; invalidConfig: string };

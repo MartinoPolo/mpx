@@ -1314,9 +1314,13 @@ export function buildQuotaLine(input: QuotaInput): string {
     const isStale = isCache && input.usageAgeSeconds > USAGE_STALE_SECONDS;
     const isOld = isCache && input.usageAgeSeconds > USAGE_WARN_SECONDS;
 
-    const fivePct = formatPct(input.fiveRaw);
-    const sevenPct = formatPct(input.sevenRaw);
-    if (fivePct === "" || !isNonNegativeInt(fivePct)) {
+    const percentOrUndefined = (raw: string): number | undefined => {
+        const pct = formatPct(raw);
+        return pct !== "" && isNonNegativeInt(pct) ? Math.min(100, Number(pct)) : undefined;
+    };
+    const five = percentOrUndefined(input.fiveRaw);
+    const seven = percentOrUndefined(input.sevenRaw);
+    if (five === undefined && seven === undefined) {
         return `${DIM}quota unknown${RESET}`;
     }
 
@@ -1334,16 +1338,12 @@ export function buildQuotaLine(input: QuotaInput): string {
         return countdown === "" ? segment : `${segment} ${DIM}${countdown}${RESET}`;
     };
 
-    const five = Math.min(100, Number(fivePct));
-    const seven = sevenPct !== "" && isNonNegativeInt(sevenPct) ? Math.min(100, Number(sevenPct)) : undefined;
-
-    let line = isOld ? `${WARN}⚠ ` : "";
-    line += window("5h", five, input.fiveResets);
-    line += SEPARATOR;
-    line +=
-        seven === undefined
-            ? `${label}${hyperlink(USAGE_DASHBOARD_URL, "7d")} n/a`
-            : window("7d", seven, input.sevenResets);
+    // Plans without a 5-hour window report only the weekly one.
+    const windows = [
+        five === undefined ? "" : window("5h", five, input.fiveResets),
+        seven === undefined ? "" : window("7d", seven, input.sevenResets)
+    ].filter((segment) => segment !== "");
+    let line = (isOld ? `${WARN}⚠ ` : "") + windows.join(SEPARATOR);
 
     if (isOld) {
         line += `${SEPARATOR}${WARN}${humanAge(input.usageAgeSeconds)} old ⚠${RESET}`;
@@ -1558,7 +1558,7 @@ function render(): string {
     let usageSource: "live" | "cache" | "" = "";
     let usageAgeSeconds = 0;
 
-    if (fiveRaw !== "") {
+    if (fiveRaw !== "" || sevenRaw !== "") {
         usageSource = "live";
         try {
             writeFileSync(usage.cache, [fiveRaw, fiveResets, sevenRaw, sevenResets].join(UNIT_SEPARATOR) + "\n");
