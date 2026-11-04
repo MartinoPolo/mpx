@@ -167,6 +167,8 @@ Add `mpxconfig.json` to the repository root (linked worktrees share the main che
 - Optional `fast_checks` and `full_checks` arrays override discovered checks by category, including
   empty arrays. Entries look like `{ "command": "pnpm test", "cwd": "." }`, relative to the repository
   root. Full verification runs both; put only deferred checks in `full_checks`.
+- `"connectors": true` makes every Claude launch in the project load claude.ai connectors, for
+  places where `--connectors` cannot be passed, such as Orca automations.
 
 ### Orca worktree setup
 
@@ -217,8 +219,8 @@ accept missing project metadata, use a matching `projectOverrides` entry with `o
 as above; shared domains do not suppress project configuration warnings. Inspect the result with
 `mpx project config <directory>`.
 
-Claude loads claude.ai connectors only when launched with `--connectors`, or inside a folder listed in
-`"connectorFolders": ["C:\\_ALFRED"]`. Use the folder list where the flag cannot be passed, such as Orca automations.
+Claude loads claude.ai connectors only when launched with `--connectors`, or in a project whose
+configuration sets `"connectors": true`.
 
 ### Generated outputs
 

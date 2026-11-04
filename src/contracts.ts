@@ -39,6 +39,8 @@ export interface RepositoryConfig {
   packs?: string[];
   fast_checks?: CheckCommand[];
   full_checks?: CheckCommand[];
+  /** Claude launches in this project load claude.ai connectors without `--connectors`. */
+  connectors?: boolean;
 }
 export const WARNING_SEVERITY = { red: 'red', orange: 'orange', yellow: 'yellow' } as const;
 export type WarningSeverity = (typeof WARNING_SEVERITY)[keyof typeof WARNING_SEVERITY];
@@ -77,8 +79,6 @@ export interface UserConfig {
   projectOverrideDiagnostics?: { path: string; message: string }[];
   defaultPacks?: Partial<Record<Account, string[]>>;
   executables?: Partial<Record<Harness, string>>;
-  /** Claude launches inside these folders load claude.ai connectors without `--connectors`. */
-  connectorFolders?: string[];
   piTitle?: { provider: string; model: string; thinking: Thinking };
 }
 export interface ProjectSelection {
