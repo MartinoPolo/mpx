@@ -19,12 +19,12 @@
   ],
   "chapters": [
     {
-      "id": "calendar", "type": "calendar", "name": "Calendar", "title": "Standup, then the dentist", "status": "fyi", "count": 5,
+      "id": "calendar", "type": "calendar", "name": "Calendar", "title": "Standup, the accountant, then the dentist", "status": "fyi", "count": 6,
       "data": {
         "calendars": [
-          { "id": "personal", "name": "Personal", "account": "personal", "color": "#039be5" },
-          { "id": "family", "name": "Family", "account": "personal", "color": "#33b679" },
-          { "id": "work", "name": "Work", "account": "work", "color": "#7986cb", "busyOnly": true }
+          { "id": "personal", "name": "Personal", "account": "personal", "access": "owner", "color": "#039be5" },
+          { "id": "family", "name": "Family", "account": "personal", "access": "owner", "color": "#33b679" },
+          { "id": "work", "name": "Work", "account": "work", "access": "freeBusy", "color": "#7986cb", "busyOnly": true }
         ],
         "days": [
           { "id": "2026-10-15", "label": "Thu", "date": "15" },
@@ -35,6 +35,7 @@
           { "id": "retro-meeting", "calendarId": "work", "day": "2026-10-15", "start": "14:00", "end": "15:00", "busyOnly": true },
           { "id": "swim", "calendarId": "family", "day": "2026-10-15", "start": "17:00", "end": "18:00", "title": "Swimming lesson", "url": "https://calendar.google.com/" },
           { "id": "standup", "calendarId": "work", "day": "today", "start": "09:30", "end": "09:45", "busyOnly": true },
+          { "id": "accountant", "calendarId": "personal", "day": "today", "start": "11:00", "end": "11:30", "title": "Tax return call with Dana", "attendees": 1, "url": "https://calendar.google.com/" },
           { "id": "planning", "calendarId": "work", "day": "today", "start": "13:00", "end": "14:00", "busyOnly": true },
           { "id": "dentist", "calendarId": "personal", "day": "today", "start": "16:00", "end": "17:00", "title": "Dentist", "place": "Downtown", "notes": ["Leave by 15:30"], "url": "https://calendar.google.com/" },
           { "id": "pickup", "calendarId": "family", "day": "today", "start": "17:30", "end": "18:00", "title": "Kindergarten pickup", "url": "https://calendar.google.com/" },
@@ -47,6 +48,7 @@
       "beats": [
         { "say": "Good morning. Yesterday, in grey, ended with the swimming lesson.", "note": "Yesterday", "targets": ["event-swim"] },
         { "say": "Standup at half past nine, planning at one.", "note": "Work blocks", "targets": ["event-standup", "event-planning"] },
+        { "say": "Between them, at eleven, the tax return call with Dana.", "note": "Tax call", "targets": ["event-accountant"] },
         { "say": "The dentist is at four; leave by half past three.", "note": "Dentist", "targets": ["event-dentist"], "select": "dentist" },
         { "say": "Tomorrow is family day: park run, the market, and Sam's party in Oak Park.", "note": "Tomorrow", "targets": ["event-run", "event-market", "event-birthday"] }
       ]
@@ -262,6 +264,21 @@
       "beats": [
         { "say": "Gemini Flash now speaks natively, which could voice this brief cheaply.", "note": "Gemini audio", "targets": ["news-n1"] },
         { "say": "On Hacker News, local-first agent sandboxes; and a small Claude Code release.", "note": "HN, Claude Code", "targets": ["news-n2", "news-n3"] }
+      ]
+    },
+    {
+      "id": "teasers", "type": "teasers", "name": "Brain teasers", "title": "Three to wake up with", "status": "fyi", "count": 3,
+      "data": {
+        "items": [
+          { "id": "bat-ball", "kind": "math", "question": "A bat and a ball cost 1.10 euros together. The bat costs one euro more than the ball. What does the ball cost?", "answer": "5 cents. The bat costs 1.05 euros." },
+          { "id": "boxes", "kind": "logic", "question": "Three boxes are labelled apples, oranges and mixed, and every label is wrong. You may take one fruit from one box. Which box do you pick from to fix all three labels?", "answer": "The box labelled mixed. Its fruit names its true content, and the other two labels follow." },
+          { "id": "footsteps", "kind": "riddle", "question": "The more you take, the more you leave behind. What are they?", "answer": "Footsteps." }
+        ]
+      },
+      "beats": [
+        { "say": "A bat and a ball cost one euro ten together, and the bat costs one euro more than the ball. What does the ball cost?", "note": "Math", "targets": ["teaser-bat-ball"] },
+        { "say": "Three fruit boxes all carry the wrong label, and you may take one fruit from one box. Which box fixes every label?", "note": "Logic", "targets": ["teaser-boxes"] },
+        { "say": "And a riddle: the more you take, the more you leave behind. What are they?", "note": "Riddle", "targets": ["teaser-footsteps"] }
       ]
     },
     {

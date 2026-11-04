@@ -18,7 +18,8 @@ Window: %SINCE% to %UNTIL%. Today is %TODAY%.
      same issue or pipeline; note its project or repository and whether a later mail shows it fixed.
    - `notification`: everything else automated; count it by sender, do not list it.
 3. Work calendar, only if a Google Calendar connector exists: my primary work calendar's events for
-   each day of the window, today and all of tomorrow, with titles. Skip declined events.
+   each day of the window, today and all of tomorrow, with titles. Skip declined events. `attendees`
+   counts the invited people other than me.
 
 Answer with one JSON object and nothing else:
 

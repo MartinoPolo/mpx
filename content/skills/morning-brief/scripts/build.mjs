@@ -7,7 +7,8 @@ import { dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 
-const CHAPTER_TYPES = ['calendar', 'overnight', 'work', 'issues', 'slack', 'mail', 'triage', 'retro', 'instructions', 'news', 'actions'];
+const CHAPTER_TYPES = ['calendar', 'overnight', 'work', 'issues', 'slack', 'mail', 'triage', 'retro', 'instructions', 'news', 'teasers', 'actions'];
+const TEASER_COUNT = 3;
 const CHANGE_KINDS = ['global', 'project', 'skill'];
 const STATUSES = ['needs', 'fyi', 'quiet', 'unavailable'];
 const NOTE_MAXIMUM_WORDS = 4;
@@ -37,7 +38,7 @@ for (const [index, chapter] of (brief.chapters ?? []).entries()) {
   if (!CHAPTER_TYPES.includes(chapter.type)) problems.push(`${where}: type must be one of ${CHAPTER_TYPES.join(', ')}`);
   if (!STATUSES.includes(chapter.status)) problems.push(`${where}: status must be one of ${STATUSES.join(', ')}`);
   if (!chapter.name || !chapter.title) problems.push(`${where}: name and title are required`);
-  const narrated = !['quiet', 'unavailable'].includes(chapter.status);
+  const narrated = isNarrated(chapter);
   if (narrated && (!Array.isArray(chapter.beats) || chapter.beats.length === 0)) problems.push(`${where}: beats need at least one entry`);
   for (const beat of chapter.beats ?? []) {
     if (!beat.say || !beat.note) problems.push(`${where}: every beat needs say and note`);
@@ -57,6 +58,34 @@ for (const item of brief.chapters?.find((chapter) => chapter.type === 'actions')
 }
 for (const change of brief.chapters?.find((chapter) => chapter.type === 'instructions')?.data?.changes ?? []) {
   if (!CHANGE_KINDS.includes(change.kind)) problems.push(`instruction change "${change.id}": kind must be one of ${CHANGE_KINDS.join(', ')}`);
+}
+const calendarChapter = brief.chapters?.find((chapter) => chapter.type === 'calendar' && isNarrated(chapter));
+if (calendarChapter) {
+  const { calendars = [], days = [], events = [] } = calendarChapter.data ?? {};
+  const focusDayIds = new Set(days.filter((day) => day.focus).map((day) => day.id));
+  // Another person's calendar reaches me as `reader`; its meetings are narrated only when they change my day.
+  const myCalendarIds = new Set(calendars.filter((calendar) => (calendar.access ?? 'owner') === 'owner').map((calendar) => calendar.id));
+  const narratedTargets = new Set(calendarChapter.beats?.flatMap((beat) => beat.targets ?? []));
+  for (const event of events) {
+    const isMyMeetingToday = focusDayIds.has(event.day) && event.title && event.attendees > 0 && !event.busyOnly && myCalendarIds.has(event.calendarId);
+    if (isMyMeetingToday && !narratedTargets.has(`event-${event.id}`)) problems.push(`calendar event "${event.id}" (${event.title}): a meeting today on my calendar needs a beat targeting event-${event.id}`);
+  }
+}
+const teaserChapter = brief.chapters?.find((chapter) => chapter.type === 'teasers' && isNarrated(chapter));
+if (teaserChapter) {
+  const teasers = teaserChapter.data?.items ?? [];
+  if (teasers.length !== TEASER_COUNT) problems.push(`teasers: exactly ${TEASER_COUNT} items are required, found ${teasers.length}`);
+  for (const teaser of teasers) {
+    if (!teaser.id || !teaser.kind || !teaser.question || !teaser.answer) problems.push(`teaser "${teaser.id ?? 'no id'}": id, kind, question and answer are required`);
+  }
+  if (new Set(teasers.map((teaser) => teaser.id)).size !== teasers.length) problems.push('teasers: each item needs a different id');
+  if (new Set(teasers.map((teaser) => normalisedText(teaser.kind))).size !== teasers.length) problems.push('teasers: each item needs a different kind');
+  if (new Set(teasers.map((teaser) => normalisedText(teaser.question))).size !== teasers.length) problems.push('teasers: each item needs a different question');
+  const earlierQuestions = await earlierTeaserQuestions(join(dayDirectory, '..'), brief.date);
+  for (const teaser of teasers) {
+    const earlierDate = earlierQuestions.get(normalisedText(teaser.question));
+    if (earlierDate) problems.push(`teaser "${teaser.id}": the question already ran on ${earlierDate}; write a new one`);
+  }
 }
 if (problems.length) {
   console.error(`brief.json is invalid:\n- ${problems.join('\n- ')}`);
@@ -86,3 +115,39 @@ if (values['commit-state']) {
   await writeFile(statePath, `${JSON.stringify({ lastSuccess: brief.window.until, lastBrief: dayDirectory }, null, 2)}\n`);
 }
 console.log(pathToFileURL(output).href);
+
+function isNarrated(chapter) {
+  return !['quiet', 'unavailable'].includes(chapter.status);
+}
+
+// Strips only sentence punctuation: math symbols, digits and decimal points tell "1.5 + 7" from "15 × 7".
+function normalisedText(text) {
+  return String(text ?? '').toLowerCase().replace(/[.,;:!?]+(?=\s|$)|['"‘’“”()]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+// Maps each normalised teaser question from day folders dated before the brief to the latest day it ran.
+async function earlierTeaserQuestions(briefsDirectory, date) {
+  const questions = new Map();
+  const entries = await readdir(briefsDirectory, { withFileTypes: true }).catch((error) => {
+    if (error.code === 'ENOENT') return [];
+    throw error;
+  });
+  const earlierDays = entries
+    .filter((entry) => entry.isDirectory() && /^\d{4}-\d{2}-\d{2}$/.test(entry.name) && entry.name < date)
+    .map((entry) => entry.name)
+    .sort();
+  for (const day of earlierDays) {
+    let earlierBrief;
+    try {
+      earlierBrief = JSON.parse(await readFile(join(briefsDirectory, day, 'brief.json'), 'utf8'));
+    } catch (error) {
+      if (error.code !== 'ENOENT') console.error(`warning: teasers from ${day} were not checked for repeats; its brief.json is unreadable (${error.message})`);
+      continue;
+    }
+    for (const chapter of earlierBrief.chapters ?? []) {
+      if (chapter.type !== 'teasers') continue;
+      for (const teaser of chapter.data?.items ?? []) questions.set(normalisedText(teaser.question), day);
+    }
+  }
+  return questions;
+}

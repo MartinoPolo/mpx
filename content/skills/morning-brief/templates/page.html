@@ -372,6 +372,16 @@ details.project-group:not([open]) > .project-head { border-radius: 14px; }
 .vote[aria-pressed="true"].up { background: var(--fill-ready); box-shadow: inset 0 0 0 1.5px var(--ink); }
 .vote[aria-pressed="true"].down { background: var(--fill-failing); box-shadow: inset 0 0 0 1.5px var(--ink); }
 
+/* Brain teasers: the answer stays folded until I open it. */
+.teaser { padding: 12px 14px; border-radius: 12px; background: var(--fill-review); }
+.teaser .question { margin: 4px 0 0; font: 600 18px/1.35 var(--font-head); }
+.teaser-answer { margin-top: 8px; }
+.teaser-answer summary { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px; font-weight: 650; color: var(--ink-soft); list-style: none; border-radius: var(--radius-button); }
+.teaser-answer summary::-webkit-details-marker { display: none; }
+.teaser-answer summary svg { transition: transform var(--duration-normal) var(--ease-spring); }
+.teaser-answer[open] summary svg { transform: rotate(90deg); }
+.teaser-answer p { margin: 6px 0 0; padding: 6px 10px; border-radius: 8px; background: var(--paper); font-size: 16px; font-weight: 600; }
+
 /* Action points: one per line, grouped by project; the head of each group decides the follow-up agents. */
 .action-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .action { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; column-gap: 10px; align-items: center; padding: 7px 7px 7px 8px; border-radius: 12px; background: var(--paper); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ink) 10%, transparent); }
@@ -394,6 +404,10 @@ details.project-group:not([open]) > .project-head { border-radius: 14px; }
 .action .from:hover { color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--ink); }
 .save-area { display: flex; justify-content: flex-end; align-items: center; gap: var(--space-4); margin-top: var(--space-3); }
 .save-area .summary { font-size: 14px; color: var(--ink-soft); text-align: right; }
+.feedback { display: flex; flex-direction: column; gap: 6px; margin-top: var(--space-5); }
+.feedback label { font-size: 14px; font-weight: 650; color: var(--ink-soft); }
+.feedback textarea { min-height: 88px; padding: 8px 10px; resize: vertical; border-radius: var(--radius-button); border: 1.5px solid color-mix(in srgb, var(--ink) 30%, transparent); background: var(--paper); color: var(--ink); font: 400 15px/1.4 var(--font-body); }
+.feedback textarea:hover { border-color: var(--ink); }
 
 /* Quiet and unavailable chapters. */
 .quiet-slide { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); padding: var(--space-10) 0; text-align: center; }
@@ -550,6 +564,7 @@ const UI_ICONS = {
 	arrowUp: '<path d="M12 19V5M6.5 10.5L12 5l5.5 5.5"/>',
 	download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
 	thread: '<path d="M4.5 5.5h15v10h-8l-4.5 3.5v-3.5H4.5z"/>',
+	bulb: '<path d="M9.5 18h5M10.5 21h3"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.7.5 1.1 1.3 1.1 2.1v.1h5v-.1c0-.8.4-1.6 1.1-2.1A6 6 0 0 0 12 3z"/>',
 };
 function icon(name, size = 20, label = '') {
 	const labelled = label ? `role="img" aria-label="${escapeHtml(label)}"` : 'aria-hidden="true"';
@@ -567,7 +582,7 @@ function iconLink(url, label, iconName = 'external', className = '') {
 	return `<a class="icon-link ${className}" href="${escapeHtml(href)}" target="_blank" rel="noopener" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">${graphic}</a>`;
 }
 
-const CHAPTER_ICONS = { calendar: 'googlecalendar', work: 'gitlab', issues: 'ticket', overnight: 'moon', slack: 'slack', mail: 'gmail', triage: 'obsidian', retro: 'claude', instructions: 'github', news: 'news', actions: 'checklist' };
+const CHAPTER_ICONS = { calendar: 'googlecalendar', work: 'gitlab', issues: 'ticket', overnight: 'moon', slack: 'slack', mail: 'gmail', triage: 'obsidian', retro: 'claude', instructions: 'github', news: 'news', teasers: 'bulb', actions: 'checklist' };
 const QUIET_HOLD_SECONDS = 2;
 const chapters = brief.chapters.map((chapter) => chapter.status === 'quiet' || chapter.status === 'unavailable' || !chapter.beats?.length
 	? { ...chapter, beats: chapter.beats?.length ? chapter.beats : [{ say: chapter.title, note: chapter.status === 'unavailable' ? 'Unavailable' : 'Quiet', targets: [], hold: QUIET_HOLD_SECONDS }] }
@@ -599,7 +614,7 @@ function byProject(items) {
    open until approved or dismissed, on its source slide or at the end. Approved agent points of one
    project go to the follow-up agents its spawn choice sets: one for the project, one per point, or none. */
 const actionItems = chapterOfType('actions')?.data?.items ?? [];
-const choices = { news: {}, triage: {}, decisions: {}, autoHandled: {}, spawn: {} };
+const choices = { news: {}, triage: {}, decisions: {}, autoHandled: {}, spawn: {}, feedback: '' };
 for (const group of chapterOfType('triage')?.data?.groups ?? []) for (const item of group.items) choices.triage[item.id] = { project: item.project ?? '', heading: item.heading ?? '', priority: item.priority ?? '' };
 for (const item of chapterOfType('work')?.data?.autoHandled ?? []) choices.autoHandled[item.id] = true;
 for (const group of byProject(actionItems)) choices.spawn[group.project.id] = 'one';
@@ -620,6 +635,7 @@ function exportedChoices() {
 		triage: (chapterOfType('triage')?.data?.groups ?? []).flatMap((group) => group.items.map((item) => ({ id: item.id, note: group.note, text: item.text, ...choices.triage[item.id] }))),
 		news: (chapterOfType('news')?.data?.items ?? []).filter((item) => choices.news[item.id]).map((item) => ({ id: item.id, title: item.title, url: item.url, vote: choices.news[item.id] })),
 		autoHandled: (chapterOfType('work')?.data?.autoHandled ?? []).map((item) => ({ id: item.id, text: item.text, proposal: item.proposal, enabled: choices.autoHandled[item.id] })),
+		feedback: choices.feedback.trim(),
 	};
 }
 function agentCount() {
@@ -632,7 +648,7 @@ function choiceSummary() {
 	const count = (value) => actionItems.filter((item) => (choices.decisions[item.id] ?? 'open') === value).length;
 	const votes = Object.values(choices.news).filter(Boolean).length;
 	const agents = agentCount();
-	return [`${count('approve')} approved`, `${count('dismiss')} dismissed`, `${count('open')} open`, `${agents} agent${agents === 1 ? '' : 's'} to start`, votes && `${votes} news vote${votes === 1 ? '' : 's'}`].filter(Boolean).join(' · ');
+	return [`${count('approve')} approved`, `${count('dismiss')} dismissed`, `${count('open')} open`, `${agents} agent${agents === 1 ? '' : 's'} to start`, votes && `${votes} news vote${votes === 1 ? '' : 's'}`, choices.feedback.trim() && 'feedback written'].filter(Boolean).join(' · ');
 }
 
 const DECISION_LABELS = { approve: 'Approve', dismiss: 'Dismiss' };
@@ -1106,6 +1122,18 @@ const RENDERERS = {
 			</li>`; }).join('')}</ul>`;
 	},
 
+	teasers(data, chapter) {
+		return `<ul class="row-list">${(data.items ?? []).map((item) => `
+			<li class="teaser" ${target(`teaser-${item.id}`)}>
+				<span class="chip">${escapeHtml(item.kind)}</span>
+				<p class="question">${escapeHtml(item.question)}</p>
+				<details class="teaser-answer" data-disclosure="teaser-${escapeHtml(item.id)}" ${disclosureOpen(chapter, `teaser-${item.id}`, false) ? 'open' : ''}>
+					<summary>${icon('chevron', 16)}Show answer</summary>
+					<p>${escapeHtml(item.answer)}</p>
+				</details>
+			</li>`).join('')}</ul>`;
+	},
+
 	actions(data, chapter) {
 		const SPAWN_LABELS = { one: 'One agent', each: 'Agent per point', none: 'No agent' };
 		const action = (item) => {
@@ -1136,6 +1164,10 @@ const RENDERERS = {
 					</summary>
 					<div class="project-body"><ul class="action-list">${[...agentPoints, ...items.filter(isManual)].map(action).join('')}</ul></div>
 				</details>`; }).join('')}
+			<section class="feedback">
+				<label for="feedback-text">Notes for the AI and ideas to improve the brief</label>
+				<textarea id="feedback-text" data-feedback rows="3">${escapeHtml(choices.feedback)}</textarea>
+			</section>
 			<div class="save-area">
 				<span class="summary" id="choice-summary">${escapeHtml(choiceSummary())}</span>
 				<button class="text-button" type="button" data-action="save">${icon('download', 18)} Save choices</button>
@@ -1499,6 +1531,13 @@ stage.addEventListener('change', (event) => {
 	const element = event.target;
 	if (element.dataset.triage) choices.triage[element.dataset.triage][element.dataset.field] = element.value;
 	if (element.dataset.auto) choices.autoHandled[element.dataset.auto] = element.checked;
+});
+// Typing updates the summary in place; a re-render would drop the caret.
+stage.addEventListener('input', (event) => {
+	if (!('feedback' in event.target.dataset)) return;
+	choices.feedback = event.target.value;
+	const summary = byId('choice-summary');
+	if (summary) summary.textContent = choiceSummary();
 });
 stage.addEventListener('toggle', (event) => {
 	const key = event.target.dataset?.disclosure;

@@ -7,6 +7,7 @@ Window: %SINCE% to %UNTIL%. Today is %TODAY%; use the calendar's own time zone f
    for each day of the window, today and all of tomorrow. Skip public holiday and import-only
    calendars unless they have an event on those days. A calendar you can only see as free/busy (for
    example a work calendar) still counts: report its busy blocks with `busyOnly: true` and no title.
+   Skip events I declined. `attendees` counts the invited people other than me.
 2. Mail. Search inbox threads received in the window. Classify each thread:
    - `act`: a person asks something of me, a deadline, a bill, a booking or a delivery that needs a
      step from me.

@@ -3,8 +3,8 @@ name: morning-brief
 description:
   'Builds the daily morning brief: an interactive narrated page covering calendar, overnight runs,
   merge requests, issues, Slack, mail, Obsidian triage, AI retro, instruction changes and AI
-  news since the last brief, with action points approved where they arise and saved for a separate
-  apply session'
+  news since the last brief, plus brain teasers, with action points approved where they arise and
+  saved for a separate apply session'
 argument-hint: '[--no-state] [--rebuild]'
 triggers:
   morning brief; morning summary; daily brief
@@ -119,19 +119,27 @@ wait, never by ending the turn.
   on what it means for my setup.
 
 `$MPX_AI_RETAINED/morning-brief/taste.md`, when present, holds my preferences (whose calendars are
-whose, news taste); the main session and every area follow it.
+whose, news taste); the main session and every area follow it, and the apply session adds to it.
 
 Calendar, Slack and mail come from the gatherers; the main session shapes them into chapters.
 The calendar shows one column per day: earlier days the window covers (greyed as history), today,
 and all of tomorrow; a day without events gets no column, only a clause in the narration. Events are
-coloured by calendar and busy-only work blocks stay untitled. A calendar that belongs to someone
-else is named after them; narrate its events only when they change my day (a clash, someone to pick
-up), saying whose they are, and never its name days, birthdays or anniversaries. Slack leads with
-what still waits on me, shown even when empty, then what is worth knowing, then one sentence on what I already handled;
-handled messages stay listed but are not narrated one by one. A problem someone else is handling
-names them (`handledBy`). Mail lists only what needs action, in a personal and a work panel;
-notifications collapse into count lines per `account`, and alerts go to merge requests. Merge
-requests, issues and mail are narrated personal first, then work.
+coloured by calendar and busy-only work blocks stay untitled. Every titled meeting with other
+attendees today on my own personal and work calendars is narrated with at least its time and title,
+and the beat targets it (a sentence naming two meetings targets both); `build.mjs` rejects a missed
+one. A calendar that belongs to someone else is named after them; narrate its events only when they
+change my day (a clash, someone to pick up), saying whose they are, and never its name days,
+birthdays or anniversaries. Slack leads with what still waits on me, shown even when empty, then
+what is worth knowing, then one sentence on what I already handled; handled messages stay listed
+but are not narrated one by one. A problem someone else is handling names them (`handledBy`). Mail
+lists only what needs action, in a personal and a work panel; notifications collapse into count
+lines per `account`, and alerts go to merge requests. Merge requests, issues and mail are narrated
+personal first, then work.
+
+The main session writes three brain teasers a day, short math problems or riddles of different
+kinds (for example math, logic, riddle, wordplay), each with `id`, `kind`, `question` and `answer`.
+Read the teasers in earlier days' `brief.json` first and never repeat one; `build.mjs` rejects a
+repeat. Beats read the question, never the answer; the page reveals it on click.
 
 ## brief.json
 
@@ -143,8 +151,11 @@ problem affects), `projects` (`id`, `name`, `color` from `--tag-<project>-bg` in
 `fyi`, `quiet`, `unavailable`), `count`, `beats`, and `data` for its type; quiet and unavailable
 chapters carry `detail` instead. Calendar days use ISO dates as `id`; give each calendar a distinct
 Google colour, list only calendars with events, and prefer a titled event over its busy-only copy.
+Calendars keep `access` from the gatherers: `owner` marks mine, and another person's calendar shared
+with me is `reader`.
 
-Order: calendar, overnight, work, issues, slack, mail, triage, retro, instructions, news, actions.
+Order: calendar, overnight, work, issues, slack, mail, triage, retro, instructions, news, teasers,
+actions.
 
 Each action point has `id`, `text`, a `detail` with why and where it came from (for example, which
 email warned about an expiring token), `app`, a link, its `chapter` and its `project` (a `projects`
@@ -155,7 +166,9 @@ without a source gather at the foot of their chapter. A point stays open until I
 actions chapter lists every point one per line, grouped by project, with the same state; each
 project chooses one follow-up agent for its approved points, one per point, or none. Its beats name
 the manual steps first, then the agent work per project, and the saved choices drive the apply
-session.
+session. A feedback box at its foot takes my notes for the AI and ideas to improve the brief, saved
+as `feedback`: the apply session writes preferences to `taste.md` and reports workflow, skill or
+instruction improvements as proposals without applying them.
 
 ## Narration
 
@@ -164,10 +177,10 @@ Each beat is one spoken sentence (`say`), a sidebar `note` label of at most four
 lights its control on the source slide); `event-<id>`, `day-<day id>`, `card-<id>`,
 `column-<board column>`, `issue-<id>`, `issue-column-<column name, lowercase and hyphenated>`,
 `auto-<id>`, `message-<id>`, `slack-waiting` (empty), `slack-addressed`, `mail-<id>`,
-`mail-empty-<account>`, `task-<id>`, `retro-<id>`, `change-<id>`, `news-<id>`, `project-<id>` (a
-project group on overnight runs and action points). `select` opens a calendar event's popover;
-`scope` switches work and personal on merge requests and issues and, on mail, keeps that panel
-bright while the other dims.
+`mail-empty-<account>`, `task-<id>`, `retro-<id>`, `change-<id>`, `news-<id>`, `teaser-<id>`,
+`project-<id>` (a project group on overnight runs and action points). `select` opens a calendar
+event's popover; `scope` switches work and personal on merge requests and issues and, on mail, keeps
+that panel bright while the other dims.
 Quiet chapters get one silent beat with `hold` of about two seconds.
 
 - The highlight shows what is being said: each beat targets exactly the items its sentence names,
