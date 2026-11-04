@@ -5,7 +5,7 @@ description:
 triggers: turning requirements into an Epic specification
 metadata:
   author: MartinoPolo
-  version: '0.9'
+  version: '0.10'
   category: project-management
   mpx:
     schemaVersion: 1
@@ -56,20 +56,21 @@ Incorporate the answer before drafting.
 ### 4. Draft the specification
 
 Derive a concise Epic title from the approved requirements using project domain language; do not add
-a conventional-commit prefix. Use these body sections:
+a conventional-commit prefix. Write the description and acceptance criteria per
+[the Issue template]({{MPX_SHARED_INSTRUCTIONS}}/ISSUE_TEMPLATE.md) and its rules, then add the
+Epic sections that carry the how:
 
-- **Overview** — what and why, tied to project context.
-- **User Stories** — `As a [user], I want [action], so that [benefit].`
-- **Scope** — explicit Included and Excluded lists.
-- **Acceptance Criteria** — measurable checkboxes mapped to stories.
-- **Technical Notes** — architecture constraints, versions/dependencies, risks, open questions.
-- **Implementation Decisions** — modules, interfaces, schemas/contracts, and interactions; no file
+- Description, no heading — what is wanted and why, tied to project context.
+- **Acceptance criteria** — observable conditions, ending with what is out of scope.
+- **Technical notes** — architecture constraints, versions/dependencies, and risks.
+- **Implementation decisions** — modules, interfaces, schemas/contracts, and interactions; no file
   paths or code snippets.
-- **Testing Decisions** — valuable tests, selected modules, test-suite prior art, and boundaries.
+- **Testing decisions** — valuable tests, selected modules, test-suite prior art, and boundaries.
 - **Child Issues** — initialize with `_None yet._`; {{MPX_SKILL_PREFIX}}to-issues replaces this with
   deterministic body links.
 
-Use project domain language and provider-compatible Markdown.
+Use `##` headings, project domain language, and provider-compatible Markdown. Resolve open questions
+at the approval gate rather than recording them in the body.
 
 ### 5. Approval gate
 
