@@ -120,6 +120,9 @@ test('cold compaction scans advance in bounded chunks without claiming completio
 test('quota displays native values and explicit unknown state', () => {
   assert.match(plain(buildQuotaLine({ fiveRaw: '20', fiveResets: '', sevenRaw: '30', sevenResets: '', usageSource: 'live', usageAgeSeconds: 0 })), /5h.*20%.*7d.*30%/);
   assert.match(plain(buildQuotaLine({ fiveRaw: '', fiveResets: '', sevenRaw: '', sevenResets: '', usageSource: '', usageAgeSeconds: 0 })), /unknown/i);
+  const weeklyOnly = plain(buildQuotaLine({ fiveRaw: '', fiveResets: '', sevenRaw: '40', sevenResets: '', usageSource: 'live', usageAgeSeconds: 0 }));
+  assert.match(weeklyOnly, /7d.*40%/);
+  assert.doesNotMatch(weeklyOnly, /5h|unknown/i);
 });
 
 test('statusline source has no legacy dependency, auth-file read, port registry, or launcher generation', async () => {

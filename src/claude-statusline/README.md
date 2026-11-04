@@ -9,7 +9,7 @@ This package carries the Claude Code status-line renderers from the legacy `mpx-
 - Account-scoped state follows `CLAUDE_CONFIG_DIR`; `MPX_ACCOUNT` is preferred for the visible account badge. Session and agent identifiers reject path separators and traversal.
 - Cold compaction history advances through bounded byte chunks over successive ticks; oversized transcript lines are skipped rather than allocated in full.
 - Location actions are native `file:///` links. The renderer creates no editor shortcuts or launcher artifacts.
-- Quota uses Claude's stdin `rate_limits` and the matching account cache only. It never reads credentials or calls the OAuth usage endpoint; missing data renders as unknown.
+- Quota uses Claude's stdin `rate_limits` and the matching account cache only. It never reads credentials or calls the OAuth usage endpoint; a plan without a 5-hour window shows only the weekly one, and missing data renders as unknown.
 - Merge-request and exchange-rate refreshes remain detached, bounded, best-effort processes with hidden Windows child windows. A cold exchange-rate cache never causes synchronous network work.
 - Legacy development-server port probing and its project registry are intentionally excluded because Orca owns server visibility.
 - Effort presentation does not enforce the retired model-tier/high-ceiling policy. Task payloads lack the declaration identity needed to compare against current runtime profiles; inherited effort stays visibly uncertain.
