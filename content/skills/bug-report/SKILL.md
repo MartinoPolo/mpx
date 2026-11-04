@@ -21,7 +21,8 @@ Investigate each bug from the invocation input to its root cause, and create or 
 Resolve project configuration as specified by
 [Provider Routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md), then select `issues.provider`.
 Load only the selected
-[GitHub]({{MPX_SHARED_INSTRUCTIONS}}/providers/GITHUB.md) or
+[GitHub]({{MPX_SHARED_INSTRUCTIONS}}/providers/GITHUB.md),
+[GitLab]({{MPX_SHARED_INSTRUCTIONS}}/providers/GITLAB.md), or
 [KanbanFlow]({{MPX_SHARED_INSTRUCTIONS}}/providers/KANBANFLOW.md) guide. Preserve the native
 authentication environment and explicit target identity. Never infer from remotes, switch providers,
 or invent commands. An unsupported Issue provider receives a bounded manual handoff.

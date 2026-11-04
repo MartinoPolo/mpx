@@ -104,7 +104,7 @@ native provider state before any retry.
 
 If a milestone argument was supplied, assign it with the selected Issue provider's native command.
 Preserve native behavior: the milestone must already exist unless the provider guide explicitly
-supports approved creation. For GitHub use the guide's target-bound `gh issue edit` form. KanbanFlow has no milestone operation.
+supports approved creation. For GitHub use the guide's target-bound `gh issue edit` form; for GitLab the Issue `PUT` with `milestone_id`. KanbanFlow has no milestone operation.
 If unsupported, preserve the created Epic and report the limitation; do not silently omit it.
 
 ### 8. Report

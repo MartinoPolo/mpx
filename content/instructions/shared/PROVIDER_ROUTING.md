@@ -16,7 +16,7 @@ stops provider-dependent work.
 
 For repository operations, load exactly the selected [GitHub](providers/GITHUB.md),
 [GitLab](providers/GITLAB.md), or [Gerrit](providers/GERRIT.md) guide. For Issue operations, load
-exactly [GitHub](providers/GITHUB.md) or [KanbanFlow](providers/KANBANFLOW.md).
+exactly [GitHub](providers/GITHUB.md), [GitLab](providers/GITLAB.md), or [KanbanFlow](providers/KANBANFLOW.md).
 `local`, `generic`, `none`, an unknown provider, a missing guide, or a role mismatch stops that branch; never substitute GitHub.
 
 ## Validate explicit targets

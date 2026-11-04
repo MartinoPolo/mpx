@@ -20,13 +20,14 @@ without losing it. Modify Issue bodies, never comments.
 ## Provider setup (required)
 
 Apply the inlined provider routing and native provider guides below. Load `mpxconfig.json`, resolve
-`issues.provider`, and use only the inlined GitHub or KanbanFlow guide.
+`issues.provider`, and use only the inlined GitHub, GitLab, or KanbanFlow guide.
 
 - **GitHub:** use native `gh issue view/list/edit/create`, with `--repo` when required by the launch
   identity.
+- **GitLab:** use the guide's `glab issue` and `glab api` Issue forms, bound to the Issue target.
 - **KanbanFlow:** obtain board id, columns, labels/tags, and credentials only from `mpxconfig.json`
   and `KANBANFLOW.md`; do not infer them.
-A local, GitLab, or unknown Issue provider is blocked; never substitute GitHub.
+A local or unknown Issue provider is blocked; never substitute GitHub.
 
 Never switch providers. Never use native parent/sub-Issue APIs. Relationships are body links encoded
 in Issue bodies. Mutating sibling, tracking, or epic bodies and creating a tracking Issue requires
@@ -79,7 +80,7 @@ failure, continue independent items and record exact failures.
 ```json
 {
   "status": "routed | partial | blocked",
-  "provider": "github | kanbanflow",
+  "provider": "github | gitlab | kanbanflow",
   "source": { "id": "42", "title": "..." },
   "epic": { "id": "7", "title": "..." },
   "routed_to_siblings": [{ "summary": "...", "issue_id": "9", "issue_title": "..." }],
@@ -96,6 +97,8 @@ JSON.
 {{include:../instructions/shared/PROVIDER_ROUTING.md}}
 
 {{include:../instructions/shared/providers/GITHUB.md}}
+
+{{include:../instructions/shared/providers/GITLAB.md}}
 
 {{include:../instructions/shared/providers/KANBANFLOW.md}}
 

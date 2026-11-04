@@ -72,13 +72,13 @@ For a Git repository, manage `<project>/mpxconfig.json` as user-owned metadata. 
 parse it and require exactly this native schema before changing another field: `projectId`;
 `repository: { provider, remote }`; `issues: { provider, metadata? }`; and optional
 `packageManager` and `packs`. Repository providers are independently one of GitHub, GitLab, or
-Gerrit. Issue providers are independently GitHub or KanbanFlow; local Issues are unsupported.
+Gerrit. Issue providers are independently GitHub, GitLab, or KanbanFlow; local Issues are unsupported.
 Malformed or unknown fields block this branch and remain untouched.
 
 When the file is missing, gather and confirm the complete values. Propose the folder name as
 `projectId`; require an explicit repository provider and remote; require an independent Issue
 provider and its target metadata (for KanbanFlow, `boardId` and optional `boardName`; for GitHub,
-the explicit Issue repository when it differs); detect a package manager only from repository files;
+the explicit Issue repository when it differs; for GitLab, `project` as `HOST/PROJECT` when it differs); detect a package manager only from repository files;
 and ask for selected packs only when the user wants to replace wrapper defaults. Show the complete
 JSON before writing it. Write only after confirmation, preserve an explicit empty `packs: []`,
 then parse the written file again and report its path and values. Never add credentials, account

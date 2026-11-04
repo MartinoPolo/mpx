@@ -19,7 +19,7 @@ import { LAUNCH_WARNING_CODE, sortLaunchWarnings, WARNING_SEVERITY } from './con
 const execFileAsync = promisify(execFile);
 const PACK_NAME = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 const REPOSITORY_PROVIDERS = new Set(['github', 'gitlab', 'gerrit']);
-const ISSUE_PROVIDERS = new Set(['github', 'kanbanflow']);
+const ISSUE_PROVIDERS = new Set(['github', 'gitlab', 'kanbanflow']);
 const PACKAGE_MANAGERS = new Set(['pnpm', 'npm', 'yarn', 'bun']);
 const APPROVED_ENVIRONMENT = new Set([
   'MPX_PROJECTS',

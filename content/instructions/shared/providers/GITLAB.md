@@ -1,6 +1,6 @@
 # GitLab Native Guide (`glab`)
 
-Applies only when `repository.provider` is `gitlab`. Issue-provider use is unsupported. Follow [Provider Routing](../PROVIDER_ROUTING.md),
+Applies when the independently selected repository or Issue role is `gitlab`. Follow [Provider Routing](../PROVIDER_ROUTING.md),
 preserve native authentication and any existing `GLAB_CONFIG_DIR`, and bind CLI commands with
 `--repo <TARGET>`. Use `TARGET=PROJECT` only when the independently selected host is the validated
 default; otherwise use `HOST/PROJECT`. For API calls percent-encode every `/` in the complete
@@ -10,10 +10,37 @@ Installed `glab 1.107.0 --help` verifies `--repo`, JSON issue output, API `--fie
 pagination, milestone JSON, and the CI commands below. Check subcommand help before optional
 version-sensitive flags.
 
-## Issue-provider boundary
+## Issues
 
-GitLab Issue operations are outside the MPX Issue-provider contract. Do not execute them or
-substitute GitLab for the independently selected GitHub or KanbanFlow Issue provider.
+The Issue target is the repository's validated project when `repository.provider` is also
+`gitlab`; otherwise `issues.metadata.project` supplies `HOST/PROJECT`. Write multiline bodies
+through the API with `--field <key>=@<file>`; the `glab issue` forms accept only inline text.
+
+```text
+glab issue list --repo <TARGET> [--all | --closed] [--assignee @me] [--label <label>] \
+    --per-page 100 --output json
+glab issue view <iid> --repo <TARGET> --output json
+glab api projects/<ENCODED_PROJECT>/issues/<iid>/notes --hostname <HOST> --paginate
+glab api projects/<ENCODED_PROJECT>/issues --hostname <HOST> --method POST \
+    --raw-field title=<title> --field description=@<body-file> \
+    [--raw-field labels=<label,label>] [--raw-field milestone_id=<id>] [--raw-field assignee_ids=<user-id>]
+glab api projects/<ENCODED_PROJECT>/issues/<iid> --hostname <HOST> --method PUT \
+    [--raw-field title=<title>] [--field description=@<body-file>] [--raw-field add_labels=<label>] \
+    [--raw-field remove_labels=<label>] [--raw-field milestone_id=<id>] [--raw-field assignee_ids=<user-id>]
+glab api projects/<ENCODED_PROJECT>/issues/<iid>/notes --hostname <HOST> --method POST --field body=@<body-file>
+glab issue close|reopen <iid> --repo <TARGET>
+glab api user --hostname <HOST>
+glab api projects/<ENCODED_PROJECT>/labels --hostname <HOST> --paginate
+glab api projects/<ENCODED_PROJECT>/labels --hostname <HOST> --method POST \
+    --raw-field name=<name> --raw-field color=<#hex> --raw-field description=<text>
+glab api projects/<ENCODED_PROJECT>/milestones --hostname <HOST> --paginate
+glab api projects/<ENCODED_PROJECT>/uploads --hostname <HOST> --method POST --form file=@<path>
+```
+
+`glab api user` returns your own user id for `assignee_ids`. Resolve milestones by exact title
+before assignment; create one only with explicit authorization. An upload returns a `markdown`
+field: place it in the body or note where the image supports the text. Uploads on a private
+project need project access to view. Use body links, not native child items or epics.
 
 ## Merge requests and CI
 

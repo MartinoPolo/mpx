@@ -22,7 +22,8 @@ the provider. If the project has its own `issue-create` skill, follow that skill
 Resolve project configuration as specified by
 [Provider Routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md), then select `issues.provider`.
 Load only the selected
-[GitHub]({{MPX_SHARED_INSTRUCTIONS}}/providers/GITHUB.md) or
+[GitHub]({{MPX_SHARED_INSTRUCTIONS}}/providers/GITHUB.md),
+[GitLab]({{MPX_SHARED_INSTRUCTIONS}}/providers/GITLAB.md), or
 [KanbanFlow]({{MPX_SHARED_INSTRUCTIONS}}/providers/KANBANFLOW.md) guide. Never infer a provider from
 remotes, switch providers, or invent a command. An unsupported provider receives a manual handoff
 with the composed title and body.

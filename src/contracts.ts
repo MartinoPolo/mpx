@@ -36,7 +36,7 @@ export interface CheckCommand {
 export interface RepositoryConfig {
   projectId: string;
   repository?: { provider: 'github' | 'gitlab' | 'gerrit'; remote: string };
-  issues?: { provider: 'github' | 'kanbanflow'; metadata?: Record<string, unknown> };
+  issues?: { provider: 'github' | 'gitlab' | 'kanbanflow'; metadata?: Record<string, unknown> };
   packageManager?: 'pnpm' | 'npm' | 'yarn' | 'bun';
   packs?: string[];
   fast_checks?: CheckCommand[];

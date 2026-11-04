@@ -37,7 +37,7 @@ that shows it.]
   Issue comments as short pointers, one topic per comment. Never put probe results or session
   history in the body.
 - Put each link and screenshot in the section or comment it supports, attached through the provider
-  guide. GitHub embeds images inline; where the provider cannot embed them (KanbanFlow), name each
+  guide. GitHub and GitLab embed images inline; where the provider cannot embed them (KanbanFlow), name each
   attached image in the text.
 - Paths are repo-relative hints, never absolute. The code is the source of truth.
 - `### Epic` and `### Blocking relationships` hold body links for real relationships only; they do

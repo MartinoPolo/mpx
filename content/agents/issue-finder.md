@@ -25,9 +25,11 @@ Use only the selected provider branch:
 - **GitHub:** native `gh`; list with
   `gh issue list --repo <owner/repo> --state open --limit 50 --json number,title,body,labels`. If
   needed, repeat with `--state closed --limit 20`.
+- **GitLab:** native `glab`; list with
+  `glab issue list --repo <TARGET> --per-page 50 --output json`. If needed, repeat with `--closed`.
 - **KanbanFlow:** obtain board identity/column mapping from `mpxconfig.json`; follow `KANBANFLOW.md`
   exactly. Do not infer board identifiers or substitute `gh`/`glab`.
-- **Local, GitLab, or unknown:** return an unsupported no-match result.
+- **Local or unknown:** return an unsupported no-match result.
 
 Unsupported or unavailable provider operations produce the no-match result with a bounded reason;
 never fall back to another provider.
@@ -52,8 +54,8 @@ names, and explicit Issue references. Fetch Issues through the selected branch a
 | Label matches change type               | low           |
 
 A single score above 0.7 is high confidence. Otherwise return at most three candidates.
-Provider-specific closing syntax belongs only in `statement` (`Closes #42` for GitHub when the
-repository and Issue target are the same and the GitHub guide supports it). Cross-provider links in
+Provider-specific closing syntax belongs only in `statement` (`Closes #42` for GitHub or GitLab
+when the repository and Issue target are the same project on that provider). Cross-provider links in
 PR bodies use canonical URLs without a closing keyword. Do not call native parent/sub-Issue APIs.
 
 ## Output (ONLY JSON)
@@ -61,7 +63,7 @@ PR bodies use canonical URLs without a closing keyword. Do not call native paren
 ```json
 {
   "match": "high | candidates | none",
-  "provider": "github | kanbanflow | unsupported",
+  "provider": "github | gitlab | kanbanflow | unsupported",
   "issue": "42 | provider-id | null",
   "statement": "Closes #42 | null",
   "candidates": [{ "id": "42", "title": "...", "confidence": 0.8 }],
@@ -77,6 +79,8 @@ PRs.
 {{include:../instructions/shared/PROVIDER_ROUTING.md}}
 
 {{include:../instructions/shared/providers/GITHUB.md}}
+
+{{include:../instructions/shared/providers/GITLAB.md}}
 
 {{include:../instructions/shared/providers/KANBANFLOW.md}}
 

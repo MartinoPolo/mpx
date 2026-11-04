@@ -98,6 +98,9 @@ test('parseRepositoryConfig accepts independent supported providers and manager 
     assert.deepEqual(parsed.repository, { provider, remote: 'origin' });
     assert.deepEqual(parsed.issues, { provider: 'kanbanflow', metadata: { boardId: 'board' } });
   }
+  for (const provider of ['github', 'gitlab', 'kanbanflow'] as const) {
+    assert.deepEqual(parseRepositoryConfig({ ...repositoryConfig, issues: { provider } }).issues, { provider });
+  }
 });
 
 test('parseRepositoryConfig strictly rejects malformed provided repository and issue roles', () => {

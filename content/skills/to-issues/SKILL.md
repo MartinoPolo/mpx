@@ -83,7 +83,7 @@ required label is absent and return the exact manual label handoff.
 
 Build body files from the Issue template, always including `### Epic`, then
 create sequentially enough to capture every immutable ID and URL. Use the selected guide's
-target-bound GitHub or KanbanFlow Issue-create form. On ambiguous creation outcome, reconcile before
+target-bound GitHub, GitLab, or KanbanFlow Issue-create form. On ambiguous creation outcome, reconcile before
 retrying.
 
 ### 7. Deterministic body-link writeback
@@ -112,7 +112,7 @@ Replace the Epic's `## Child Issues` section with creation-order entries:
 Preserve all other Epic text byte-for-byte where practical. Sort child links by approved creation
 order; sort each relationship list by immutable ID. Include both directions for every dependency.
 Use the selected guide's target-bound native edit command
-(`gh issue edit ... --repo <target> --body-file ...` or the documented KanbanFlow description edit
+(`gh issue edit ... --repo <target> --body-file ...`, the GitLab API Issue `PUT`, or the documented KanbanFlow description edit
 form). If any writeback fails, do not claim that relationship; report created Issues and exact
 repair edits.
 
@@ -123,7 +123,7 @@ final dependency graph, body-writeback evidence, and provider limitations.
 
 ## Provider limitations
 
-GitHub and KanbanFlow Issue bodies can preserve the approved relationship convention, but
+GitHub, GitLab, and KanbanFlow Issue bodies can preserve the approved relationship convention, but
 checkboxes are documentary and do not auto-sync with child state, and the links do not create native
 Epic hierarchy. An unsupported Issue provider, missing native tool, or unavailable reliable body
 editing stops the affected operation with a deterministic manual handoff. Milestones are inherited
