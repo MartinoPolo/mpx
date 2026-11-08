@@ -1,0 +1,444 @@
+/* Three columns of outlined rows, sized so the printed list fits one A4 page. */
+:root {
+	--page: #f2f5f4;
+	--surface: #fff;
+	--ink: #164a38;
+	--line: #1d2a26;
+	--accent: #14a56f;
+	--accent-deep: #0b7a4e;
+	--on-accent: #fff;
+	--muted: #4a5a55;
+	--tint: #eef6f2;
+	--done-fill: #d6efe3;
+	--shadow-color: #c9d8d1;
+	--shadow: 3px 3px 0 var(--shadow-color);
+	--morning-fill: #dcedfb;
+	--morning-line: #1d5f96;
+	--danger-fill: #fde2e2;
+	--danger: #a12020;
+	/* Product photos are cut-outs; on a dark ground the dark ones would vanish, so they sit on a light tile there. */
+	--photo-ground: transparent;
+	--label-size: 1rem;
+	--box-size: 1.25em;
+	--photo-size: 2.4rem;
+	--row-gap: 6px;
+	color-scheme: light;
+}
+/* packing-theme.js always resolves the theme into data-theme; screen only, so print stays light. */
+@media screen {
+	:root[data-theme="dark"] {
+		--page: #0e1412;
+		--surface: #18211e;
+		--ink: #8fdcb9;
+		--line: #c3d3cc;
+		--accent: #2fc68a;
+		--accent-deep: #1b9466;
+		--muted: #93a8a0;
+		--tint: #22312c;
+		--done-fill: #1d3a2e;
+		--shadow-color: #050807;
+		--morning-fill: #13283a;
+		--morning-line: #6fb0e6;
+		--danger-fill: #4a1d1d;
+		--danger: #ff9b9b;
+		--photo-ground: #e4ebe7;
+		color-scheme: dark;
+	}
+}
+* { box-sizing: border-box; }
+body {
+	margin: 0;
+	background: var(--page);
+	color: var(--line);
+	font: 400 16px/1.25 'Geist Variable', 'Geist', system-ui, sans-serif;
+	print-color-adjust: exact;
+	-webkit-print-color-adjust: exact;
+}
+.sheet {
+	max-width: 1100px;
+	margin: 24px auto;
+	padding: 22px;
+	background: var(--surface);
+	border: 2px solid var(--line);
+	border-radius: 14px;
+	box-shadow: 5px 5px 0 var(--shadow-color);
+}
+h1, h2 { font-family: 'DynaPuff Variable', 'DynaPuff', 'Geist Variable', 'Geist', sans-serif; margin: 0; color: var(--ink); }
+
+header {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	gap: 4px 16px;
+	align-items: end;
+	padding-bottom: 10px;
+	margin-bottom: 12px;
+	border-bottom: 2px solid var(--line);
+}
+.facts { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 4px 0 0; padding: 0; list-style: none; color: var(--muted); font-size: 0.9rem; }
+header .title-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+h1 { font-size: 2.2rem; font-weight: 700; line-height: 1; }
+.meta { color: var(--muted); font-size: 0.95rem; }
+.meta strong { color: var(--line); font-weight: 600; }
+.tally { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tally [data-progress] { font-family: 'DynaPuff Variable', 'DynaPuff', sans-serif; font-size: 1.5rem; color: var(--ink); }
+.bar {
+	grid-column: 1 / -1;
+	height: 6px;
+	border: 1.5px solid var(--line);
+	border-radius: 99px;
+	overflow: hidden;
+}
+.bar::before {
+	content: '';
+	display: block;
+	height: 100%;
+	width: calc(var(--progress, 0) * 100%);
+	background: var(--accent);
+	transition: width 0.2s;
+}
+.actions { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+:root[data-unpacked-only] :is(.item, .category)[data-done] { display: none; }
+button {
+	font: 600 0.95rem 'Geist Variable', 'Geist', sans-serif;
+	color: var(--line);
+	background: var(--surface);
+	border: 2px solid var(--line);
+	border-radius: 10px;
+	padding: 7px 14px;
+	box-shadow: var(--shadow);
+	cursor: pointer;
+}
+button:hover { background: var(--tint); }
+button:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--shadow-color); }
+button[data-action="print"] { background: var(--accent-deep); border-color: var(--accent-deep); color: var(--on-accent); }
+button[data-action="print"]:hover { background: var(--ink); }
+button[data-action="theme"] { margin-left: auto; }
+.layout-switch { display: flex; }
+.layout-switch button { border-radius: 0; }
+.layout-switch button:first-child { border-radius: 10px 0 0 10px; }
+.layout-switch button:last-child { border-radius: 0 10px 10px 0; margin-left: -2px; }
+.layout-switch button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--surface); }
+.bag-legend { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0; padding: 0; list-style: none; font-size: 0.85rem; font-weight: 600; color: var(--muted); }
+.bag-legend::before { content: 'Zavazadla:'; font-weight: 400; }
+:root[data-active-layout="bags"] .bag-legend { display: none; }
+button[data-armed] { background: var(--tint); border-color: var(--ink); }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+/* The app sets --columns and, by section, deals the sections into that many columns. CSS multi-column would balance
+   them on its own, but re-laying it out after every tick or edit takes a noticeable fraction of a second. By bag, each
+   bag spans the page and lays its rows out in the columns instead, so the big first bag never fills one column alone. */
+.categories { display: grid; grid-template-columns: repeat(var(--columns, 3), minmax(0, 1fr)); gap: 0 14px; align-items: start; }
+:root[data-active-layout="bags"] .categories { display: block; }
+:root[data-active-layout="bags"] .items { grid-template-columns: repeat(var(--columns, 3), minmax(0, 1fr)); column-gap: 14px; }
+.category { margin-bottom: 14px; }
+.item, .add-item { break-inside: avoid; }
+.category-strip, .note { break-after: avoid; }
+.category-strip {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 3px 10px 3px 6px;
+	margin-bottom: 6px;
+	background: var(--tint);
+	border: 1.5px solid var(--line);
+	border-radius: 10px;
+	font-size: var(--label-size);
+}
+.category-strip h2 { font-size: 1.1em; font-weight: 600; flex: 1; }
+.section-progress { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ink); font-size: 0.85em; }
+.category[data-done] .category-strip { background: var(--done-fill); }
+.note { margin: -2px 4px 6px; font-size: 0.8rem; color: var(--muted); }
+.category.highlight {
+	padding: 6px;
+	background: var(--morning-fill);
+	border: 2px solid var(--morning-line);
+	border-radius: 12px;
+}
+.category.highlight .category-strip { background: var(--surface); border-color: var(--morning-line); }
+.category[data-optional] .category-strip { background: var(--surface); border-style: dashed; }
+.category[data-optional] h2 { color: var(--muted); }
+
+/* Lead box, photo, label, piece boxes, delete: the lead box column lines up across every row of a column. */
+.items { display: grid; gap: var(--row-gap); }
+.item {
+	position: relative;
+	display: grid;
+	grid-template-columns: var(--box-size) var(--photo-size) 1fr auto auto auto;
+	align-items: center;
+	gap: 0 0.45em;
+	padding: 3px 4px 3px 6px;
+	border: 1.5px solid var(--line);
+	border-radius: 8px;
+	background: var(--surface);
+	font-size: var(--label-size);
+}
+.item[data-done] { border-style: dashed; border-color: var(--muted); background: var(--tint); }
+.category.highlight .item { border-color: var(--morning-line); }
+.visual { position: relative; display: grid; }
+.photo { width: var(--photo-size); height: var(--photo-size); object-fit: contain; background: var(--photo-ground); border-radius: 6px; }
+.emoji { width: var(--photo-size); font-size: calc(var(--photo-size) * 0.72); line-height: 1; text-align: center; }
+.label { font-weight: 600; line-height: 1.15; cursor: pointer; overflow-wrap: break-word; }
+.pieces { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.25em; }
+/* Long runs of piece boxes take their own line so they never squeeze the label. */
+.item.many > :is(.lead, .visual) { grid-row: span 2; }
+.item.many .pieces { grid-column: 3 / 5; grid-row: 2; }
+.item .item-controls { grid-column: 5; grid-row: 1; }
+.item.many .item-controls { grid-row: 1 / span 2; }
+
+/* The bag badge sits on the photo's corner; tapping it moves the item to the next bag. */
+.bag-badge {
+	position: absolute;
+	right: -0.45em;
+	bottom: -0.35em;
+	display: grid;
+	place-content: center;
+	width: 1.45em;
+	height: 1.45em;
+	padding: 0;
+	font-size: 0.78em;
+	line-height: 1;
+	border: 1.5px solid var(--line);
+	border-radius: 50%;
+	background: var(--surface);
+	box-shadow: none;
+}
+.bag-badge:active { transform: none; box-shadow: none; }
+/* Most items stay in the first bag, so its badge steps back and the others stand out. */
+.bag-badge.main-bag { opacity: 0.55; }
+
+/* touch-action keeps the page from scrolling under the finger while dragging the grip. */
+.item > [data-drag-handle] {
+	grid-column: 6;
+	grid-row: 1 / -1;
+	align-self: stretch;
+	padding: 0 0.15em;
+	border: 0;
+	border-radius: 4px;
+	box-shadow: none;
+	background: none;
+	color: var(--muted);
+	font-size: 1.1em;
+	line-height: 1;
+	cursor: grab;
+	touch-action: none;
+	opacity: 0.6;
+}
+.item > [data-drag-handle]:active { transform: none; box-shadow: none; }
+.item:hover > [data-drag-handle], .item > [data-drag-handle]:focus-visible { opacity: 1; }
+:root.dragging-item, :root.dragging-item * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
+/* While dragging, the row stays put and faded, a copy follows the pointer, and a line shows where it will land. */
+.item.dragging { opacity: 0.35; }
+.drag-ghost {
+	position: fixed;
+	z-index: 30;
+	margin: 0;
+	pointer-events: none;
+	border-color: var(--accent);
+	box-shadow: 6px 6px 0 var(--shadow-color);
+	will-change: transform;
+}
+.drop-marker {
+	position: fixed;
+	left: 0;
+	top: -2px;
+	z-index: 29;
+	height: 4px;
+	border-radius: 2px;
+	background: var(--accent);
+	pointer-events: none;
+	will-change: transform;
+}
+/* An empty section or bag still needs room to drop into. Marked by the app, since list markers keep :empty from matching. */
+.items[data-empty] { min-height: calc(var(--photo-size) + 8px); border: 1.5px dashed var(--muted); border-radius: 8px; }
+:root[data-active-layout="bags"] .items[data-empty]::before { content: 'sem přetáhni věci'; grid-column: 1 / -1; display: block; padding: 0.7em; text-align: center; font-size: 0.8rem; color: var(--muted); }
+.item[data-optional] { border-style: dashed; }
+.item[data-optional] .label { color: var(--muted); }
+.label .part { font-weight: 400; font-size: 0.8em; color: var(--muted); }
+
+/* An inner bag (toiletry bag, packing cube) hangs inside its bag, set off by a rail on the left. */
+.category .inner-bag { margin: 0 0 var(--row-gap) 0.5em; padding-left: 0.5em; border-left: 3px solid var(--line); font-size: 0.97em; }
+.inner-bag .category-strip { background: var(--surface); }
+
+/* Each piece of a multi-piece item shows its bag above its box; the ones in the item's own bag step back. */
+.piece { display: grid; justify-items: center; gap: 1px; }
+.piece-bag {
+	padding: 0;
+	border: 0;
+	border-radius: 4px;
+	background: none;
+	box-shadow: none;
+	font-size: 0.8em;
+	line-height: 1.1;
+}
+.piece-bag.same { opacity: 0.3; }
+.piece-bag:active { transform: none; box-shadow: none; }
+
+.bag-picker {
+	position: absolute;
+	z-index: 20;
+	display: grid;
+	gap: 2px;
+	min-width: 12em;
+	padding: 6px;
+	background: var(--surface);
+	border: 2px solid var(--line);
+	border-radius: 10px;
+	box-shadow: var(--shadow);
+}
+.bag-picker p { margin: 0 4px 4px; font-size: 0.8rem; color: var(--muted); }
+.bag-picker button { text-align: left; padding: 4px 8px; border: 0; box-shadow: none; font-weight: 500; }
+.bag-picker button.inner { padding-left: 1.8em; }
+.bag-picker button[aria-checked="true"] { background: var(--done-fill); font-weight: 700; }
+
+.edit-block { padding: 0 4px; border: 0; box-shadow: none; background: none; color: var(--muted); font-size: 1em; line-height: 1; opacity: 0.7; }
+.edit-block:hover { opacity: 1; }
+.add-new { width: 100%; padding: 6px; border: 1.5px dashed var(--muted); box-shadow: none; background: none; color: var(--muted); font-weight: 600; }
+.editor { display: grid; gap: 8px; margin-bottom: 8px; padding: 8px; border: 2px solid var(--accent-deep); border-radius: 10px; background: var(--surface); }
+.editor input, .editor select { font: inherit; color: var(--line); background: var(--surface); border: 1.5px solid var(--line); border-radius: 8px; padding: 4px 8px; }
+.editor-name { display: flex; gap: 6px; }
+.editor-emoji { width: 3.2em; text-align: center; font-size: 1.1em; }
+.editor-title { flex: 1; min-width: 0; font-weight: 600; }
+.editor-place { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--muted); }
+.editor-place select { flex: 1; min-width: 0; }
+.editor-icons, .editor-ideas { display: flex; flex-wrap: wrap; gap: 4px; }
+.editor-icons button { width: 2.1em; height: 2.1em; padding: 0; font-size: 1.05em; border-width: 1.5px; box-shadow: none; }
+.editor-ideas button { padding: 2px 8px; font-size: 0.8rem; font-weight: 500; border-width: 1.5px; border-style: dashed; box-shadow: none; }
+.editor-actions { display: flex; gap: 6px; }
+.editor-actions button { padding: 4px 12px; font-size: 0.85rem; }
+.editor-actions .save { background: var(--accent-deep); border-color: var(--accent-deep); color: var(--on-accent); }
+.editor-delete { margin-left: auto; color: var(--danger); }
+.editor-delete:hover, .editor-delete[data-armed] { background: var(--danger-fill); }
+
+input[type="checkbox"] {
+	appearance: none;
+	font: inherit;
+	margin: 0;
+	width: var(--box-size);
+	height: var(--box-size);
+	border: 2px solid var(--line);
+	border-radius: 0.25em;
+	background: var(--surface);
+	display: grid;
+	place-content: center;
+	flex: none;
+	cursor: pointer;
+}
+input[type="checkbox"]:hover { background: var(--tint); }
+input[type="checkbox"]::after {
+	content: '';
+	width: 0.32em;
+	height: 0.62em;
+	margin-top: -0.12em;
+	border: solid var(--on-accent);
+	border-width: 0 0.14em 0.14em 0;
+	transform: rotate(45deg) scale(0);
+	transition: transform 0.12s;
+}
+input[type="checkbox"]:checked { background: var(--accent-deep); border-color: var(--accent-deep); }
+input[type="checkbox"]:checked::after { transform: rotate(45deg) scale(1); }
+/* Round boxes mean "everything in this item or section", distinct from square per-piece boxes. */
+input.toggle-all { border-radius: 50%; border-width: 2.5px; }
+input.toggle-all:indeterminate { border-color: var(--accent-deep); }
+input.toggle-all:indeterminate::after {
+	width: 0.55em;
+	height: 0;
+	margin: 0;
+	border-color: var(--accent-deep);
+	border-width: 0 0 0.16em 0;
+	transform: none;
+}
+.item .pieces input { width: calc(var(--box-size) * 0.85); height: calc(var(--box-size) * 0.85); }
+
+.item[data-done] :is(.photo, .emoji) { opacity: 0.45; }
+.item[data-done] .label { color: var(--muted); }
+
+/* Editing lives on screen only; print shows the list as it currently stands. */
+/* Fixed slots keep × top, + middle, − bottom in every row, even when a button is absent. */
+.item-controls {
+	align-self: stretch;
+	display: grid;
+	grid-template-rows: repeat(3, 1fr);
+	margin-block: -2px;
+}
+.item-controls button {
+	grid-column: 1;
+	width: 1.3em;
+	min-height: 0;
+	padding: 0;
+	border: 0;
+	border-radius: 4px;
+	box-shadow: none;
+	background: none;
+	color: var(--muted);
+	font-size: 1.2em;
+	font-weight: 600;
+	line-height: 0.8;
+	opacity: 0.5;
+}
+.item-controls .delete { grid-row: 1; }
+.item-controls .more { grid-row: 2; }
+.item-controls .fewer { grid-row: 3; }
+.item:hover .item-controls button, .item-controls button:focus-visible { opacity: 1; }
+.item-controls button:hover { background: var(--tint); color: var(--ink); }
+.item-controls button:active { transform: none; box-shadow: none; }
+.item-controls .delete:hover { background: var(--danger-fill); color: var(--danger); }
+.add-item { display: flex; gap: 6px; margin-top: 6px; }
+.add-item input {
+	flex: 1;
+	min-width: 0;
+	font: inherit;
+	font-size: 0.85rem;
+	color: var(--line);
+	padding: 4px 8px;
+	border: 1.5px dashed var(--muted);
+	border-radius: 8px;
+	background: transparent;
+}
+.add-item input::placeholder { color: var(--muted); }
+.add-item input:focus { border-style: solid; border-color: var(--accent-deep); background: var(--surface); }
+.add-item button { padding: 2px 10px; font-size: 0.8rem; box-shadow: none; border-width: 1.5px; }
+.add-item:not(:focus-within) button { display: none; }
+
+/* Screen-only, otherwise the A4 print width would match this. */
+@media screen and (max-width: 720px) {
+	.sheet { margin: 0; border: 0; border-radius: 0; box-shadow: none; padding: 16px; }
+}
+@media (hover: none) {
+	.item-controls button, .item > [data-drag-handle], .edit-block { opacity: 0.75; }
+}
+@media (prefers-reduced-motion: reduce) {
+	* { transition: none !important; }
+}
+
+@page { size: A4; margin: 8mm; }
+@media print {
+	:root { --label-size: 10.5pt; --box-size: 4.6mm; --photo-size: 7.8mm; --row-gap: 0.7mm; }
+	body { background: #fff; }
+	header { padding-bottom: 1.5mm; margin-bottom: 2.5mm; }
+	h1 { font-size: 20pt; }
+	.meta { font-size: 10pt; }
+	.tally [data-progress] { font-size: 13pt; }
+	.bar { height: 1.6mm; }
+	.categories, :root[data-active-layout="bags"] .items { column-gap: 3.5mm; }
+	.category { margin-bottom: 2.2mm; }
+	.category-strip { padding: 0.3mm 2mm 0.3mm 1.2mm; margin-bottom: 1mm; border-radius: 2.2mm; }
+	.category-strip, .note { break-after: avoid; }
+	.note { font-size: 8pt; margin: -0.5mm 1mm 0.8mm; }
+	.category.highlight { padding: 1.2mm; border-radius: 3mm; }
+	.item { padding: 0.2mm 1.2mm; border-width: 1.2px; border-radius: 2mm; break-inside: avoid; }
+	.sheet { max-width: none; margin: 0; padding: 0; border: 0; box-shadow: none; }
+	.actions, .item-controls, .add-item, .add-block, .edit-block, .editor, .piece-bag.same, [data-drag-handle] { display: none; }
+	.items[data-empty] { display: none; }
+	.item[data-done] :is(.photo, .emoji) { opacity: 1; }
+}
+.sync-warning {
+	grid-column: 1 / -1;
+	margin: 10px 0 0;
+	padding: 8px 12px;
+	border: 2px solid var(--danger);
+	border-radius: 10px;
+	background: var(--danger-fill);
+	color: var(--danger);
+	font-weight: 600;
+}
+@media print { .sync-warning { display: none; } }
