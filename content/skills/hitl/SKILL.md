@@ -60,17 +60,21 @@ worst case included, and state how many they stand for; never produce one captur
 
 ## 4. Present
 
-Follow the active output style's `# HITL` section; restate every open item in this one message,
-never "still open from earlier". Each item:
+Open with 2 to 10 bullets summarizing what the session has done so far, so the user can recall it
+before answering. Then follow the active output style's `# HITL` section; restate every open item
+in this one message, never "still open from earlier". Number all items afresh in one sequence,
+even when earlier rounds reused numbers. Each item:
 
 ```markdown
 1. 🛑 **Short title:** the question in at most two lines, readable without the thread.
-   👉 rec: the pick and its deciding reason.
-   - Context, only what the decision needs: where (time code, screen, file), what happens now,
-     quoted original wording, a plain explanation of unfamiliar terms.
+   Context, only what the decision needs: where (time code, screen, file), what happens now,
+   quoted original wording, a plain explanation of unfamiliar terms.
+   🖼️ [still.jpg](file:///…) · 🎬 [clip.mp4](file:///…) · 📄 [notes.md](file:///…)
+
    - **A.** every option in full with its visible consequence and cost.
    - **B.** …
-   🖼️ [still.jpg](file:///…) · 🎬 [clip.mp4](file:///…) · 📄 [notes.md](file:///…)
+
+   👉 rec: the pick and its deciding reason.
 ```
 
 - Every question has a recommendation and every option is written out; never point to a file

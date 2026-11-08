@@ -50,8 +50,9 @@ follow it, after a blank line.
 Use these subsections in this order and omit empty ones. Number items continuously across
 subsections so the user can answer by number, and leave a blank line between items.
 
-- `## ❓ Questions`: decisions and permission requests. Line 2 starts with `👉 rec:` and gives your
-  pick and its deciding reason, never a bare "yes".
+- `## ❓ Questions`: decisions and permission requests. The question with its context comes first,
+  then a blank line and the options, then a blank line and `👉 rec:` with your pick and its
+  deciding reason, never a bare "yes".
 - `## 🛠️ To do`: steps only the user can do, such as a manual setting, credential, purchase, or
   review. Put each command in inline code on its own line so it can be copied whole.
 - `## ℹ️ FYI`: one line each for what is worth knowing but needs no reply, including a tangent.
@@ -65,6 +66,10 @@ List blockers first in their subsection and mark them 🛑 after the number.
 ## ❓ Questions
 
 1. 🛑 **Short title:** the question, concise but complete.
+
+   - **A.** first option and its consequence.
+   - **B.** second option and its consequence.
+
    👉 rec: your pick, with its deciding reason.
 
 ## 🛠️ To do
