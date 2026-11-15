@@ -58,7 +58,6 @@ test('shared instruction, provider, rule, output-style, and helper closure is ca
   ]);
   assert.deepEqual(await filesBelow(path.join(content, 'rules')), [
     'global/css-color-guide.instructions.md',
-    'global/update-docs.instructions.md',
     'languages/css.md',
     'languages/python.md',
     'languages/rust.md',
