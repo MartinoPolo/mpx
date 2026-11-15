@@ -43,6 +43,7 @@ test('shared instruction, provider, rule, output-style, and helper closure is ca
     'shared/AGENTS.md',
     'shared/COMPACT.md',
     'shared/ISSUE_TEMPLATE.md',
+    'shared/ORCA.md',
     'shared/PROJECT_DOC_TEMPLATES.md',
     'shared/PROJECT_INBOX.md',
     'shared/PROVIDER_ROUTING.md',

@@ -62,12 +62,12 @@ Missing optional MPX port metadata is not a startup blocker.
 
 Clean up after yourself when a task ends: stop servers, drop scratch databases, and delete temporary
 scripts and logs you created; keep only evidence the user still needs to review. Once a worktree's
-work is merged or abandoned, remove it. Prefer Orca: `orca worktree ps` shows which worktrees still
-run terminals or agents, and `orca worktree rm --worktree path:<path> --delete-branch` stops its
-sessions, deregisters it, and deletes the branch only when it is provably merged. Write `path:`
-selectors with forward slashes. Without Orca, use `git worktree remove` and `git branch -d`. Never
-remove a worktree with uncommitted changes, unmerged commits, or live sessions you did not start;
-report it instead.
+work is merged or abandoned, remove it. Prefer Orca: `orca worktree ps`, then
+`orca worktree rm --worktree path:<path> --delete-branch`; without Orca, use `git worktree remove`
+and `git branch -d`. Never remove a worktree with uncommitted changes, unmerged commits, or live
+sessions you did not start; report it instead.
+
+Before any other `orca` command, read `$MPX_PROJECTS/mpx/content/instructions/shared/ORCA.md`.
 
 ## Files outside repositories
 
