@@ -43,6 +43,9 @@ workflow asks, and leave terminals and worktrees you did not start alone.
   before launching an unattended agent there.
 - `terminal send` reports whether the prompt was submitted. On silence never send it again; after a
   transport failure reissue the same command with the reported `--retry-request` id.
+- `terminal send` types into whatever the tab shows. Read the terminal first: when its prompt line
+  reads `Message @<agent>…`, the tab is inside a sub-agent's view and the prompt reaches that
+  sub-agent, not the session's lead.
 - `terminal wait` exits non-zero on timeout. That is the wait ending, not the agent failing: read the
   terminal before deciding.
 - `worktree rm` stops the worktree's sessions and deregisters it; `--delete-branch` deletes the branch
