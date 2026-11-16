@@ -128,6 +128,37 @@ export function claudeStatusLineEntries(root: string): Record<'statusLine' | 'su
   };
 }
 
+const DELIVERY_POLICY_PREFIX = 'MPX delivery policy:';
+type AutoModeRuleSection = 'allow' | 'soft_deny';
+
+/** Auto-mode classifier rules for the shared delivery rule: personal projects merge, work projects never do. */
+export function claudeAutoModeDeliveryRules(environment: NodeJS.ProcessEnv): Record<AutoModeRuleSection, string[]> {
+  const personalRoot = environment.MPX_PROJECTS?.trim();
+  const workRoot = environment.MPX_WORK?.trim();
+  return {
+    allow: personalRoot ? [`${DELIVERY_POLICY_PREFIX} In repositories under ${path.normalize(personalRoot)} (the owner's personal projects), the owner authorizes marking ready and merging the PR or MR that carries this session's finished work without human review. This is an exception to Merge Without Review only; it never covers --admin, bypassing required checks, or force-pushing.`] : [],
+    soft_deny: workRoot ? [`${DELIVERY_POLICY_PREFIX} In repositories under ${path.normalize(workRoot)} (the owner's work projects), never merge a PR or MR or submit a Gerrit change; agents stop at a draft PR or MR.`] : [],
+  };
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every(entry => typeof entry === 'string');
+}
+
+function mergeAutoModeDeliveryRules(current: unknown, rules: Record<AutoModeRuleSection, string[]>): Record<string, unknown> | undefined {
+  if (current !== undefined && (!current || typeof current !== 'object' || Array.isArray(current))) throw new Error('invalid autoMode object; preserved');
+  const autoMode: Record<string, unknown> = { ...current };
+  for (const [section, owned] of Object.entries(rules)) {
+    const existing = autoMode[section];
+    if (existing === undefined && owned.length === 0) continue;
+    if (existing !== undefined && !isStringArray(existing)) throw new Error(`invalid autoMode.${section}; preserved`);
+    // A new section keeps the built-in rules; an authored list without "$defaults" stays fully owned by the user.
+    const authored = (existing ?? ['$defaults']).filter(rule => !rule.startsWith(DELIVERY_POLICY_PREFIX));
+    autoMode[section] = [...authored, ...owned];
+  }
+  return Object.keys(autoMode).length ? autoMode : undefined;
+}
+
 const LEGACY_CLAUDE_STATUS_LINES = {
   statusLine: [
     { type: 'command', command: 'node "$HOME/.claude/scripts/status-line.mts"' },
@@ -148,7 +179,7 @@ export function validateRuntimeScope(scope: unknown): RuntimeScope {
   return { account: value.account as Account, harness: value.harness as Harness };
 }
 
-async function runRuntime(root: string, config: UserConfig, preview: boolean, scopes: readonly RuntimeScope[]): Promise<RuntimeInstallResult> {
+async function runRuntime(root: string, config: UserConfig, preview: boolean, scopes: readonly RuntimeScope[], environment: NodeJS.ProcessEnv): Promise<RuntimeInstallResult> {
   const entries: RuntimeInstallEntry[] = [];
   for (const { account, harness } of scopes) {
     const accountRoot = config.accounts[account][harness];
@@ -197,28 +228,29 @@ async function runRuntime(root: string, config: UserConfig, preview: boolean, sc
           const legacy = LEGACY_CLAUDE_STATUS_LINES[field as keyof typeof LEGACY_CLAUDE_STATUS_LINES];
           return [field, existing === undefined || legacy.some(value => isDeepStrictEqual(value, existing)) || ownedRegistrationEquals(existing, expected) ? expected : existing];
         }));
-        return { ...current, ...statusLineSettings, hooks, permissions: { defaultMode: 'default', ...permissions }, outputStyle: 'mpx-terse', autoCompactWindow: CLAUDE_AUTO_COMPACT_TRIGGER_TOKENS + AUTO_COMPACT_RESERVE };
+        const autoMode = mergeAutoModeDeliveryRules(current.autoMode, claudeAutoModeDeliveryRules(environment));
+        return { ...current, ...statusLineSettings, hooks, permissions: { defaultMode: 'default', ...permissions }, outputStyle: 'mpx-terse', autoCompactWindow: CLAUDE_AUTO_COMPACT_TRIGGER_TOKENS + AUTO_COMPACT_RESERVE, ...(autoMode ? { autoMode } : {}) };
       }, preview));
     }
   }
   return { ok: entries.every(entry => entry.status !== 'conflict'), entries };
 }
 
-async function preflightAndRun(root: string, config: UserConfig, preview: boolean, scopes: readonly RuntimeScope[]): Promise<RuntimeInstallResult> {
-  const preflight = await runRuntime(root, config, true, scopes);
+async function preflightAndRun(root: string, config: UserConfig, preview: boolean, scopes: readonly RuntimeScope[], environment: NodeJS.ProcessEnv): Promise<RuntimeInstallResult> {
+  const preflight = await runRuntime(root, config, true, scopes, environment);
   if (preview || !preflight.ok) return preflight;
-  return runRuntime(root, config, false, scopes);
+  return runRuntime(root, config, false, scopes, environment);
 }
 
 /** Installs exactly one validated account/harness runtime scope. */
-export async function syncRuntimeScope(root: string, config: UserConfig, scope: RuntimeScope, preview = true): Promise<RuntimeInstallResult> {
-  return preflightAndRun(root, config, preview, [validateRuntimeScope(scope)]);
+export async function syncRuntimeScope(root: string, config: UserConfig, scope: RuntimeScope, preview = true, environment: NodeJS.ProcessEnv = process.env): Promise<RuntimeInstallResult> {
+  return preflightAndRun(root, config, preview, [validateRuntimeScope(scope)], environment);
 }
 
 /** Broad-scope compatibility API: installs all personal/work and Pi/Claude runtime roots. */
-export async function syncRuntime(root: string, config: UserConfig, preview = true): Promise<RuntimeInstallResult> {
+export async function syncRuntime(root: string, config: UserConfig, preview = true, environment: NodeJS.ProcessEnv = process.env): Promise<RuntimeInstallResult> {
   return preflightAndRun(root, config, preview, [
     { account: 'personal', harness: 'pi' }, { account: 'personal', harness: 'claude' },
     { account: 'work', harness: 'pi' }, { account: 'work', harness: 'claude' },
-  ]);
+  ], environment);
 }

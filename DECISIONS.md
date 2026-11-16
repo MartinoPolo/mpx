@@ -63,8 +63,10 @@ conventions belong in `AGENTS.md`; rollout evidence and recovery belong in `migr
   check overrides precede deterministic discovery; unresolved discovery goes to the checker.
 - **Separate shipping from repair.** One standard-class shipper owns delivery; main evaluates failures
   and authorizes repairs under a shared attempt budget that survives continuation.
-- **Make delivery intent explicit.** `pr` publishes a draft for human-controlled readiness. Execute
-  leaves work PRs unmerged and autonomously merges personal work when authorized and verified.
+- **Make delivery intent explicit.** Finished work is committed and pushed without asking. The
+  project path, not the account, decides the rest: personal projects (`MPX_PROJECTS`) merge
+  autonomously once verified; work projects (`MPX_WORK`) stop at a draft PR/MR and never merge;
+  Verotel keeps its own Gerrit workflow. `pr` publishes a draft for human-controlled readiness.
   Post-merge base updates are manual so checkout-availability prompts cannot block completed delivery.
 - **Treat tests as evidence of requirements.** New acceptance criteria take priority over obsolete
   tests. `--no-tdd` excludes test creation during implementation, not existing verification.

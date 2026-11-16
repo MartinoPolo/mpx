@@ -68,7 +68,7 @@ For draft creation through the API, prefix the title with GitLab's required `Dra
 verify the returned draft state. The authored title after that provider marker retains the verified
 Issue identifier. Removing the marker is a readiness transition and needs workflow authorization.
 
-Poll explicit pipeline/job IDs boundedly; never infer an update or retry target. Merge requires
-explicit authorization for the current run and permitted strategy. An invoked workflow that
-explicitly authorizes merge supplies that authorization; otherwise ask the user. Reliable cross-version watch semantics, client-selected non-exposed merge
+Poll explicit pipeline/job IDs boundedly; never infer an update or retry target. Merge only with
+a permitted strategy: personal projects (`MPX_PROJECTS`) may merge finished work without asking,
+work projects (`MPX_WORK`) never merge, and elsewhere ask the user. Reliable cross-version watch semantics, client-selected non-exposed merge
 behavior, native hierarchy, and automatic body-link synchronization are unsupported.

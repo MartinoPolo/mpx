@@ -45,8 +45,8 @@ gh run rerun <run-id> --repo <target> --failed
 gh pr merge <pr> --repo <target> --merge|--squash|--rebase
 ```
 
-Merge only with explicit authorization for the current run and permitted strategy. An invoked
-workflow that explicitly authorizes merge supplies that authorization; otherwise ask the user. Arbitrary review-state
+Merge only with a permitted strategy: personal projects (`MPX_PROJECTS`) may merge finished work
+without asking, work projects (`MPX_WORK`) never merge, and elsewhere ask the user. Arbitrary review-state
 transitions, native hierarchy, and automatic body-link synchronization are unsupported.
 
 ## Images

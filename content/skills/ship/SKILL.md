@@ -17,9 +17,11 @@ metadata:
 Here, PR means a GitHub pull request, GitLab merge request, or Gerrit change, as applicable.
 Prepare a substantive summary of the intended change before delivery. Read
 [Provider Routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md). Publication requires a valid
-configured `repository.provider`; resolve it and load only its selected native guide. Invocation
-authorizes merge unless `--no-auto-merge` is present. Resolve the current source branch and pass it
-explicitly to `mpx-shipper`. Invoke `mpx-shipper` with endpoint `merge`, the explicit intended paths, summary and
+configured `repository.provider`; resolve it and load only its selected native guide. Resolve
+personal or work from the project path, not the account or Git host; ask if unclear. In a personal
+project (`MPX_PROJECTS`), invocation authorizes merge unless `--no-auto-merge` is present. A work
+project (`MPX_WORK`) never merges: use endpoint `pr`. Resolve the current source branch and pass it
+explicitly to `mpx-shipper`. Invoke `mpx-shipper` with that endpoint, the explicit intended paths, summary and
 `the invocation input`, actual target branch when supplied, configured remote and validated
 repository target, verified Issue identity/link when any, existing immutable PR/change and CI
 identities, repository merge policy, merge authorization, and `no_auto_merge` state.
@@ -44,8 +46,8 @@ and verification commands. Tell it to inspect the current diff and relevant file
 repair before invoking the shipper again. The shipper never repairs.
 For CI repairs, supply the validated repository, PR, branch, commit, and failing run/job identities.
 
-Without `--no-auto-merge`, completion requires provider-confirmed merge. With it, completion is green
-CI with the explicit PR still open.
+In a personal project without `--no-auto-merge`, completion requires provider-confirmed merge.
+Otherwise, completion is green CI with the explicit PR still open.
 
 Report actual results after delivery, including completed stage, commit/branch/repository/PR/run
 identities, CI and merge state, excluded artifacts, attempts,

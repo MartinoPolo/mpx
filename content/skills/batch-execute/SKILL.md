@@ -31,10 +31,10 @@ correct test merely to pass. Commands come from repository policy/check discover
 exactly.
 
 Establish the delivery endpoint before selection, as `{{MPX_SKILL_COMMAND}}execute` does: a personal
-repository uses `merge`, requiring confirmed merge; a work repository, `--no-auto-merge`, or a user
-request to wait before merging uses `pr`, stopping at green CI with the PR open. Resolve personal/work
-ownership from account/domain context, not the Git host; ask if unclear. Invocation authorizes that
-endpoint.
+project uses `merge`, completing at the provider-confirmed merge; a work project, `--no-auto-merge`,
+or a user request to wait before merging uses `pr`, stopping at green CI with the draft PR open.
+Resolve personal or work from the project path (`MPX_PROJECTS` or `MPX_WORK`), not the account or
+Git host; ask if unclear. Invocation authorizes that endpoint.
 
 ## Selection
 
@@ -145,7 +145,7 @@ locally, then invoke the shipper again so it reconciles completed stages. Final 
 own three shipping attempts total—the initial attempt plus two repair/retry attempts—covering its
 commit, push, PR, and CI stages without resetting during continuation. Per-item commit attempts do
 not reduce this budget. Independently confirm fresh green status for the
-explicit PR before completing publication. The `merge` endpoint then requires a confirmed merge;
+explicit PR before completing publication. The `merge` endpoint then completes at the provider-confirmed merge;
 the `pr` endpoint leaves the PR open.
 For CI repairs, supply the validated repository, PR, branch, commit, and failing run/job identities.
 After publication, attach those screenshots in a comment on each Issue they verify through the Issue

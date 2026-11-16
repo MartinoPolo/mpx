@@ -91,6 +91,39 @@ test('Claude scopes preserve native permission modes and initialize only an abse
   } finally { await rm(scratch, { recursive: true, force: true }); }
 });
 
+test('Claude scopes teach auto mode the path-based merge policy while preserving authored rules', async () => {
+  const scratch = await mkdtemp(join(tmpdir(), 'mpx-runtime-claude-auto-mode-'));
+  const selected = join(scratch, 'claude');
+  const settingsFile = join(selected, 'settings.json');
+  const config: UserConfig = { accounts: { personal: { pi: join(scratch, 'unused-pi'), claude: selected }, work: { pi: join(scratch, 'unused-work-pi'), claude: join(scratch, 'unused-work-claude') } }, domains: { personal: [], work: [] } };
+  const scope = { account: 'personal', harness: 'claude' } as const;
+  const environment = { MPX_PROJECTS: join(scratch, 'personal-projects'), MPX_WORK: join(scratch, 'work-projects') };
+  try {
+    await mkdir(selected);
+    await writeFile(settingsFile, JSON.stringify({ autoMode: { soft_deny: ['$defaults', 'authored deny'], environment: ['authored environment'] } }));
+    assert.equal((await syncRuntimeScope(resolve('.'), config, scope, false, environment)).ok, true);
+    const { autoMode } = JSON.parse(await readFile(settingsFile, 'utf8'));
+    assert.deepEqual(autoMode.environment, ['authored environment']);
+    assert.deepEqual(autoMode.allow.slice(0, 1), ['$defaults']);
+    assert.equal(autoMode.allow.length, 2);
+    assert.ok(autoMode.allow[1].includes(environment.MPX_PROJECTS) && /merg/i.test(autoMode.allow[1]));
+    assert.deepEqual(autoMode.soft_deny.slice(0, 2), ['$defaults', 'authored deny']);
+    assert.equal(autoMode.soft_deny.length, 3);
+    assert.ok(autoMode.soft_deny[2].includes(environment.MPX_WORK) && /never merge/i.test(autoMode.soft_deny[2]));
+    assert.ok((await syncRuntimeScope(resolve('.'), config, scope, false, environment)).entries.every(entry => entry.status === 'unchanged'));
+
+    assert.equal((await syncRuntimeScope(resolve('.'), config, scope, false, {})).ok, true);
+    const withoutRoots = JSON.parse(await readFile(settingsFile, 'utf8')).autoMode;
+    assert.deepEqual(withoutRoots.allow, ['$defaults']);
+    assert.deepEqual(withoutRoots.soft_deny, ['$defaults', 'authored deny']);
+
+    const malformed = JSON.stringify({ autoMode: { allow: 'authored' } });
+    await writeFile(settingsFile, malformed);
+    assert.equal((await syncRuntimeScope(resolve('.'), config, scope, false, environment)).ok, false);
+    assert.equal(await readFile(settingsFile, 'utf8'), malformed);
+  } finally { await rm(scratch, { recursive: true, force: true }); }
+});
+
 test('Claude scopes import shared instructions natively while preserving authored CLAUDE.md content', async () => {
   const scratch = await mkdtemp(join(tmpdir(), 'mpx-runtime-claude-instructions-'));
   const selected = join(scratch, 'claude');
