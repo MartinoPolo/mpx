@@ -15,7 +15,7 @@ metadata:
   mpx:
     schemaVersion: 1
     skillPacks: [development]
-    defaultExposure: normal
+    defaultExposure: explicit-only
 ---
 
 # Unified Review

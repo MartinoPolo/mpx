@@ -13,7 +13,7 @@ metadata:
   mpx:
     schemaVersion: 1
     skillPacks: [personal]
-    defaultExposure: name-only
+    defaultExposure: explicit-only
 ---
 
 # Save this session as unfinished

@@ -8,7 +8,7 @@ metadata:
   mpx:
     schemaVersion: 1
     skillPacks: [development]
-    defaultExposure: name-only
+    defaultExposure: explicit-only
 ---
 
 # Check & Fix
