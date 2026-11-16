@@ -5,12 +5,13 @@ description: 'Color and styling rules for accessible, professional web designs'
 paths:
   - '**/*.css'
   - '**/*.scss'
+  - '**/*.pcss'
   - '**/*.tsx'
   - '**/*.jsx'
   - '**/*.vue'
   - '**/*.html'
   - '**/*.svelte'
-applyTo: '**/*.css, **/*.scss, **/*.tsx, **/*.jsx, **/*.vue, **/*.html, **/*.svelte'
+applyTo: '**/*.css, **/*.scss, **/*.pcss, **/*.tsx, **/*.jsx, **/*.vue, **/*.html, **/*.svelte'
 ---
 
 # CSS Color & Style Guide
