@@ -5,7 +5,7 @@ import { machineRootContext, STYLE_REINFORCEMENT } from './context.js';
 import { evaluateTool, editedPaths } from './safeguards/tools.js';
 import { repositoryRoot } from './safeguards/fallow.js';
 import { formatEditedFile } from './safeguards/format.js';
-import { claudePromptRunContext, recordClaudeStop, RUN_STATE_DIRECTORY, type ClaudeRunEvent } from './claude-run-attention.js';
+import { checkClaudeStop, claudeLedgerContext, HITL_LEDGER_DIRECTORY, type ClaudeRunEvent } from './hitl-ledger.js';
 import { CLAUDE_UNFINISHED_PROMPT, saveUnfinished } from './unfinished-command.js';
 
 export interface ClaudeHookInput extends ClaudeRunEvent { hook_event_name: string; source?: string; cwd?: string; transcript_path?: string; tool_name?: string; tool_input?: Record<string, unknown> }
@@ -14,9 +14,13 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // Counters the native post-summary footer that says to continue without asking, which would skip open questions.
 export const POST_COMPACTION_RESTART = 'Context was just compacted. Before continuing, re-read the plan, state, and critical files the summary names, and check in-flight work by its IDs. If the summary lists open questions or pending approvals, wait for the user instead of continuing past them.';
 /** Claude native context/tool transport. Claude appends PreCompact stdout to the summarizer instructions, after any `/compact` arguments. */
-export async function handleClaudeHook(event: ClaudeHookInput, contentRoot = root, env = process.env, runStateDirectory = RUN_STATE_DIRECTORY): Promise<ClaudeHookResult> {
+export async function handleClaudeHook(event: ClaudeHookInput, contentRoot = root, env = process.env, ledgerDirectory = HITL_LEDGER_DIRECTORY): Promise<ClaudeHookResult> {
   const result: ClaudeHookResult = { code: 0, stdout: '', stderr: '' };
-  if (event.hook_event_name === 'Stop') { await recordClaudeStop(event, runStateDirectory); return result; }
+  if (event.hook_event_name === 'Stop') {
+    const reason = await checkClaudeStop(event, ledgerDirectory);
+    if (reason) result.stdout = JSON.stringify({ decision: 'block', reason });
+    return result;
+  }
   const cwd = event.cwd ?? process.cwd();
   const unfinished = event.hook_event_name === 'UserPromptSubmit' && event.session_id ? event.prompt?.trim().match(CLAUDE_UNFINISHED_PROMPT) : null;
   if (unfinished && event.session_id) {
@@ -28,8 +32,8 @@ export async function handleClaudeHook(event: ClaudeHookInput, contentRoot = roo
   const currentRoot = await repositoryRoot(cwd);
   const isTrusted = (candidate: string) => currentRoot !== undefined && path.resolve(candidate) === path.resolve(currentRoot);
   if (event.hook_event_name === 'UserPromptSubmit') {
-    const runContext = await claudePromptRunContext(event, runStateDirectory);
-    result.stdout = JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: runContext ? `${STYLE_REINFORCEMENT}\n\n${runContext}` : STYLE_REINFORCEMENT } });
+    const ledgerContext = await claudeLedgerContext(event, ledgerDirectory);
+    result.stdout = JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: ledgerContext ? `${STYLE_REINFORCEMENT}\n\n${ledgerContext}` : STYLE_REINFORCEMENT } });
 
   } else if (event.hook_event_name === 'PreCompact') {
     try {

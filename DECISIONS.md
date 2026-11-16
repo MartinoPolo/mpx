@@ -11,7 +11,9 @@ conventions belong in `AGENTS.md`; rollout evidence and recovery belong in `migr
   orchestration status, and desktop attention. MPX may emit thin status events, but has no daemon,
   credential router, session or port registry, worktree service, or competing notification writer.
   Orca's setup script may ask `prepare-worktree.mjs` for per-worktree dev ports; the slot is derived
-  from sibling worktrees' own port files at setup time and never recorded elsewhere.
+  from sibling worktrees' own port files at setup time and never recorded elsewhere. The Claude
+  Stop hook keeps a disposable per-session ledger of open HITL items in the temp directory: a cache
+  of what the transcript already holds, never an authority.
 - **Keep independently chosen utilities independent.** MPX installation and retirement must not
   uninstall user utilities or absorb their state; ownership does not follow functional overlap.
 - **Support Git Bash as the Windows shell contract.** Preserve shell identity so native hooks run
@@ -129,6 +131,12 @@ conventions belong in `AGENTS.md`; rollout evidence and recovery belong in `migr
 - **Keep reporting links in native presentation instructions.** Inline link guidance in Pi's
   appended system instructions and Claude's output style, not general agent guidance or a deferred
   shared document.
+- **Make the latest message complete for the user.** Questions and to-dos keep one session-wide
+  number until closed, and every `# HITL` section accounts for each open item, because wake-ups
+  from background work bury earlier sections and per-message numbering made answers ambiguous. The
+  Claude Stop hook refuses a final message that drops, renames, or renumbers an open item, since
+  instructions alone did not hold. Readers such as Alfred Control Center identify an item by
+  session and number and need no marker in the text.
 
 - **Prefer native UI and tools.** MPX adds thin presentation and lifecycle data without replacing
   native tool rendering, questions, MCP, web tools, shortcuts, or transcript semantics.
