@@ -66,7 +66,8 @@ generated custom properties in the global stylesheet), the design tokens **compl
 library owns component-level tokens; the design system owns app-level semantics, the type scale,
 spacing philosophy, radius and shadow values for custom components, and motion standards.
 
-Spawn `mpx-context7-docs-fetcher` for the library's theming API before overriding anything.
+Read the library's theming API (a matching clone under `MPX_CLONED` first, then its public
+documentation) before overriding anything.
 
 ## Step 5: Write `designs/tokens.css`
 

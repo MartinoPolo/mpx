@@ -28,11 +28,10 @@ and delegation mechanics.
 
 ## Workflow
 
-1. **Fetch current runtime mechanics.** For runtime or library documentation available through
-   Context7, spawn the existing `mpx-context7-docs-fetcher` and ask for the active runtime's current
-   skill frontmatter, packaging, invocation, capability-grant, reload, and discovery mechanics with
-   runtime-source citations. For installed-runtime mechanics that Context7 does not cover, return a
-   bounded handoff asking the parent to read the installed runtime documentation and provide the
+1. **Fetch current runtime mechanics.** Read the active runtime's current skill frontmatter,
+   packaging, invocation, capability-grant, reload, and discovery mechanics from a matching clone
+   under `MPX_CLONED`, then its public documentation, with source citations. For installed-runtime
+   mechanics neither covers, return a bounded handoff asking the parent to read the installed runtime documentation and provide the
    cited findings. Treat only cited runtime facts as platform mechanics.
 
 2. **Gather requirements.** In one numbered request, ask for every item not supplied by

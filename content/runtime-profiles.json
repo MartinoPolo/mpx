@@ -48,9 +48,6 @@
       "browser": [
         "mcp__chrome-devtools__*"
       ],
-      "context": [
-        "mcp__context7__*"
-      ],
       "web": [
         "WebSearch",
         "WebFetch"
@@ -73,9 +70,6 @@
         "write"
       ],
       "browser": [
-        "ext:pi-mcp-adapter"
-      ],
-      "context": [
         "ext:pi-mcp-adapter"
       ],
       "web": [

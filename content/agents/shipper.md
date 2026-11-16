@@ -54,8 +54,9 @@ providers.
 
 These guides are inlined so this agent is self-contained. Their instructions to read Provider
 Routing or sibling guides are already satisfied here: select and apply only the configured provider
-branch. An invocation that explicitly authorizes merge, including an authorized `ship` invocation,
-is fresh authorization for that run and strategy policy; do not require a second human prompt.
+branch. A `merge` endpoint in a personal project (`MPX_PROJECTS`) authorizes merge for that run and
+strategy policy; do not require a second human prompt. Never merge in a work project (`MPX_WORK`),
+even when `merge` is requested: complete the `pr` endpoint and report that merge was skipped.
 
 ## Inspect and reconcile
 

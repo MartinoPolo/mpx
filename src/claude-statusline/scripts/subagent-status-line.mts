@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 // Tasks-panel status line: collapses every running sub-agent into one summary
-// row (count, tiers, tokens, longest elapsed) and records each agent in the
-// session state file the main bar's finished-agent tally reads.
+// row (count, tiers, tokens, longest elapsed). Stateless: each tick renders only
+// the payload it was given.
 //
 // Contract (verified against the 2.1.310 bundle): stdin is a JSON object
 // {columns, session_id, cwd, transcript_path, tasks:[{id,name,type,agentType,
@@ -14,131 +14,107 @@
 //
 // The summary hangs off the first running task: the panel only renders rows for
 // ids in the payload, so a session-wide line has nowhere of its own to live.
-// Terminal tasks stay in the payload for 30s (the bundle's eviction delay); they
-// are hidden too, because the main bar's tally already counts them.
-//
-// A task's tokens and elapsed time freeze the first tick it is seen terminal, so
-// a finished agent stops accruing time in the state file.
+// Terminal tasks stay in the payload for 30s (the bundle's eviction delay) and
+// are hidden too.
 
-import {
-    appendFileSync,
-    existsSync,
-    mkdirSync,
-    readdirSync,
-    realpathSync,
-    renameSync,
-    statSync,
-    unlinkSync,
-    writeFileSync,
-} from "node:fs";
+import { appendFileSync, existsSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { RESET, readStdin, toNonNegativeInt } from "./lib/statusline-ansi.mts";
+import { RESET, isNonNegativeInt, readStdin, toNonNegativeInt } from "./lib/statusline-ansi.mts";
 import { loadPalette } from "./lib/terminal-theme.mts";
-import { isSafeStatusIdentifier } from "./lib/compaction.mts";
-import {
-    TIER_COLORS,
-    TIER_ORDER,
-    UNKNOWN_TIER,
-    capitalize,
-    countLabel,
-    formatDuration,
-    formatTokens,
-    groupByOrder,
-    isTerminalStatus,
-    modelTier,
-    readSessionRecords,
-    serializeRecord,
-    sessionStateDir,
-    statusStyle,
-    type StateRecord,
-} from "./lib/subagent-history.mts";
 
 const PALETTE = loadPalette();
 const GRAY = PALETTE.gray;
 const DIM = PALETTE.dim;
+/** `●` U+25CF is in plain Cascadia Mono's cmap, so it never falls back to an emoji face. */
+const RUNNING_GLYPH = `${PALETTE.effortBudget}●${RESET}`;
 
-const CONFIG_DIR =
-    process.env.CLAUDE_CONFIG_DIR || `${process.env.HOME || homedir()}/.claude`;
-const STATE_DIR = sessionStateDir(CONFIG_DIR);
+const CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR || `${process.env.HOME || homedir()}/.claude`;
 
-const PRUNE_AFTER_DAYS = 7;
+/** Model tier colors; declaration order is the order the summary lists tiers in. */
+const TIER_COLORS: Readonly<Record<string, string>> = {
+    opus: PALETTE.accent,
+    sonnet: PALETTE.contextYellow,
+    haiku: PALETTE.tierHaiku,
+    fable: PALETTE.contextOrange
+};
+const UNKNOWN_TIER = "unknown";
+const TIER_ORDER = [...Object.keys(TIER_COLORS), UNKNOWN_TIER];
+
+const TERMINAL_STATUSES = ["completed", "failed", "killed"];
 
 /** One task from the payload, every field already flattened to a string. */
 export interface TaskFields {
     id: string;
     model: string;
-    effort: string;
     status: string;
     startTime: string;
     tokenCount: string;
 }
 
-export function taskRecord(task: TaskFields, nowMs: number): StateRecord {
-    const startTime = toNonNegativeInt(task.startTime, 0);
-    return {
-        id: task.id,
-        tier: modelTier(task.model) || UNKNOWN_TIER,
-        effort: task.effort,
-        tokens: task.tokenCount === "" ? "0" : task.tokenCount,
-        elapsedMs: String(startTime > 0 ? nowMs - startTime : 0),
-        status: task.status,
-    };
+/** Normalizes either an alias ("sonnet") or a full id ("claude-sonnet-5.5"). */
+function modelTier(model: string): string {
+    return Object.keys(TIER_COLORS).find((tier) => model.includes(tier)) ?? UNKNOWN_TIER;
+}
+
+/** `95000` -> `1m35s`. Whole seconds, matching the clock the panel ticks on. */
+export function formatDuration(milliseconds: number): string {
+    const totalSeconds = Math.max(0, Math.trunc(milliseconds / 1000));
+    if (totalSeconds < 60) {
+        return `${totalSeconds}s`;
+    }
+    if (totalSeconds < 3600) {
+        return `${Math.trunc(totalSeconds / 60)}m${String(totalSeconds % 60).padStart(2, "0")}s`;
+    }
+    const minutes = Math.trunc((totalSeconds % 3600) / 60);
+    return `${Math.trunc(totalSeconds / 3600)}h${String(minutes).padStart(2, "0")}m`;
 }
 
 /**
- * Merges this tick's records into the session state. A record already terminal
- * keeps its frozen tokens and elapsed time; everything else is overwritten. New
- * ids append in encounter order, existing ids keep their original position.
+ * 25032 -> 25.0k ; below 1000 stays exact. Integer arithmetic on purpose: 25032
+ * rounds to 25082, whose hundreds digit is 0, so it reads 25.0k rather than the
+ * 25.1k a float divide would give.
  */
-export function mergeSessionState(fresh: StateRecord[], prior: StateRecord[]): StateRecord[] {
-    // Map insertion order is first-seen order, and re-setting an existing key
-    // updates the value without moving it — which is exactly the freeze rule.
-    const merged = new Map<string, StateRecord>();
-    for (const record of prior) {
-        if (record.id !== "") merged.set(record.id, record);
+export function formatTokens(value: number): string {
+    if (isNonNegativeInt(value) && value >= 1000) {
+        const rounded = value + 50;
+        return `${Math.trunc(rounded / 1000)}.${Math.trunc((rounded % 1000) / 100)}k`;
     }
-    for (const record of fresh) {
-        const existing = merged.get(record.id);
-        if (existing !== undefined && isTerminalStatus(existing.status)) continue;
-        merged.set(record.id, record);
-    }
-    return [...merged.values()];
+    return String(value);
 }
 
-/** `● 3 running · 2×Sonnet 1×Opus · 412.3k tokens · 4m12s`, or "" when none run. */
-export function buildRunningSummary(running: StateRecord[]): string {
+/** `● 3 running · 1×Opus 2×Sonnet · 412.3k tokens · 4m12s`, or "" when none run. */
+export function buildRunningSummary(running: readonly TaskFields[], nowMs: number): string {
     if (running.length === 0) return "";
-    const members = running.map((record) => ({
-        label: record.tier,
-        tokens: Number.parseFloat(record.tokens) || 0,
-        drifted: false,
-    }));
-    const tiers = groupByOrder(members, TIER_ORDER)
-        .map((group) => `${TIER_COLORS[group.label] ?? GRAY}${countLabel(group.count, capitalize(group.label))}${RESET}`)
+    const tierCounts = new Map<string, number>();
+    for (const task of running) {
+        const tier = modelTier(task.model);
+        tierCounts.set(tier, (tierCounts.get(tier) ?? 0) + 1);
+    }
+    const tiers = [...tierCounts]
+        .sort(([left], [right]) => TIER_ORDER.indexOf(left) - TIER_ORDER.indexOf(right))
+        .map(([tier, count]) => `${TIER_COLORS[tier] ?? GRAY}${count}×${tier[0]!.toUpperCase()}${tier.slice(1)}${RESET}`)
         .join(" ");
-    const tokens = members.reduce((sum, member) => sum + member.tokens, 0);
-    const longest = Math.max(...running.map((record) => Number.parseFloat(record.elapsedMs) || 0));
-    const status = statusStyle("running");
+    const tokens = running.reduce((sum, task) => sum + Math.trunc(Number.parseFloat(task.tokenCount) || 0), 0);
+    const longest = Math.max(
+        ...running.map((task) => {
+            const startTime = toNonNegativeInt(task.startTime, 0);
+            return startTime > 0 ? nowMs - startTime : 0;
+        })
+    );
     return (
-        `${status.color}${status.glyph}${RESET} ${running.length} running` +
+        `${RUNNING_GLYPH} ${running.length} running` +
         ` ${DIM}·${RESET} ${tiers}` +
-        ` ${DIM}· ${formatTokens(Math.trunc(tokens))} tokens · ${formatDuration(longest)}${RESET}`
+        ` ${DIM}· ${formatTokens(tokens)} tokens · ${formatDuration(longest)}${RESET}`
     );
 }
 
-/** jq's `tostring`: strings pass through, everything else renders as JSON. */
-function toText(value: unknown): string {
-    if (typeof value === "string") return value;
-    return JSON.stringify(value) ?? "";
-}
-
-/** jq's `//`: null and false fall through to the alternative. */
+/** jq's `//` then `tostring`: null and false fall through, non-strings render as JSON. */
 function orDefault(value: unknown, fallback: string): string {
     if (value === null || value === undefined || value === false) return fallback;
-    return toText(value);
+    return typeof value === "string" ? value : (JSON.stringify(value) ?? "");
 }
 
 export function extractTasks(payload: unknown): TaskFields[] {
@@ -149,42 +125,11 @@ export function extractTasks(payload: unknown): TaskFields[] {
         return {
             id: orDefault(task.id, ""),
             model: orDefault(task.model, ""),
-            effort: orDefault(task.effort, ""),
             status: orDefault(task.status, ""),
             startTime: orDefault(task.startTime, "0"),
-            tokenCount: orDefault(task.tokenCount, "0"),
+            tokenCount: orDefault(task.tokenCount, "0")
         };
     });
-}
-
-/**
- * Writes through a temp file: the panel kills in-flight scripts when a new
- * update arrives, and a tick cancelled mid-write would otherwise truncate the
- * session tally.
- */
-function writeState(stateFile: string, records: StateRecord[]): void {
-    const temporaryFile = `${stateFile}.tmp`;
-    try {
-        const body = records.map((record) => `${serializeRecord(record)}\n`).join("");
-        writeFileSync(temporaryFile, body);
-        if (statSync(temporaryFile).size > 0) renameSync(temporaryFile, stateFile);
-    } catch {
-        // A tally that fails to persist is not worth breaking the panel over.
-    }
-}
-
-/** `find -mtime +7 -delete`: strictly more than seven whole days old. */
-function pruneStaleState(nowMs: number): void {
-    try {
-        for (const entry of readdirSync(STATE_DIR)) {
-            if (!entry.endsWith(".tsv")) continue;
-            const path = `${STATE_DIR}/${entry}`;
-            const ageDays = Math.floor((nowMs - statSync(path).mtimeMs) / 86400000);
-            if (ageDays > PRUNE_AFTER_DAYS) unlinkSync(path);
-        }
-    } catch {
-        // Pruning is housekeeping; a missing or busy file must not stop a render.
-    }
 }
 
 function main(): void {
@@ -196,10 +141,7 @@ function main(): void {
     // it to stop.
     if (existsSync(`${CONFIG_DIR}/subagent-statusline-debug`)) {
         try {
-            appendFileSync(
-                `${CONFIG_DIR}/subagent-statusline-debug.jsonl`,
-                `${input.replace(/\n+$/, "")}\n`,
-            );
+            appendFileSync(`${CONFIG_DIR}/subagent-statusline-debug.jsonl`, `${input.replace(/\n+$/, "")}\n`);
         } catch {
             // Debug capture never blocks a render.
         }
@@ -212,37 +154,17 @@ function main(): void {
         return;
     }
 
-    const sessionId = orDefault((payload as { session_id?: unknown })?.session_id, "nosession") || "nosession";
-    if (!isSafeStatusIdentifier(sessionId)) return;
+    const tasks = extractTasks(payload).filter((task) => task.id !== "");
+    if (tasks.length === 0) return;
 
     // Second granularity: elapsed time is rendered in whole seconds, so a
     // millisecond clock would only add render churn.
     const nowMs = Math.floor(Date.now() / 1000) * 1000;
-    const records = extractTasks(payload)
-        .filter((task) => isSafeStatusIdentifier(task.id))
-        .map((task) => taskRecord(task, nowMs));
-    if (records.length === 0) return;
-
-    const stateFile = `${STATE_DIR}/${sessionId}.tsv`;
-    if (!existsSync(stateFile)) {
-        try {
-            mkdirSync(STATE_DIR, { recursive: true });
-        } catch {
-            // Absent state only costs the tally, not the rows.
-        }
-        // Prune on first tick of a session only; a scan on every tick would be
-        // paid several times a second for a directory that changes once.
-        pruneStaleState(nowMs);
-    }
-    writeState(stateFile, mergeSessionState(records, readSessionRecords(stateFile)));
-
-    const running = records.filter((record) => !isTerminalStatus(record.status));
+    const running = tasks.filter((task) => !TERMINAL_STATUSES.includes(task.status));
     const summaryId = running[0]?.id;
-    const summary = buildRunningSummary(running);
+    const summary = buildRunningSummary(running, nowMs);
     process.stdout.write(
-        records
-            .map((record) => `${JSON.stringify({ id: record.id, content: record.id === summaryId ? summary : "" })}\n`)
-            .join(""),
+        tasks.map((task) => `${JSON.stringify({ id: task.id, content: task.id === summaryId ? summary : "" })}\n`).join("")
     );
 }
 

@@ -37,12 +37,13 @@ Agents may run in sandboxes. Report inaccessible paths or websites, why access w
 available error or block details.
 
 Requests to answer, explain, inspect, or report are read-only. Requested changes include
-implementation and verification. Commits, pushes, PRs, and merges require a request or an explicitly
-invoked workflow.
+implementation, verification, and delivery: commit and push this session's finished work without
+asking. In personal projects (`MPX_PROJECTS`), also open and merge its PRs. In work projects
+(`MPX_WORK`), stop at a draft PR or MR; Verotel follows its own Gerrit workflow.
 
 During implementation, attempt to fix even unrelated errors, especially blockers. If a fix attempt
 fails, undo only that attempt. Always report both resolved and unresolved issues to the user. Commit
-unrelated fixes separately if committing is authorized.
+unrelated fixes separately.
 
 Run the narrowest relevant checks first, then repository checks. Add tests where the repository
 already uses them and where they validate behavior.
@@ -65,7 +66,10 @@ scripts and logs you created; keep only evidence the user still needs to review.
 work is merged or abandoned, remove it. Prefer Orca: `orca worktree ps`, then
 `orca worktree rm --worktree path:<path> --delete-branch`; without Orca, use `git worktree remove`
 and `git branch -d`. Never remove a worktree with uncommitted changes, unmerged commits, or live
-sessions you did not start; report it instead.
+sessions you did not start; report it instead. Before deleting a tree you created, stop the
+processes you started in it (browsers, servers, watchers) and leave it. If deletion still fails, or
+you are unsure it is safe, append the path with its reason and blocker to
+`C:\_ALFRED\TO_BE_DELETED.md` instead of asking.
 
 Before any other `orca` command, read `$MPX_PROJECTS/mpx/content/instructions/shared/ORCA.md`.
 
@@ -100,10 +104,10 @@ decisions. The parent or a reasoning-capable specialist synthesizes their findin
 the task scope, relevant constraints, stopping condition, and required evidence. The parent evaluates
 findings and owns decisions. Prefer declared agent model and effort defaults; use supported overrides
 only when needed. For external-tool implementation questions, check a relevant clone under
-`MPX_CLONED`; use Context7 for current API documentation, with public web fallback.
+`MPX_CLONED`, then public documentation.
 
 ## Preferences
 
-Commands suggested for manual execution use Bash; use PowerShell for Windows-native tooling. In Bash, redirect to `/dev/null`, never `nul`. Use conventional commits when authorized. When a
+Commands suggested for manual execution use Bash; use PowerShell for Windows-native tooling. In Bash, redirect to `/dev/null`, never `nul`. Use conventional commits. When a
 workflow step fails and you find a working solution, record that solution in the most specific
 durable place (the project's docs or AGENTS.md, or memory for machine-specific setup) and report it.

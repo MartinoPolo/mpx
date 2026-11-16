@@ -53,7 +53,8 @@ the gaps.
 
 For each gap:
 
-1. Spawn `mpx-context7-docs-fetcher` against the project's component library.
+1. Read the component library's docs: a matching clone under `MPX_CLONED` first, then its public
+   documentation.
 2. Install with the project's configured package manager and its supported one-off executor.
    shadcn projects: `<pm-exec> shadcn@latest add <name> --yes --overwrite`, using
    `shadcn-svelte@latest` on Svelte. Other libraries: their documented install command.

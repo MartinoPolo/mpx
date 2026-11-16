@@ -39,9 +39,8 @@ For questions or root-cause analysis about an external tool or library, resolve 
 runtime and check that configured repository collection first. If a clone matches the relevant
 project and version or source, use its code as the primary implementation evidence.
 
-Use the Context7 MCP tools (`resolve-library-id`, then `query-docs`) or web documentation for
-current public API and version facts, and when no matching clone exists. Do not infer an API from
-local `node_modules` or from memory.
+Use public documentation for current public API and version facts, and when no matching clone
+exists. Do not infer an API from local `node_modules` or from memory.
 
 ## Report
 

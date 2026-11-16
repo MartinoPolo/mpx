@@ -1,13 +1,15 @@
 #!/usr/bin/env node
-// Claude Code `statusLine` renderer: one JSON object on stdin, the rendered
-// status text on stdout. It is re-run on every render tick, so the render path
-// stays cheap — a single git call, cache reads, and nothing else. Claude Code
-// cancels a status line that blocks, so every network touch is pushed into a
-// detached child (`--warm-czk`, status-line-mr-refresh.mjs) that
-// only ever writes a cache for a *later* render to pick up.
+// Claude Code `statusLine` renderer: one JSON object on stdin, three rows of
+// status text on stdout. It is re-run on every render tick and Claude Code
+// cancels a status line that blocks, so the render path is one git call plus
+// cache reads, with no network and no background processes.
+//
+//   P · session name · #6fdaff6d · project/worktree
+//   Opus 5 (1M) · ◆◆◆◇◇ · 84k ████░░ · 󰘕 3
+//   5h ██░░ 37% 2h · 7d ████ 62% 3d
 
-import { execFileSync, spawn } from "node:child_process";
-import { existsSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,131 +26,42 @@ import {
     visibleWidth
 } from "./lib/statusline-ansi.mts";
 import { loadPalette } from "./lib/terminal-theme.mts";
-import {
-    type CompactionStyle,
-    autoCompactLimit,
-    buildCompactionLines,
-    readCompactionHistory
-} from "./lib/compaction.mts";
-import {
-    type SubagentSummary,
-    TIER_COLORS,
-    capitalize,
-    countLabel,
-    formatDuration,
-    formatTokens,
-    readSessionRecords,
-    sessionStateFile,
-    summarizeFinishedAgents
-} from "./lib/subagent-history.mts";
-
-export { cacheKey };
+import { autoCompactLimit, readCompactionHistory } from "./lib/compaction.mts";
 
 // --- Theme -------------------------------------------------------------------
 
-/**
- * Every color below is derived from the terminal's own color scheme and the
- * launching account's background, rather than being a fixed xterm-256 index —
- * see lib/terminal-theme.mts for why, and for the blend factors that keep the
- * default scheme looking exactly as it did before. Switching scheme in Windows
- * Terminal now recolors the bar; the hue picker that used to live here (`COLOR`
- * plus a nine-entry ACCENT_BY_THEME table) is gone, because the scheme is the
- * single place that choice belongs.
- */
+/** Colors derive from the terminal's own scheme; see lib/terminal-theme.mts. */
 const PALETTE = loadPalette();
 
 const GRAY = PALETTE.gray;
 const DIM = PALETTE.dim;
-const AMBER = PALETTE.amber;
-
 const ACCENT = PALETTE.accent;
 const BAR_EMPTY = PALETTE.barEmpty;
-
-/**
- * Brightest foreground, spent on the one field that answers "where am I" — the
- * directory name. Everything else on that line is gray, so the eye lands there
- * first without any glyph or box drawing to carry the emphasis.
- */
+/** Brightest foreground, spent only on the folder that answers "where am I". */
 const WHITE = PALETTE.white;
-
-/** Warning color for a state the user has to act on (coral red). */
+/** A state the user has to act on: quota data too old to trust. */
 const WARN = PALETTE.warn;
-
-// Age notes — "last fetched 3d ago", "this cache is 11m old" — are always DIM,
-// never WARN. They answer "how much do I trust the number beside me", which is
-// context, not a call to action; coloring them as warnings trains the eye to
-// ignore coral everywhere else. The one exception is the quota line, where an
-// age past USAGE_WARN_SECONDS means the percentages themselves are wrong.
-
-// Context-consumption escalation (absolute input tokens): the 🔥 token count
-// shifts yellow -> orange -> red as context fills, so a heavy session is
-// obvious at a glance.
-const CONTEXT_YELLOW = PALETTE.contextYellow; // >=100k tokens
-const CONTEXT_ORANGE = PALETTE.contextOrange; // >=140k tokens
-const CONTEXT_RED = PALETTE.contextRed; // >=180k tokens
-
-/**
- * Compaction history ranks its own fields: `auto` is the only thing on the row
- * you did not decide, so it is the only thing that gets a color of its own.
- * `manual`, the token change and the tree glyphs stay at reading weight, and the
- * clock drops to DIM — knowing a compaction happened at 11:48 rather than 11:12
- * never changes what you do next.
- */
-const COMPACTION_STYLE: CompactionStyle = {
-    tree: DIM,
-    auto: AMBER,
-    manual: GRAY,
-    tokens: GRAY,
-    time: DIM,
-    reset: RESET
-};
-
-// Line-edit colors: green additions, red deletions.
-const ADD = PALETTE.add;
-const DEL = PALETTE.del;
-
-// Git/MR colors: sand for "never left this machine" (local branch, draft MR),
-// blue for the MR/PR reference itself.
-const LOCAL = PALETTE.local;
-const DRAFT = PALETTE.local;
-const MR = PALETTE.mr;
-
-/**
- * Session name (line 1): bold magenta. It is the title of the thing you are
- * looking at, so it is the one field allowed weight as well as hue — every
- * other rank on this bar is carried by color alone. Lavender fg(141) sat too
- * close to the panel's `max` effort purple to read as a heading of its own.
- */
+const CONTEXT_YELLOW = PALETTE.contextYellow;
+const CONTEXT_ORANGE = PALETTE.contextOrange;
+const CONTEXT_RED = PALETTE.contextRed;
+/** The session name is the row's title, so it alone carries weight as well as hue. */
 const SESSION = `${BOLD}${PALETTE.session}`;
 
 // --- Glyph vocabulary --------------------------------------------------------
 
-// The terminal font is Cascadia Mono NF (installed 2026-07-30, set in Windows
-// Terminal settings.json), which carries the full Nerd Font symbol set in the
-// Private Use Area on top of glyphs identical to plain Cascadia Mono. That is
-// what licenses the pictograms below; every other glyph on the bar
-// (≡ ◆ ◇ █ ░ ↑ ↓ ·) was verified against plain Cascadia Mono's cmap, so a
-// fallback to the non-NF font degrades only those icons, not the layout.
-//
-// Anything outside that verified set font-falls-back to Segoe UI Emoji, which
-// draws double-width into the one cell the terminal reserved and smears over
-// the neighbouring text — the reason ✎ ⟳ ⊘ ⇅ ✗ ✔ were purged, and the reason
-// new glyphs get added to the cmap probe in the docs before they get used here.
+// Windows Terminal draws this bar with `Cascadia Mono, Symbols Nerd Font`, and
+// Orca with Cascadia Mono. Every glyph must be in plain Cascadia Mono's cmap
+// (◆ ◇ █ ░ ● ·) or be a Nerd Font Private Use Area icon; anything else falls
+// back to Segoe UI Emoji, which draws double-width over its neighbour. That is
+// why ⟳ ↻ ✎ ⊘ ⇅ ✗ ✔ are never used. Probe a new glyph's cmap before adding it.
 
-/** Git branch glyph (U+E725, Nerd Font devicons) — compact and centred, unlike the full-height powerline U+E0A0 it replaced. */
-const BRANCH_ICON = "";
+/** Nerd Font `md-arrow_collapse_vertical` (U+F0615): the compaction counter. */
+const COMPACTION_ICON = "󰘕";
 
-/** VS Code logo (U+F0A1E, Nerd Font Material Design set) — drawn larger than the devicon U+E70C it replaced. */
-const VSCODE_ICON = "󰨞";
-
-/**
- * Braille pattern blank (U+2800): the first character of any indented row.
- * Claude Code trims whitespace off each status-line row before rendering it, so
- * an indent made of plain spaces never reaches the screen. U+2800 draws as an
- * empty cell but is not whitespace to any trim, and once it survives as the
- * first character the ordinary spaces behind it are interior and safe.
- */
-export const INDENT_GUARD = "⠀";
+const CONTEXT_BAR_CELLS = 6;
+const QUOTA_BAR_CELLS = 4;
+const LOCATION_LABEL_WIDTH = 20;
+const ELLIPSIS = "…";
 
 /**
  * "Opus 5 (1M context)" -> "Opus 5 (1M)". The payload's display_name spells the
@@ -158,14 +71,7 @@ export function trimModelName(model: string): string {
     return model.replace(/\((\d+[KMG]?) context\)/i, "($1)");
 }
 
-/**
- * The one field separator, on every line. `|` drew a wall between fields that
- * are merely adjacent, and once the git section spelled its states as words
- * (`in sync 2 staged 28 modified`) something lighter was needed *inside* a
- * section too — so one glyph now means "next field" at every level rather than
- * two glyphs meaning two ranks of the same thing. U+00B7 renders in both
- * Cascadia Mono and Consolas.
- */
+/** The one field separator on every row. U+00B7 renders in Cascadia Mono and Consolas. */
 export const SEPARATOR = ` ${GRAY}·${RESET} `;
 
 /** Joins pre-colored segments, dropping the empty ones so no separator dangles. */
@@ -203,44 +109,21 @@ export function toFileUrl(absolutePath: string): string {
     return `file:///${encodeURI(forwardSlashed).replace(/#/g, "%23").replace(/\?/g, "%3F")}`;
 }
 
-/** Pipeline state -> the color and label the MR block renders for it. */
-const CI_STATE_BY_PIPELINE: Record<string, { color: string; text: string }> = {
-    SUCCESS: { color: ADD, text: "ci ok" },
-    FAILED: { color: WARN, text: "ci fail" },
-    RUNNING: { color: CONTEXT_YELLOW, text: "ci run" },
-    CANCELED: { color: GRAY, text: "ci skip" },
-    SKIPPED: { color: GRAY, text: "ci skip" }
-};
-
 // --- Cache layout ------------------------------------------------------------
 
 const CACHE_DIR = tmpdir();
 
 /**
- * ASCII Unit Separator. The on-disk caches (written here and by
- * status-line-mr-refresh.mjs) are delimited with it despite the `.tsv` names, so
- * a field that happens to contain a tab or a space can never shift a column.
+ * ASCII Unit Separator. The quota cache is delimited with it so a field that
+ * happens to contain a tab or a space can never shift a column.
  */
 const UNIT_SEPARATOR = "\x1f";
 
 const USAGE_STALE_SECONDS = 900; // 15 min: cached quota older than this gets a muted age note
 const USAGE_WARN_SECONDS = 1800; // 30 min: older than this is flagged coral (genuinely outdated)
 
-const CZK_CACHE = path.join(CACHE_DIR, "claude-czk-cache.txt");
-const CZK_CACHE_TTL = 3600; // 1 hour
-
-const MR_TTL = 90; // refetch cached MR/PR data past this
-const MR_ATTEMPT_MIN = 30; // floor between refresh attempts (also covers failures / no-MR)
-const MR_STALE_NOTE = 600; // show an age note past this
-
-const FX_ENDPOINT = "https://api.frankfurter.dev/v1/latest?base=USD&symbols=CZK";
-
 const HOME_DIR = process.env.HOME || process.env.USERPROFILE || "";
 
-/**
- * Account (work vs personal). `.claude-work` = work account (ccw/ccwd aliases);
- * anything else (default ~/.claude via cc/ccd) = personal.
- */
 function resolveConfigDir(): string {
     return process.env.CLAUDE_CONFIG_DIR || `${HOME_DIR}/.claude`;
 }
@@ -273,10 +156,10 @@ export function resolveAccountLabel(configDir: string): AccountLabel {
 /**
  * Quota cache keyed by account, NOT by config-dir path — the path arrives in two
  * forms (C:\Users\... vs /c/Users/...) which used to split one account across
- * two caches and double the fetch rate.
+ * two caches.
  */
-function usagePaths(account: AccountLabel) {
-    return { cache: path.join(CACHE_DIR, `claude-usage-${account}.tsv`) };
+function usageCachePath(account: AccountLabel): string {
+    return path.join(CACHE_DIR, `claude-usage-${account}.tsv`);
 }
 
 // --- Small filesystem/format primitives --------------------------------------
@@ -285,7 +168,6 @@ function nowSeconds(): number {
     return Math.floor(Date.now() / 1000);
 }
 
-/** Seconds-resolution mtime, matching the `stat -c %Y` the caches were sized against. */
 function mtimeSeconds(file: string): number | undefined {
     try {
         return Math.floor(statSync(file).mtimeMs / 1000);
@@ -329,9 +211,8 @@ function incrementDecimalDigits(digits: string): string {
 }
 
 /**
- * C `printf("%.*f")`, which is what both `format_pct` and `round_n` ultimately
- * were. It differs from `toFixed` on exact ties: libc rounds half to even
- * (0.5 -> "0", 1.5 -> "2", 2.5 -> "2") while `toFixed` always rounds up.
+ * C `printf("%.*f")`. It differs from `toFixed` on exact ties: libc rounds half
+ * to even (0.5 -> "0", 1.5 -> "2", 2.5 -> "2") while `toFixed` always rounds up.
  */
 export function formatFixed(value: number, decimals: number): string {
     if (!Number.isFinite(value)) {
@@ -378,17 +259,9 @@ export function formatPct(raw: string): string {
     return formatFixed(numericPrefix(raw), 0);
 }
 
-/** `awk printf("%.*f")` over a raw stdin field; empty for absent values. */
-export function roundN(raw: string, decimals: number): string {
-    if (raw === "" || raw === "null") {
-        return "";
-    }
-    return formatFixed(numericPrefix(raw), decimals);
-}
-
 /**
- * `basename`, splitting on both separators: under Git Bash it treats a Windows
- * `\` as a path separator, so a `C:\...\repo` cwd must still yield `repo`.
+ * `basename`, splitting on both separators so a `C:\...\repo` cwd still yields
+ * `repo` and git's forward-slashed paths do too.
  */
 export function basename(input: string): string {
     if (input === "") {
@@ -417,9 +290,9 @@ const BACKSLASH_ESCAPES: Record<string, string> = {
 
 /**
  * The bash renderer emitted every line through `printf '%b'`, which expands
- * backslash escapes in the *data* too — a branch or session name containing
- * `\t` really did render as a tab. Reproduced so no payload can diverge.
- * `\c` truncates the rest of the output, newline included.
+ * backslash escapes in the *data* too — a session name containing `\t` really
+ * did render as a tab. Reproduced so no payload can diverge. `\c` truncates the
+ * rest of the output, newline included.
  */
 export function expandBackslashEscapes(input: string): { text: string; truncated: boolean } {
     if (!input.includes("\\")) {
@@ -479,7 +352,7 @@ export function expandBackslashEscapes(input: string): { text: string; truncated
  * "this is a bar". The context bar passes its own escalating color instead, so
  * the bar and the token count beside it always agree.
  */
-export function progressBar(pct: number, width = 10, color: string = ACCENT): string {
+export function progressBar(pct: number, width: number, color: string = ACCENT): string {
     const filled = Math.trunc((pct * width) / 100);
     let out = "";
     for (let i = 0; i < width; i++) {
@@ -490,8 +363,8 @@ export function progressBar(pct: number, width = 10, color: string = ACCENT): st
 
 /**
  * Accepts either a Unix epoch (stdin `rate_limits.*.resets_at`) or an ISO-8601
- * string (endpoint fallback). Renders a compact "1h 21m" / "5d 5h", or nothing
- * once the reset is in the past.
+ * string. Renders the largest whole unit — "3d", "2h", "45m" — or nothing once
+ * the reset is in the past.
  */
 export function timeUntil(value: string, now: number = nowSeconds()): string {
     if (value === "" || value === "null") {
@@ -511,16 +384,7 @@ export function timeUntil(value: string, now: number = nowSeconds()): string {
     if (diff <= 0) {
         return "";
     }
-    const days = Math.trunc(diff / 86400);
-    const hours = Math.trunc((diff % 86400) / 3600);
-    const minutes = Math.trunc((diff % 3600) / 60);
-    if (days > 0) {
-        return `${days}d ${hours}h`;
-    }
-    if (hours > 0) {
-        return `${hours}h ${minutes}m`;
-    }
-    return `${minutes}m`;
+    return humanAge(diff);
 }
 
 /** Compact age like "2d", "2h", "7m", "45s". */
@@ -541,6 +405,21 @@ export function humanAge(seconds: number | string): string {
     return `${value}s`;
 }
 
+function truncateDisplayLabel(label: string, maximumWidth: number): string {
+    if (visibleWidth(label) <= maximumWidth) {
+        return label;
+    }
+    const contentWidth = maximumWidth - visibleWidth(ELLIPSIS);
+    let truncated = "";
+    for (const character of label) {
+        if (visibleWidth(truncated + character) > contentWidth) {
+            break;
+        }
+        truncated += character;
+    }
+    return `${truncated}${ELLIPSIS}`;
+}
+
 // --- stdin payload -----------------------------------------------------------
 
 export interface PayloadFields {
@@ -551,8 +430,6 @@ export interface PayloadFields {
     transcriptPath: string;
     maxContext: string;
     sessionTokensIn: string;
-    contextUsedPct: string;
-    sessionCostUsdRaw: string;
     effortLevel: string;
     fiveRaw: string;
     fiveResets: string;
@@ -606,8 +483,6 @@ export function extractPayloadFields(input: string): PayloadFields {
         transcriptPath: field(root, ["transcript_path"]),
         maxContext: field(root, ["context_window", "context_window_size"], 200000),
         sessionTokensIn: field(root, ["context_window", "total_input_tokens"]),
-        contextUsedPct: field(root, ["context_window", "used_percentage"]),
-        sessionCostUsdRaw: field(root, ["cost", "total_cost_usd"]),
         effortLevel: field(root, ["effort", "level"]),
         fiveRaw: field(root, ["rate_limits", "five_hour", "used_percentage"]),
         fiveResets: field(root, ["rate_limits", "five_hour", "resets_at"]),
@@ -616,157 +491,7 @@ export function extractPayloadFields(input: string): PayloadFields {
     };
 }
 
-// --- Git ---------------------------------------------------------------------
-
-export interface GitStatus {
-    branch: string;
-    hasUpstream: boolean;
-    hasAheadBehind: boolean;
-    ahead: number;
-    behind: number;
-    staged: number;
-    unstaged: number;
-    conflicts: number;
-    untracked: number;
-}
-
-export function parsePorcelainV2(output: string): GitStatus {
-    const status: GitStatus = {
-        branch: "",
-        hasUpstream: false,
-        hasAheadBehind: false,
-        ahead: 0,
-        behind: 0,
-        staged: 0,
-        unstaged: 0,
-        conflicts: 0,
-        untracked: 0
-    };
-    const lines = output.split("\n");
-    lines.pop(); // a final unterminated line is never consumed by `while read`
-    for (const line of lines) {
-        if (line.startsWith("# branch.head ")) {
-            status.branch = line.slice("# branch.head ".length);
-        } else if (line.startsWith("# branch.upstream ")) {
-            status.hasUpstream = true;
-        } else if (line.startsWith("# branch.ab ")) {
-            status.hasAheadBehind = true;
-            const fields = line.trim().split(/\s+/);
-            status.ahead = numericPrefix((fields[2] ?? "").replace(/^\+/, ""));
-            status.behind = numericPrefix((fields[3] ?? "").replace(/^-/, ""));
-        } else if (line.startsWith("1 ") || line.startsWith("2 ")) {
-            const xy = line.trim().split(/\s+/)[1] ?? "";
-            if (xy.slice(0, 1) !== ".") {
-                status.staged++;
-            }
-            if (xy.slice(1, 2) !== ".") {
-                status.unstaged++;
-            }
-        } else if (line.startsWith("u ")) {
-            status.conflicts++;
-        } else if (line.startsWith("? ")) {
-            status.untracked++;
-        }
-    }
-    if (status.branch === "(detached)") {
-        status.branch = "detached";
-    }
-    return status;
-}
-
-/**
- * The branch-state line is deliberately quiet: it restates work you already
- * know about (you made those edits), so everything routine is DIM and symbolic
- * — `≡` in sync, `+n` staged, `!n` modified, `?n` untracked. Color survives
- * only where git is telling you something you might not know: a diverged or
- * deleted upstream, a conflict, an unpushed/unpulled count.
- *
- * An unpushed count links to `compareUrl` when the caller has one: commits
- * ahead of the default branch are the ones a PR would carry, so the count is
- * the natural place to click through to the compare view.
- */
-export function buildGitSigns(status: GitStatus, compareUrl = ""): string {
-    if (status.branch === "") {
-        return "";
-    }
-    if (!status.hasUpstream) {
-        return `${LOCAL}local${RESET}`;
-    }
-    // An upstream with no branch.ab line is exactly how git reports a deleted
-    // remote branch.
-    if (!status.hasAheadBehind) {
-        return `${WARN}remote deleted${RESET}`;
-    }
-    const unpushed = (color: string, label: string): string =>
-        `${color}${compareUrl === "" ? label : hyperlink(compareUrl, label)}${RESET}`;
-    if (status.ahead > 0 && status.behind > 0) {
-        return unpushed(WARN, `↑${status.ahead}↓${status.behind}`);
-    }
-    if (status.ahead > 0) {
-        return unpushed(ADD, `↑${status.ahead}`);
-    }
-    if (status.behind > 0) {
-        return `${DEL}↓${status.behind}${RESET}`;
-    }
-    return `${DIM}≡${RESET}`;
-}
-
-/** One segment per non-zero count; the caller joins them. */
-export function buildGitDirt(status: GitStatus): string[] {
-    if (status.branch === "") {
-        return [];
-    }
-    const segments: string[] = [];
-    if (status.staged > 0) {
-        segments.push(`${DIM}+${status.staged}${RESET}`);
-    }
-    if (status.unstaged > 0) {
-        segments.push(`${DIM}!${status.unstaged}${RESET}`);
-    }
-    if (status.untracked > 0) {
-        segments.push(`${DIM}?${status.untracked}${RESET}`);
-    }
-    if (status.conflicts > 0) {
-        segments.push(`${WARN}~${status.conflicts}${RESET}`);
-    }
-    return segments;
-}
-
-/**
- * One git call carries branch name, upstream, ahead/behind and dirty state.
- * `--untracked-files=normal` walks the working tree, which the index-only `=no`
- * avoided — measured at 98ms against 92ms here, and untracked files are the one
- * class of uncommitted change the line could not otherwise show. `normal`
- * (rather than `all`) collapses an untracked directory to one entry, so the
- * count matches what `git status` shows a human and a large unignored tree
- * cannot inflate it. git's stderr is discarded outright so a non-repo cwd cannot
- * leak into the line.
- */
-function readGitStatus(cwd: string): GitStatus | undefined {
-    if (cwd === "") {
-        return undefined;
-    }
-    try {
-        if (!statSync(cwd).isDirectory()) {
-            return undefined;
-        }
-    } catch {
-        return undefined;
-    }
-    let output = "";
-    try {
-        output = execFileSync("git", ["-C", cwd, "status", "--porcelain=v2", "--branch", "--untracked-files=normal"], {
-            encoding: "utf8",
-            stdio: ["ignore", "pipe", "ignore"],
-            windowsHide: true
-        });
-    } catch {
-        output = "";
-    }
-    return parsePorcelainV2(output);
-}
-
-// --- Worktree awareness --------------------------------------------------------
+// --- Location ----------------------------------------------------------------
 
 export interface WorktreePaths {
     commonDir: string;
@@ -786,29 +511,24 @@ function samePath(a: string, b: string): boolean {
 }
 
 export interface ProjectLocation {
+    /** Main project folder name, or the cwd's folder outside a linked worktree. */
     projectName: string;
-    projectUrl: string;
-    /** Both empty when the cwd is the main checkout rather than a linked worktree. */
+    /** Linked worktree folder name; "" in the main checkout or outside git. */
     worktreeName: string;
-    worktreeUrl: string;
-    /** Main project folder, distinct from a linked worktree. */
-    projectDir: string;
+    /** Folder the label opens: the worktree, or the cwd. */
+    folderUrl: string;
 }
 
 /**
  * In a linked worktree the shared `.git` lives under the *main* checkout, so
- * `dirname(--git-common-dir)` is the original project folder while
- * `--show-toplevel` is the worktree — when the two differ, both get named and
- * both get a link. In the main checkout (or outside git) the location is just
- * the cwd, exactly as before.
+ * `dirname(--git-common-dir)` names the original project while `--show-toplevel`
+ * is the worktree. Anywhere else the location is just the cwd.
  */
 export function resolveProjectLocation(cwd: string, worktree: WorktreePaths | undefined): ProjectLocation {
     const plain: ProjectLocation = {
         projectName: basename(cwd),
-        projectUrl: cwd === "" ? "" : `${toFileUrl(cwd)}/`,
         worktreeName: "",
-        worktreeUrl: "",
-        projectDir: cwd
+        folderUrl: cwd === "" ? "" : toFileUrl(cwd)
     };
     if (worktree === undefined) {
         return plain;
@@ -819,16 +539,20 @@ export function resolveProjectLocation(cwd: string, worktree: WorktreePaths | un
     }
     return {
         projectName: basename(mainProjectDir),
-        projectUrl: `${toFileUrl(mainProjectDir)}/`,
         worktreeName: basename(worktree.toplevel),
-        worktreeUrl: `${toFileUrl(worktree.toplevel)}/`,
-        projectDir: mainProjectDir
+        folderUrl: toFileUrl(worktree.toplevel)
     };
 }
 
-/** One extra fast git call (~10ms), only made when the cwd is already known to be a repo. */
+/**
+ * The render's only git call. Refs and config only, so it never waits on the
+ * network; stderr is discarded so a non-repo cwd cannot leak into the bar.
+ */
 function readWorktreePaths(cwd: string): WorktreePaths | undefined {
     try {
+        if (cwd === "" || !statSync(cwd).isDirectory()) {
+            return undefined;
+        }
         const output = execFileSync(
             "git",
             ["-C", cwd, "rev-parse", "--path-format=absolute", "--git-common-dir", "--show-toplevel"],
@@ -840,458 +564,94 @@ function readWorktreePaths(cwd: string): WorktreePaths | undefined {
     }
 }
 
-// --- Remote branch -------------------------------------------------------------
-
 /**
- * The remote's web root — `https://host/owner/repo`, no trailing slash — or ""
- * when the remote is missing or unparseable. Handles the three spellings git
- * remotes come in: scp-like `git@host:owner/repo.git`, `ssh://git@host/owner/repo`,
- * and plain `http(s)://`.
+ * `project/worktree`, or just the folder. The worktree half takes WHITE because
+ * it, not the project, answers "where am I"; it is capped by rendered cells.
  */
-function remoteWebRoot(remote: string): string {
-    let url = remote.trim();
-    if (url === "") {
+export function buildLocationLabel(location: ProjectLocation): string {
+    if (location.projectName === "") {
         return "";
     }
-    const scpLike = url.match(/^[\w.+-]+@([^:/]+):(.+)$/);
-    if (scpLike) {
-        url = `https://${scpLike[1]}/${scpLike[2]}`;
-    }
-    url = url
-        .replace(/^(?:ssh|git):\/\/(?:[\w.+-]+@)?/, "https://")
-        .replace(/^https:\/\/([^/:]+):\d+\//, "https://$1/") // ssh port, meaningless over https
-        .replace(/\.git$/, "")
-        .replace(/\/+$/, "");
-    return /^https?:\/\/[^/]+\/./.test(url) ? url : "";
+    const label =
+        location.worktreeName === ""
+            ? `${WHITE}${location.projectName}`
+            : `${GRAY}${location.projectName}/${WHITE}${truncateDisplayLabel(location.worktreeName, LOCATION_LABEL_WIDTH)}`;
+    return `${maybeLink(location.folderUrl, label)}${RESET}`;
 }
 
-/**
- * Views live at different depths per host: GitLab nests them under `/-/`,
- * GitHub and everything else serve `/tree/…` and `/compare/…` directly.
- */
-function webViewPath(webRoot: string, view: "tree" | "compare"): string {
-    return /^https?:\/\/[^/]*gitlab/i.test(webRoot) ? `/-/${view}/` : `/${view}/`;
+// --- Row builders ------------------------------------------------------------
+
+export interface SessionLineInput {
+    /** Pre-colored `P`/`W` badge, or "" to omit; it never renders alone. */
+    accountMarker: string;
+    sessionName: string;
+    shortId: string;
+    /** `file:` URL of the transcript `.jsonl`; "" leaves the id unlinked. */
+    transcriptUrl: string;
+    locationLabel: string;
 }
 
-/** Encoded per segment: slashes in a branch name stay path separators. */
-function encodeBranchPath(branch: string): string {
-    return branch.split("/").map(encodeURIComponent).join("/");
-}
-
-/** Web URL of `branch` on the remote the `origin` URL points at, or "". */
-export function buildBranchUrl(remote: string, branch: string): string {
-    const webRoot = remoteWebRoot(remote);
-    if (webRoot === "" || branch === "") {
-        return "";
-    }
-    return webRoot + webViewPath(webRoot, "tree") + encodeBranchPath(branch);
-}
-
-/**
- * Web URL of the `base...head` compare view — the page that lists the commits
- * `head` carries on top of `base` and offers to open a PR/MR from them. "" when
- * the remote is unparseable or the two branches are the same, which compares to
- * nothing.
- */
-export function buildCompareUrl(remote: string, base: string, head: string): string {
-    const webRoot = remoteWebRoot(remote);
-    if (webRoot === "" || base === "" || head === "" || base === head) {
-        return "";
-    }
-    return `${webRoot}${webViewPath(webRoot, "compare")}${encodeBranchPath(base)}...${encodeBranchPath(head)}`;
-}
-
-/**
- * The remote's default branch from `git for-each-ref` output over
- * `refs/remotes/origin/{HEAD,main,master}`, formatted `%(refname:short)\t%(symref:short)`.
- * `origin/HEAD` sorts first and wins when the clone recorded one; the usual
- * names are the fallback for clones that did not.
- */
-export function parseDefaultBranch(output: string): string {
-    for (const line of output.split("\n")) {
-        const [name = "", symref = ""] = line.split("\t");
-        const target = symref === "" ? name : symref; // only origin/HEAD is symbolic
-        if (target.startsWith("origin/") && target !== "origin/HEAD") {
-            return target.slice("origin/".length);
-        }
-    }
-    return "";
-}
-
-/** Refs only, never the network — a status line may not wait on a remote. */
-function defaultBranch(cwd: string): string {
-    try {
-        const output = execFileSync(
-            "git",
-            [
-                "-C",
-                cwd,
-                "for-each-ref",
-                "--format=%(refname:short)\t%(symref:short)",
-                "refs/remotes/origin/HEAD",
-                "refs/remotes/origin/main",
-                "refs/remotes/origin/master"
-            ],
-            { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true }
-        );
-        return parseDefaultBranch(output);
-    } catch {
-        return "";
-    }
-}
-
-/**
- * The `origin` URLs for a live checkout, from a single `remote get-url` call.
- * The compare view costs one further ref read, so it is resolved only when the
- * caller has something to compare — an unpushed commit.
- */
-function remoteUrls(cwd: string, branch: string, wantCompare: boolean): { branchUrl: string; compareUrl: string } {
-    if (cwd === "" || branch === "") {
-        return { branchUrl: "", compareUrl: "" };
-    }
-    let remote = "";
-    try {
-        remote = execFileSync("git", ["-C", cwd, "remote", "get-url", "origin"], {
-            encoding: "utf8",
-            stdio: ["ignore", "pipe", "ignore"],
-            windowsHide: true
-        }).trim();
-    } catch {
-        return { branchUrl: "", compareUrl: "" };
-    }
-    return {
-        branchUrl: buildBranchUrl(remote, branch),
-        compareUrl: wantCompare ? buildCompareUrl(remote, defaultBranch(cwd), branch) : ""
-    };
-}
-
-// --- MR/PR block -------------------------------------------------------------
-
-export interface MrFields {
-    timestamp: string;
-    provider: string;
-    iid: string;
-    draft: string;
-    conflicts: string;
-    approved: string;
-    approvalsRequired: string;
-    approvalsLeft: string;
-    status: string;
-    notes: string;
-    pipeline: string;
-    url: string;
-    fetchEpoch: string;
-}
-
-const EMPTY_MR_FIELDS: MrFields = {
-    timestamp: "",
-    provider: "",
-    iid: "",
-    draft: "",
-    conflicts: "",
-    approved: "",
-    approvalsRequired: "",
-    approvalsLeft: "",
-    status: "",
-    notes: "",
-    pipeline: "",
-    url: "",
-    fetchEpoch: ""
-};
-
-export function parseMrCacheLine(line: string): MrFields {
-    const [
-        timestamp,
-        provider,
-        iid,
-        draft,
-        conflicts,
-        approved,
-        approvalsRequired,
-        approvalsLeft,
-        status,
-        notes,
-        pipeline,
-        url,
-        fetchEpoch
-    ] = readFields(line, 13);
-    return {
-        timestamp: timestamp!,
-        provider: provider!,
-        iid: iid!,
-        draft: draft!,
-        conflicts: conflicts!,
-        approved: approved!,
-        approvalsRequired: approvalsRequired!,
-        approvalsLeft: approvalsLeft!,
-        status: status!,
-        notes: notes!,
-        pipeline: pipeline!,
-        url: url!,
-        fetchEpoch: fetchEpoch!
-    };
-}
-
-/**
- * Ahead/behind compares against the local copy of the remote ref, so `in sync`
- * silently lies until a fetch happens; the age says how far to trust it.
- */
-export function buildFetchAge(fetchEpoch: string, now: number): string {
-    if (!isNonNegativeInt(fetchEpoch)) {
-        return "";
-    }
-    const seconds = now - Number(fetchEpoch);
-    if (seconds >= 86400) {
-        return `${DIM}${Math.trunc(seconds / 86400)}d ago${RESET}`;
-    }
-    if (seconds >= 3600) {
-        return `${DIM}${Math.trunc(seconds / 3600)}h ago${RESET}`;
-    }
-    if (seconds >= 600) {
-        return `${DIM}${Math.trunc(seconds / 60)}m ago${RESET}`;
-    }
-    return "";
-}
-
-/**
- * The one review state worth showing, or "". Mutually exclusive by construction:
- * a draft's conflicts and approvals are noise until it is marked ready.
- */
-function buildMrState(mr: MrFields): string {
-    if (mr.draft === "true") {
-        return `${DRAFT}draft${RESET}`;
-    }
-    if (mr.conflicts === "true") {
-        return `${WARN}conflicts${RESET}`;
-    }
-    if (mr.status === "CHANGES_REQUESTED") {
-        return `${WARN}changes-req${RESET}`;
-    }
-    if (mr.approved === "true") {
-        return `${ADD}approved${RESET}`;
-    }
-    if (isNonNegativeInt(mr.approvalsLeft) && Number(mr.approvalsLeft) > 0) {
-        return `${GRAY}${mr.approvalsLeft}/${mr.approvalsRequired} approvals${RESET}`;
-    }
-    if (mr.status === "MERGEABLE") {
-        return `${ADD}mergeable${RESET}`;
-    }
-    if (mr.status !== "") {
-        return `${GRAY}${mr.status.toLowerCase()}${RESET}`;
-    }
-    return "";
-}
-
-/**
- * The provider's own list of runs for this MR/PR — GitHub's Checks tab, GitLab's
- * Pipelines tab. Both are paths under the MR/PR URL already in the cache, so the
- * link costs no extra field and no extra API call. It targets the tab rather than
- * the newest run: the tab is a valid destination while the run is still queued,
- * and it shows the earlier attempts, which is what "why did this break" needs.
- */
-export function buildCiUrl(mr: MrFields): string {
-    if (mr.url === "") {
-        return "";
-    }
-    return mr.provider === "github" ? `${mr.url}/checks` : `${mr.url}/pipelines`;
-}
-
-export function buildMrBlock(mr: MrFields, cacheAge: number): string {
-    if (mr.iid === "") {
-        return "";
-    }
-    const reference = mr.provider === "github" ? `#${mr.iid}` : `!${mr.iid}`;
-    // The review state qualifies the reference — `#42 draft` names one thing, the
-    // way `📁 repo` does — so a space binds them. CI is a separate fact about the
-    // branch and takes the separator, as does every field after it.
-    const state = buildMrState(mr);
-    const head = `${MR}${maybeLink(mr.url, reference)}${RESET}${state === "" ? "" : ` ${state}`}`;
-
-    const ci = CI_STATE_BY_PIPELINE[mr.pipeline];
-    const notes = isNonNegativeInt(mr.notes) && Number(mr.notes) > 0 ? `${GRAY}💬 ${mr.notes}${RESET}` : "";
-
-    return joinSegments([
-        head,
-        ci ? `${ci.color}${maybeLink(buildCiUrl(mr), ci.text)}${RESET}` : "",
-        notes,
-        cacheAge >= MR_STALE_NOTE ? `${DIM}${Math.trunc(cacheAge / 60)}m ago${RESET}` : ""
-    ]);
-}
-
-// --- Line builders -----------------------------------------------------------
-
-// Builders are named for what they say, not for the row they land on: the branch
-// state moved onto its own row and renumbered everything below it once already.
-
-/**
- * Title · id: what the session is about, how to refer to it, badged with the
- * account. A compact `P`/`W` badge identifies the account independently of any
- * externally applied pane tint. The id
- * links to the transcript `.jsonl` when its path is known, so the raw session
- * log is one click away from the very identifier that names it.
- *
- * `accountMarker` is a pre-colored badge (or "" to omit); it leads the line as a
- * normal `·`-separated segment, the same separator the rest of the row uses. An
- * empty line stays empty — a badge never renders alone.
- */
-export function buildSessionLine(
-    sessionName: string,
-    shortId: string,
-    transcriptUrl: string,
-    accountMarker: string
-): string {
+/** Account · title · id · where: identity of the session in one row. */
+export function buildSessionLine(input: SessionLineInput): string {
     const body = joinSegments([
-        sessionName === "" ? "" : `${SESSION}${sessionName}${RESET}`,
-        shortId === "" ? "" : `${GRAY}${maybeLink(transcriptUrl, `#${shortId}`)}${RESET}`
+        input.sessionName === "" ? "" : `${SESSION}${input.sessionName}${RESET}`,
+        input.shortId === "" ? "" : `${GRAY}${maybeLink(input.transcriptUrl, `#${input.shortId}`)}${RESET}`,
+        input.locationLabel
     ]);
-    if (body === "" || accountMarker === "") {
+    if (body === "" || input.accountMarker === "") {
         return body;
     }
-    return `${accountMarker}${SEPARATOR}${body}`;
-}
-
-export function buildModelLine(model: string, effortLevel: string, mrBlock = ""): string {
-    return joinSegments([
-        `${ACCENT}${trimModelName(model)}${RESET}`,
-        effortLevel === "" ? "" : `${GRAY}${effortGauge(effortLevel)}${RESET}`,
-        mrBlock
-    ]);
-}
-
-export interface LocationLineInput {
-    /** Main project folder name; in a worktree this is the *original* project. */
-    projectName: string;
-    /** `file:` URL of the main project folder; clicking it opens Explorer there. */
-    projectUrl: string;
-    /** Worktree folder name, or "" when the cwd is the main checkout. */
-    worktreeName: string;
-    /** `file:` URL of the worktree folder. */
-    worktreeUrl: string;
-    /** `file:` URL of a shortcut opening VS Code at the main project folder. */
-    projectEditorUrl: string;
-    /** `file:` URL of a shortcut opening VS Code at the cwd; "" outside a worktree. */
-    worktreeEditorUrl: string;
-    branch: string;
-    /** Web URL of the branch on its remote host; "" leaves the branch unlinked. */
-    branchUrl: string;
+    return `${input.accountMarker}${SEPARATOR}${body}`;
 }
 
 /**
- * Where you are and what you are working on: project (slash worktree) and branch.
- * In a worktree the two path halves are separate click targets — the project name
- * opens the original folder, the worktree name opens the worktree — and the
- * worktree half takes WHITE because it, not the project, answers "where am I".
- * Each half carries its own VS Code shortcut, so both checkouts remain one click
- * away in the editor. Worktree and branch labels are capped by rendered cells;
- * their complete folder and remote URLs remain attached to the shortened text.
- */
-export function buildLocationLine(input: LocationLineInput): string {
-    const editorIcon = (editorUrl: string) =>
-        editorUrl === "" ? "" : ` ${GRAY}${hyperlink(editorUrl, VSCODE_ICON)}${RESET} `;
-    const projectIcon = editorIcon(input.projectEditorUrl);
-    const worktreeIcon = editorIcon(input.worktreeEditorUrl);
-    const project = maybeLink(input.projectUrl, input.projectName);
-    const worktreeLabel = truncateDisplayLabel(input.worktreeName, LOCATION_LABEL_WIDTH);
-    const branchLabel = truncateDisplayLabel(input.branch, LOCATION_LABEL_WIDTH);
-    const name = (
-        input.worktreeName === ""
-            ? `${WHITE}${project}${RESET}${projectIcon}`
-            : `${GRAY}${project}${RESET}${projectIcon}${GRAY}/${RESET}` +
-              `${WHITE}${maybeLink(input.worktreeUrl, worktreeLabel)}${RESET}${worktreeIcon}`
-    ).trimEnd();
-    return joinSegments([
-        name,
-        input.branch === "" ? "" : `${GRAY}${BRANCH_ICON} ${maybeLink(input.branchUrl, branchLabel)}${RESET}`
-    ]);
-}
-
-const LOCATION_LABEL_WIDTH = 20;
-const ELLIPSIS = "…";
-
-function truncateDisplayLabel(label: string, maximumWidth: number): string {
-    if (visibleWidth(label) <= maximumWidth) {
-        return label;
-    }
-    const contentWidth = maximumWidth - visibleWidth(ELLIPSIS);
-    let truncated = "";
-    for (const character of label) {
-        if (visibleWidth(truncated + character) > contentWidth) {
-            break;
-        }
-        truncated += character;
-    }
-    return `${truncated}${ELLIPSIS}`;
-}
-
-export interface UsageLineInput {
-    sessionTokensIn: string;
-    tokensK: string;
-    ctxPct: string;
-    usdDisplay: string;
-    czkDisplay: string;
-    /** Tokens at which auto-compaction fires; 0 renders no bar. */
-    compactLimit?: number;
-}
-
-/**
- * Context escalation, as a fraction of the auto-compaction limit rather than the
- * old absolute 100k/140k/180k. At the default 200,000 limit the cut-offs land on
- * exactly those numbers, so nothing moves on screen — but they now follow
- * `autoCompactWindow` instead of silently meaning less every time it is raised.
+ * Context escalation, as a fraction of the auto-compaction limit: at the default
+ * 200,000-token window the cut-offs land on 100k/140k/180k, and they follow
+ * `autoCompactWindow` when it is raised.
  */
 const CONTEXT_YELLOW_FRACTION = 0.5;
 const CONTEXT_ORANGE_FRACTION = 0.7;
 const CONTEXT_RED_FRACTION = 0.9;
 
-export function buildUsageLine(input: UsageLineInput): string {
-    const compactLimit = input.compactLimit ?? 0;
+export interface ModelLineInput {
+    model: string;
+    effortLevel: string;
+    sessionTokensIn: string;
+    /** Tokens at which auto-compaction fires; 0 renders no bar. */
+    compactLimit: number;
+    compactionCount: number;
+}
+
+/**
+ * Model · effort · context · compactions. The context bar measures against the
+ * auto-compaction limit, not the model window: a full bar means compaction is
+ * about to fire, which is the only threshold anyone acts on.
+ */
+export function buildModelLine(input: ModelLineInput): string {
     const tokens = isNonNegativeInt(input.sessionTokensIn) ? Number(input.sessionTokensIn) : undefined;
-    const scale = compactLimit > 0 ? compactLimit : 200000;
-
-    let contextColor = GRAY;
+    let context = "";
     if (tokens !== undefined) {
+        const scale = input.compactLimit > 0 ? input.compactLimit : 200000;
+        let color = GRAY;
         if (tokens >= scale * CONTEXT_RED_FRACTION) {
-            contextColor = CONTEXT_RED;
+            color = CONTEXT_RED;
         } else if (tokens >= scale * CONTEXT_ORANGE_FRACTION) {
-            contextColor = CONTEXT_ORANGE;
+            color = CONTEXT_ORANGE;
         } else if (tokens >= scale * CONTEXT_YELLOW_FRACTION) {
-            contextColor = CONTEXT_YELLOW;
+            color = CONTEXT_YELLOW;
+        }
+        context = `${color}${Math.trunc((tokens + 500) / 1000)}k${RESET}`;
+        if (input.compactLimit > 0) {
+            const pct = Math.min(100, Math.trunc((tokens * 100) / input.compactLimit));
+            context += ` ${progressBar(pct, CONTEXT_BAR_CELLS, color)}`;
         }
     }
-    // No flame: the escalating color plus the bar carry the "how hot" signal,
-    // and the emoji was the loudest thing on a line that is mostly bookkeeping.
-    let contextText = "";
-    if (input.tokensK !== "") {
-        contextText = `${input.tokensK}k`;
-        if (isNonNegativeInt(input.ctxPct)) {
-            contextText += ` (${input.ctxPct}%)`;
-        }
-    } else if (isNonNegativeInt(input.ctxPct)) {
-        contextText = `${input.ctxPct}%`;
-    }
-    const context = contextText === "" ? "" : `${contextColor}${contextText}${RESET}`;
-
-    // The bar measures against the auto-compaction limit, not the model window:
-    // a bar creeping toward 1M said nothing, because nothing happens at 1M. Full
-    // bar now means compaction is about to fire, which is the only threshold on
-    // this line anyone acts on. The percentage beside it still reads against the
-    // model window, so the two answer different questions on purpose.
-    let bar = "";
-    if (compactLimit > 0 && tokens !== undefined) {
-        bar = progressBar(Math.min(100, Math.trunc((tokens * 100) / compactLimit)), 10, contextColor);
-    }
-
-    // Cost is DIM: it is a running total you check occasionally, not a state to
-    // act on, and it sat at the same weight as the context gauge beside it.
     return joinSegments([
-        [context, bar].filter((part) => part !== "").join(" "),
-        input.usdDisplay === "" ? "" : `${DIM}$${input.usdDisplay}${RESET}`,
-        input.usdDisplay === "" || input.czkDisplay === "" ? "" : `${DIM}${input.czkDisplay}${RESET}`
+        `${ACCENT}${trimModelName(input.model)}${RESET}`,
+        input.effortLevel === "" ? "" : `${GRAY}${effortGauge(input.effortLevel)}${RESET}`,
+        context,
+        input.compactionCount > 0 ? `${GRAY}${COMPACTION_ICON} ${input.compactionCount}${RESET}` : ""
     ]);
-    // Lines added/removed (`cost.total_lines_added` / `_removed`) used to close
-    // this line as `+120 -34`. Dropped as noise — session-wide edit totals never
-    // changed a decision. Restore by re-adding the two payload fields and an
-    // `${ADD}+n${RESET} ${DEL}-n${RESET}` segment here.
 }
 
 export interface QuotaInput {
@@ -1327,13 +687,10 @@ export function buildQuotaLine(input: QuotaInput): string {
     const label = isOld ? WARN : GRAY;
     const text = isOld ? WARN : "";
 
-    // A reset countdown is a time value like any other, so it is DIM even while
-    // the rest of the line is coral: knowing the window reopens in 1h 21m never
-    // asks anything of you, and at WARN weight it competed with the percentage.
-    // Each window label links to the usage dashboard, where these two numbers
-    // live with their full history.
+    // The countdown stays DIM even when the row is coral: when the window
+    // reopens never asks anything of you.
     const window = (name: string, pct: number, resets: string): string => {
-        let segment = `${label}${hyperlink(USAGE_DASHBOARD_URL, name)} ${progressBar(pct, 8)}${text} ${pct}%`;
+        const segment = `${label}${hyperlink(USAGE_DASHBOARD_URL, name)} ${progressBar(pct, QUOTA_BAR_CELLS)}${text} ${pct}%`;
         const countdown = timeUntil(resets, now);
         return countdown === "" ? segment : `${segment} ${DIM}${countdown}${RESET}`;
     };
@@ -1355,345 +712,99 @@ export function buildQuotaLine(input: QuotaInput): string {
     return line;
 }
 
-/**
- * Every sub-agent that has *finished* this session as one tally row: how many
- * agents and what each tier cost. Per-agent rows were dropped on purpose; once
- * an agent is done, only the session total is worth the footer space.
- *
- * The right column of the bar (see `composeColumns`), pinned to the terminal's
- * right edge beside the short left rows. Running agents are absent: the tasks
- * panel below this bar summarizes them for exactly as long as one is alive.
- */
-export function buildSubagentLine(summary: SubagentSummary): string[] {
-    if (summary.agents === 0) {
-        return [];
-    }
-
-    // Tokens per tier rather than one total: what a session spent is only worth
-    // reading next to what it spent it on.
-    const tiers = summary.tiers
-        .map((group) => {
-            const color = TIER_COLORS[group.label] ?? GRAY;
-            return `${color}${countLabel(group.count, capitalize(group.label))} ${DIM}${formatTokens(group.tokens)}${RESET}`;
-        })
-        .join(" ");
-
-    return [joinSegments([`${DIM}Σ ${summary.agents} agent${summary.agents === 1 ? "" : "s"}${RESET}`, tiers])];
-}
-
-// --- Background workers ------------------------------------------------------
-
-const SELF_PATH = fileURLToPath(import.meta.url);
-
-/** Detached and unref'd so the worker outlives this render's process. */
-function spawnDetached(command: string, args: string[]): void {
-    try {
-        spawn(command, args, { detached: true, stdio: "ignore", windowsHide: true }).unref();
-    } catch {
-        // A render must never fail because a background refresh could not start.
-    }
-}
-
-function spawnSelf(...args: string[]): void {
-    spawnDetached(process.execPath, [SELF_PATH, ...args]);
-}
-
-async function warmCzkCache(): Promise<void> {
-    try {
-        const response = await fetch(FX_ENDPOINT, { signal: AbortSignal.timeout(3000) });
-        if (!response.ok) {
-            return;
-        }
-        const rate = lookup(await response.json(), ["rates", "CZK"]);
-        if (rate === null || rate === undefined || rate === "") {
-            return;
-        }
-        // Written to a sibling then renamed so a render never reads a half file.
-        writeFileSync(`${CZK_CACHE}.tmp`, `${toDisplayString(rate)}\n`);
-        renameSync(`${CZK_CACHE}.tmp`, CZK_CACHE);
-    } catch {
-        // Leave the previous cache in place.
-    }
-}
-
-/**
- * Network-free in steady state: serve cache immediately, refresh in a detached
- * child when stale so the render never blocks on the FX call.
- */
-function fetchUsdCzkRate(): string {
-    if (existsSync(CZK_CACHE)) {
-        const cached = readFileOrEmpty(CZK_CACHE).replace(/\n+$/, "");
-        const age = nowSeconds() - (mtimeSeconds(CZK_CACHE) ?? 0);
-        if (age >= CZK_CACHE_TTL) {
-            spawnSelf("--warm-czk");
-        }
-        return cached;
-    }
-    spawnSelf("--warm-czk");
-    return "";
-}
-
 // --- Render ------------------------------------------------------------------
 
 /** Renders one expanded line, honoring `\c` truncation (which ate its own newline). */
-function emitRow(expanded: { text: string; truncated: boolean }): string {
+function emitRow(line: string): string {
+    const expanded = expandBackslashEscapes(line);
     return expanded.truncated ? expanded.text : `${expanded.text}\n`;
 }
 
-/** Minimum blank cells kept between the left column and the pinned right block. */
-const COLUMN_GAP = 2;
-
 /**
- * Blank cells held clear at the terminal's right edge, past the pinned block. The
- * ledger measures icons at the width the configured terminal draws them (single),
- * so seats land exactly here; a terminal whose font draws them wider would measure
- * short and push a seated row right, and this slack lets it drift into the margin
- * instead of wrapping and breaking the layout.
+ * Quota source order: stdin `rate_limits`, then the last-known account cache.
+ * Missing data remains explicit; this renderer never reads credentials.
  */
-const RIGHT_MARGIN = 3;
-
-/**
- * Two-column layout. The left column (session, model, location … quota) keeps the
- * left edge; the right column — the finished-agent ledger — is pinned near the
- * terminal's right edge so the wide gutter beside a short bar is put to use. The
- * whole ledger block starts at one column (`columns - blockWidth - RIGHT_MARGIN`)
- * so its table stays vertically aligned, and it begins on the *first* row: when the bar fills
- * the width, Claude Code relocates its own right-aligned indicators (remote-control
- * `/rc`, queued-agent count) to their own rows below the bar, leaving the first
- * row's right edge free.
- *
- * The ledger stays in order and contiguous. A left row too wide to seat its next
- * ledger line beside it leaves that line for a later row; any ledger lines with no
- * left row to share fall to their own pinned rows below. It falls back to stacking
- * the two columns (the layout before a width was known) when there is no ledger,
- * `$COLUMNS` gave no width, or the widest ledger line cannot fit beside the left
- * column at all.
- *
- * A pinned row would start with spaces, which Claude Code trims off every row, so
- * its first cell is the same invisible U+2800 guard the ledger's own indent uses —
- * it survives the trim and holds the block in place.
- */
-export function composeColumns(leftLines: string[], rightLines: string[], columns: number): string {
-    const stacked = (): string => [...leftLines, ...rightLines].map((line) => emitRow(expandBackslashEscapes(line))).join("");
-    if (rightLines.length === 0 || columns <= 0) {
-        return stacked();
-    }
-
-    const right = rightLines.map((line) => {
-        const text = expandBackslashEscapes(line).text;
-        return { text, width: visibleWidth(text) };
-    });
-    const blockStart = columns - Math.max(...right.map((entry) => entry.width)) - RIGHT_MARGIN;
-    if (blockStart < COLUMN_GAP) {
-        return stacked();
-    }
-
-    const pinned = (text: string): string => `${INDENT_GUARD}${" ".repeat(blockStart - 1)}${text}`;
-
-    const out: string[] = [];
-    let next = 0; // the next ledger line still waiting for a row to sit on
-    leftLines.forEach((line) => {
-        const { text, truncated } = expandBackslashEscapes(line);
-        // A truncated line ate the rest of its own row, so nothing may follow it.
-        if (truncated || next >= right.length) {
-            out.push(truncated ? text : `${text}\n`);
-            return;
+function readQuota(fields: PayloadFields, account: AccountLabel): QuotaInput {
+    const cache = usageCachePath(account);
+    const { fiveRaw, fiveResets, sevenRaw, sevenResets } = fields;
+    if (fiveRaw !== "" || sevenRaw !== "") {
+        try {
+            writeFileSync(cache, [fiveRaw, fiveResets, sevenRaw, sevenResets].join(UNIT_SEPARATOR) + "\n");
+        } catch {
+            // Losing the cache write only costs the next cold start.
         }
-        const gap = blockStart - visibleWidth(text);
-        if (gap >= COLUMN_GAP) {
-            out.push(`${text}${" ".repeat(gap)}${right[next]!.text}\n`);
-            next += 1;
-        } else {
-            out.push(`${text}\n`); // too wide to share — this ledger line waits
-        }
-    });
-    for (; next < right.length; next += 1) {
-        out.push(`${pinned(right[next]!.text)}\n`);
+        return { fiveRaw, fiveResets, sevenRaw, sevenResets, usageSource: "live", usageAgeSeconds: 0 };
     }
-    return out.join("");
+    if (!existsSync(cache)) {
+        return { fiveRaw, fiveResets, sevenRaw, sevenResets, usageSource: "", usageAgeSeconds: 0 };
+    }
+    const [cachedFive = "", cachedFiveResets = "", cachedSeven = "", cachedSevenResets = ""] = readFields(
+        readFileOrEmpty(cache).split("\n")[0]!,
+        4
+    );
+    const cachedAt = mtimeSeconds(cache);
+    return {
+        fiveRaw: cachedFive,
+        fiveResets: cachedFiveResets,
+        sevenRaw: cachedSeven,
+        sevenResets: cachedSevenResets,
+        usageSource: "cache",
+        usageAgeSeconds: cachedAt === undefined ? 0 : nowSeconds() - cachedAt
+    };
 }
 
 function render(): string {
     const fields = extractPayloadFields(readStdin());
-    const maxContext = toNonNegativeInt(fields.maxContext, 200000);
-    const shortId = fields.sessionId.slice(0, 8);
-    const cwdEditorUrl = fields.cwd === "" ? "" : toFileUrl(fields.cwd);
-
-    const accountLabel = resolveAccountLabel(resolveConfigDir());
+    const configDir = resolveConfigDir();
+    const accountLabel = resolveAccountLabel(configDir);
     const accountMarker =
-        accountLabel === "Work"
-            ? `${BOLD}${PALETTE.work}W${RESET}`
-            : `${BOLD}${PALETTE.personal}P${RESET}`;
+        accountLabel === "Work" ? `${BOLD}${PALETTE.work}W${RESET}` : `${BOLD}${PALETTE.personal}P${RESET}`;
 
-    const git = readGitStatus(fields.cwd);
-    const branch = git?.branch ?? "";
-    const remote = remoteUrls(fields.cwd, branch, false);
-
-    const location = resolveProjectLocation(fields.cwd, branch === "" ? undefined : readWorktreePaths(fields.cwd));
-
-    // In a worktree the cwd shortcut belongs to the worktree half; the project
-    // half gets its own shortcut pointing into the original checkout.
-    const inWorktree = location.worktreeName !== "";
-    const projectEditorUrl = inWorktree ? toFileUrl(location.projectDir) : cwdEditorUrl;
-    const worktreeEditorUrl = inWorktree ? cwdEditorUrl : "";
-
-    // --- Session cost (USD + CZK) ---
-    let usdDisplay = "";
-    let czkDisplay = "";
-    if (fields.sessionCostUsdRaw !== "" && fields.sessionCostUsdRaw !== "null") {
-        usdDisplay = roundN(fields.sessionCostUsdRaw, 3);
-        if (usdDisplay !== "") {
-            const rate = fetchUsdCzkRate();
-            if (rate !== "" && rate !== "null") {
-                czkDisplay = `${formatFixed(numericPrefix(usdDisplay) * numericPrefix(rate), 2)}Kč`;
-            }
-        }
-    }
-
-    // --- Quota utilization (5h + 7d) ---
-    // Source order: stdin rate_limits, then the last-known account cache.
-    // Missing data remains explicit; this renderer never reads credentials.
-    const usage = usagePaths(accountLabel);
-    let { fiveRaw, fiveResets, sevenRaw, sevenResets } = fields;
-    let usageSource: "live" | "cache" | "" = "";
-    let usageAgeSeconds = 0;
-
-    if (fiveRaw !== "" || sevenRaw !== "") {
-        usageSource = "live";
-        try {
-            writeFileSync(usage.cache, [fiveRaw, fiveResets, sevenRaw, sevenResets].join(UNIT_SEPARATOR) + "\n");
-        } catch {
-            // Losing the cache write only costs the next cold start.
-        }
-    } else if (existsSync(usage.cache)) {
-        [fiveRaw, fiveResets, sevenRaw, sevenResets] = readFields(
-            readFileOrEmpty(usage.cache).split("\n")[0]!,
-            4
-        ) as [string, string, string, string];
-        usageSource = "cache";
-        const cachedAt = mtimeSeconds(usage.cache);
-        if (cachedAt !== undefined) {
-            usageAgeSeconds = nowSeconds() - cachedAt;
-        }
-    }
-
-    const quotaLine = buildQuotaLine({
-        fiveRaw,
-        fiveResets,
-        sevenRaw,
-        sevenResets,
-        usageSource,
-        usageAgeSeconds
-    });
-
-    // --- Context tokens + %: from stdin, fall back to tokens/max ---
-    let ctxPct = formatPct(fields.contextUsedPct);
-    if (!isNonNegativeInt(ctxPct) && isNonNegativeInt(fields.sessionTokensIn)) {
-        ctxPct = maxContext === 0 ? "" : String(Math.trunc((Number(fields.sessionTokensIn) * 100) / maxContext));
-    }
-    if (isNonNegativeInt(ctxPct) && Number(ctxPct) > 100) {
-        ctxPct = "100";
-    }
-    const tokensK = isNonNegativeInt(fields.sessionTokensIn)
-        ? String(Math.trunc((Number(fields.sessionTokensIn) + 500) / 1000))
-        : "";
-
-    // --- MR/PR block + fetch age ---
-    // Pure cache read plus a possible detached spawn: the render itself never
-    // touches the network, since Claude Code cancels a status line that blocks.
-    let mrBlock = "";
-    if (branch !== "") {
-        const key = cacheKey(`${fields.cwd}|${branch}`);
-        const mrCache = path.join(CACHE_DIR, `claude-mr-${key}.tsv`);
-        const mrAttempt = path.join(CACHE_DIR, `claude-mr-attempt-${key}`);
-
-        const mr = existsSync(mrCache)
-            ? parseMrCacheLine(readFileOrEmpty(mrCache).split("\n")[0]!)
-            : EMPTY_MR_FIELDS;
-
-        const now = nowSeconds();
-        const cacheAge = isNonNegativeInt(mr.timestamp) ? now - Number(mr.timestamp) : 999999;
-
-        if (cacheAge >= MR_TTL) {
-            // The marker's own mtime would need an extra stat, so it carries its
-            // timestamp as its contents instead.
-            const attemptTimestamp = existsSync(mrAttempt) ? readFileOrEmpty(mrAttempt).split("\n")[0]! : "";
-            const attemptAge = isNonNegativeInt(attemptTimestamp) ? now - Number(attemptTimestamp) : 999999;
-            if (attemptAge >= MR_ATTEMPT_MIN) {
-                try {
-                    writeFileSync(mrAttempt, String(now));
-                } catch {
-                    // Without the marker we just retry on the next render.
-                }
-                const refresher = path.join(path.dirname(SELF_PATH), "status-line-mr-refresh.mjs");
-                if (existsSync(refresher)) {
-                    spawnDetached("node", [refresher, fields.cwd, branch, mrCache]);
-                }
-            }
-        }
-
-        mrBlock = buildMrBlock(mr, cacheAge);
-    }
-
-    // --- Compaction history ---
-    // Pure incremental file read: the transcript is already on disk, so unlike
-    // the MR block this needs no child process and no network.
-    const compactLimit = autoCompactLimit(maxContext, readAutoCompactWindow(resolveConfigDir()));
-    const compactions =
+    const location = resolveProjectLocation(fields.cwd, readWorktreePaths(fields.cwd));
+    const compactLimit = autoCompactLimit(toNonNegativeInt(fields.maxContext, 200000), readAutoCompactWindow(configDir));
+    // Incremental read of the transcript already on disk; see lib/compaction.mts.
+    const compactionCount =
         fields.transcriptPath === ""
-            ? []
+            ? 0
             : readCompactionHistory(
                   fields.transcriptPath,
                   path.join(CACHE_DIR, `claude-compact-${cacheKey(fields.transcriptPath)}.tsv`)
-              );
+              ).length;
 
-    // --- Sub-agent history ---
-    // One cheap read of the tasks panel's own session state file, and nothing at
-    // all when the session has spawned no agents.
-    const subagentLines = buildSubagentLine(
-        summarizeFinishedAgents(readSessionRecords(sessionStateFile(resolveConfigDir(), fields.sessionId)))
-    );
-
-    const transcriptUrl = fields.transcriptPath === "" ? "" : toFileUrl(fields.transcriptPath);
-    // The left column is every bar row except the finished-agent ledger, which is
-    // pinned to the right. A row with nothing to say is dropped rather than emitted blank.
-    const leftLines = [
-        buildSessionLine(fields.sessionName, shortId, transcriptUrl, accountMarker),
-        buildModelLine(fields.model, fields.effortLevel, mrBlock),
-        buildLocationLine({
-            projectName: location.projectName,
-            projectUrl: location.projectUrl,
-            worktreeName: location.worktreeName,
-            worktreeUrl: location.worktreeUrl,
-            projectEditorUrl,
-            worktreeEditorUrl,
-            branch,
-            branchUrl: remote.branchUrl
+    return [
+        buildSessionLine({
+            accountMarker,
+            sessionName: fields.sessionName,
+            shortId: fields.sessionId.slice(0, 8),
+            transcriptUrl: fields.transcriptPath === "" ? "" : toFileUrl(fields.transcriptPath),
+            locationLabel: buildLocationLabel(location)
         }),
-        buildUsageLine({ sessionTokensIn: fields.sessionTokensIn, tokensK, ctxPct, usdDisplay, czkDisplay, compactLimit }),
-        ...buildCompactionLines(compactions, `${INDENT_GUARD} `, COMPACTION_STYLE),
-        quotaLine
-    ].filter((line) => line !== "");
-
-    // Terminal width comes from $COLUMNS (Claude Code exports it for the status
-    // line); absent, composeColumns falls back to stacking the ledger below.
-    const columns = toNonNegativeInt(process.env.COLUMNS, 0);
-    return composeColumns(leftLines, subagentLines.filter((line) => line !== ""), columns);
+        buildModelLine({
+            model: fields.model,
+            effortLevel: fields.effortLevel,
+            sessionTokensIn: fields.sessionTokensIn,
+            compactLimit,
+            compactionCount
+        }),
+        buildQuotaLine(readQuota(fields, accountLabel))
+    ]
+        .filter((line) => line !== "")
+        .map(emitRow)
+        .join("");
 }
 
 /**
- * Both sides are compared through realpath because Claude Code invokes this via
- * `~/.claude/scripts`, which is a symlink to the repo. Node resolves
- * `import.meta.url` to the link target while `process.argv[1]` keeps the link
- * path, so a plain string compare silently fails and the status line renders
- * nothing at all.
+ * Both sides are compared through realpath because Claude Code may invoke this
+ * through a symlink. Node resolves `import.meta.url` to the link target while
+ * `process.argv[1]` keeps the link path, so a plain string compare silently
+ * fails and the status line renders nothing at all.
  */
 function isEntryPoint(): boolean {
     const invoked = process.argv[1];
     if (!invoked) {
         return false;
     }
-    return resolveRealPath(invoked) === resolveRealPath(SELF_PATH);
+    return resolveRealPath(invoked) === resolveRealPath(fileURLToPath(import.meta.url));
 }
 
 function resolveRealPath(target: string): string {
@@ -1705,10 +816,5 @@ function resolveRealPath(target: string): string {
 }
 
 if (isEntryPoint()) {
-    const flag = process.argv[2];
-    if (flag === "--warm-czk") {
-        await warmCzkCache();
-    } else {
-        process.stdout.write(render());
-    }
+    process.stdout.write(render());
 }

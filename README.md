@@ -100,7 +100,9 @@ The account shortcuts require MPX's `bin/` to precede native launchers on `PATH`
 and commit message generation, start those account shortcuts.
 Preview sync/setup before allowing writes; preserve unrelated native and project files.
 Claude Code sync owns `autoCompactWindow`; change the trigger through
-`CLAUDE_AUTO_COMPACT_TRIGGER_TOKENS` in `src/runtime-install.ts`.
+`CLAUDE_AUTO_COMPACT_TRIGGER_TOKENS` in `src/runtime-install.ts`. It also owns the
+`MPX delivery policy:` auto-mode rules that allow merges under `MPX_PROJECTS` and block them under
+`MPX_WORK`; other `autoMode` entries stay user-owned.
 For a narrower sync preview:
 
 ```bash
@@ -134,14 +136,15 @@ Use `/skill:mpx-<name>` in Pi or `/mpx-<name>` in Claude Code:
 
 | Skill | Purpose |
 | --- | --- |
-| `execute` | Implement and verify an Issue; work stops at green CI with an open PR/MR, personal continues through confirmed merge |
+| `execute` | Implement and verify an Issue; work projects stop at green CI with a draft PR/MR, personal projects continue through merge |
 | `commit` | Commit locally |
 | `commit-push` | Commit and push |
 | `pr` | Create/update a draft PR/MR and monitor CI, including commit and push |
-| `ship` | Confirm and merge; `--no-auto-merge` stops at green CI |
+| `ship` | Merge in personal projects; work projects and `--no-auto-merge` stop at green CI |
 | `playwright-test` | Standalone visual acceptance for `uncommitted`, `review:<id>`, or a feature description |
 
-For `execute`, inline work commits locally without hosted delivery. `--no-tdd` skips creating tests,
+For `execute`, inline work commits and pushes without a PR unless project instructions route it
+through one. `--no-tdd` skips creating tests,
 not running existing tests; `--full-review` adds specialist reviews; `--no-auto-merge` leaves the PR/MR open.
 Visual changes in `execute` and `batch-execute` also receive browser verification and a screenshot
 gallery, even with `--no-tdd`. Representative screenshots are attached to the Issue and PR;

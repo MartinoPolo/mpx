@@ -48,13 +48,14 @@ If the Issue has `HITL`, a HITL section, or `design needed`, ask whether to abor
 run `{{MPX_SKILL_COMMAND}}grill` on its open questions, or finish design.
 Establish the delivery endpoint before implementation:
 
-- Inline work: local `commit`, without push or PR.
-- Work repository Issue: `pr`, stopping at green CI with the PR/MR open.
-- Personal repository Issue: `merge`, requiring confirmed merge.
+- Inline work: `push`, without a PR. When project instructions route changes through PRs, use the
+  matching Issue endpoint below.
+- Work project Issue: `pr`, stopping at green CI with the draft PR/MR open; never merge.
+- Personal project Issue: `merge`, completing at the provider-confirmed merge.
 - `--no-auto-merge`: use `pr` for Issue work.
 
-Invocation authorizes that endpoint. Resolve personal/work ownership from account/domain context,
-not the Git host; ask if unclear.
+Invocation authorizes that endpoint. Resolve personal or work from the project path
+(`MPX_PROJECTS` or `MPX_WORK`), not the account or Git host; ask if unclear.
 
 ## 2. Analyze
 

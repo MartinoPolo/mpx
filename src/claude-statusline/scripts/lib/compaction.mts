@@ -1,7 +1,6 @@
-// Compaction history, shared by both status-line renderers. Claude Code writes
-// one `compact_boundary` line into a session's transcript every time that
-// session compacts, and sub-agents write their own into their own transcripts,
-// so a single reader serves the main bar and the tasks panel alike.
+// Compaction history for the main status line. Claude Code writes one
+// `compact_boundary` line into a session's transcript every time that session
+// compacts.
 //
 // The read is incremental. A transcript reaches tens of megabytes in a long
 // session and the renderers run on every tick, so a cache remembers the byte
@@ -10,7 +9,6 @@
 // was appended since the cached offset.
 
 import { closeSync, openSync, readSync, statSync, writeFileSync } from "node:fs";
-import path from "node:path";
 
 import { readFileOrEmpty } from "./statusline-ansi.mts";
 
@@ -26,14 +24,8 @@ import { readFileOrEmpty } from "./statusline-ansi.mts";
  */
 export const AUTO_COMPACT_RESERVE = 33000;
 
-/** Rows of history the renderers show before collapsing the rest into a count. */
-export const COMPACTION_ROWS = 3;
 const MAX_SCAN_BYTES = 256 * 1024;
 const MAX_PENDING_LINE_BYTES = 64 * 1024;
-
-export function isSafeStatusIdentifier(value: string): boolean {
-    return /^[A-Za-z0-9_-]+$/.test(value);
-}
 
 export interface CompactionEvent {
     /** "auto" or "manual" — the only two values Claude Code emits. */
@@ -53,16 +45,6 @@ export interface CompactionEvent {
 export function autoCompactLimit(contextWindowSize: number, autoCompactWindow: number): number {
     const window = autoCompactWindow > 0 ? Math.min(contextWindowSize, autoCompactWindow) : contextWindowSize;
     return Math.max(0, window - AUTO_COMPACT_RESERVE);
-}
-
-/** `~/.claude/projects/<slug>/<session>.jsonl` -> that session's sub-agent transcript. */
-export function subagentTranscriptPath(sessionTranscript: string, agentId: string): string {
-    if (sessionTranscript === "" || !isSafeStatusIdentifier(agentId)) {
-        return "";
-    }
-    const directory = path.dirname(sessionTranscript);
-    const session = path.basename(sessionTranscript).replace(/\.jsonl$/, "");
-    return path.join(directory, session, "subagents", `agent-${agentId}.jsonl`);
 }
 
 /**
@@ -199,73 +181,4 @@ export function readCompactionHistory(transcriptPath: string, cachePath: string)
         }
     }
     return events;
-}
-
-// --- Rendering ---------------------------------------------------------------
-
-/** `227148` -> `227k`, right-aligned so the arrows line up down the column. */
-export function formatTokensK(tokens: number): string {
-    return `${Math.round(tokens / 1000)}k`.padStart(4);
-}
-
-/** ISO-8601 -> local `HH:MM`. Local, because "when was I away" is a wall-clock question. */
-export function formatClock(timestamp: string): string {
-    const at = new Date(timestamp);
-    if (Number.isNaN(at.getTime())) {
-        return "";
-    }
-    return `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
-}
-
-export interface CompactionStyle {
-    /** Tree glyphs — structure, never signal. */
-    tree: string;
-    /** `auto`: the one you did not choose, and the only thing here worth catching. */
-    auto: string;
-    /** `manual`: you were there when it happened. */
-    manual: string;
-    /** The `227k -> 11k` change. */
-    tokens: string;
-    /** Wall clock — the least important field on the row. */
-    time: string;
-    reset: string;
-}
-
-/**
- * One row per compaction, oldest first, under the context line that owns them.
- * A long session compacts more times than a status line has room for, so only
- * the last `COMPACTION_ROWS` are spelled out and the rest collapse into a count
- * — the recent ones are what tell you whether the session you came back to is
- * still the session you left.
- */
-export function buildCompactionLines(
-    events: CompactionEvent[],
-    indent: string,
-    style: CompactionStyle,
-    maxRows: number = COMPACTION_ROWS
-): string[] {
-    if (events.length === 0) {
-        return [];
-    }
-    const shown = events.slice(-maxRows);
-    const hidden = events.length - shown.length;
-    const lines: string[] = [];
-
-    if (hidden > 0) {
-        lines.push(`${indent}${style.tree}├─ ${hidden} earlier${style.reset}`);
-    }
-    shown.forEach((event, index) => {
-        const isLast = index === shown.length - 1;
-        const glyph = `${style.tree}${isLast ? "└─" : "├─"}${style.reset}`;
-        const label = event.trigger === "auto" ? style.auto : style.manual;
-        const change = `${formatTokensK(event.preTokens)} → ${formatTokensK(event.postTokens)}`;
-        const clock = formatClock(event.timestamp);
-        let line = `${indent}${glyph} ${label}${event.trigger.padEnd(6)}${style.reset}`;
-        line += ` ${style.tokens}·${style.reset} ${style.tokens}${change}${style.reset}`;
-        if (clock !== "") {
-            line += ` ${style.time}·${style.reset} ${style.time}${clock}${style.reset}`;
-        }
-        lines.push(line);
-    });
-    return lines;
 }

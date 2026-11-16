@@ -15,13 +15,9 @@ export const RESET = "\x1b[0m";
  */
 export const BOLD = "\x1b[1m";
 
-// GRAY, DIM and AMBER used to live here as fixed xterm-256 indices, alongside an
-// `fg(code)` helper that emitted them. They are now derived per scheme in
-// terminal-theme.mts and emitted as 24-bit color by its `rgb()` — GRAY and DIM in
-// particular are blends of the scheme's own foreground toward its background, so
-// they cannot be constants. Their meanings are unchanged and documented there:
-// GRAY is default text, DIM one step back for facts that are context rather than
-// signal, and AMBER marks a fact you did not choose and would want to catch.
+// Colors live in terminal-theme.mts: GRAY and DIM are blends of the scheme's own
+// foreground toward its background, so they cannot be constants here. GRAY is
+// default text, DIM one step back for facts that are context rather than signal.
 
 // Effort levels, weakest to strongest — a filled/empty gauge reads instantly
 // where the old `<high>` word had to be parsed. Five slots because Claude Code
@@ -29,13 +25,7 @@ export const BOLD = "\x1b[1m";
 const EFFORT_RANK: Readonly<Record<string, number>> = { low: 1, medium: 2, high: 3, xhigh: 4, max: 5 };
 const EFFORT_SLOTS = 5;
 
-/**
- * `high` -> `◆◆◆◇◇`; an unrecognized level keeps the old `<level>` spelling.
- *
- * Shared by both renderers: the main bar states the session's level once, the
- * tasks panel repeats it down a column, and a level has to mean the same shape
- * in both or the eye has to learn two scales.
- */
+/** `high` -> `◆◆◆◇◇`; an unrecognized level keeps the old `<level>` spelling. */
 export function effortGauge(level: string): string {
     const rank = EFFORT_RANK[level];
     if (rank === undefined) {
@@ -46,21 +36,11 @@ export function effortGauge(level: string): string {
 
 /**
  * Rendered column width of a status-line string — what the terminal advances the
- * cursor by — so a caller can right-align other content against it. Zero-cell
- * sequences are removed first: OSC-8 hyperlink wrappers (the visible label
- * between them is kept) and SGR color runs. Each surviving code point then counts
- * as one cell, except real emoji (💬), which the emoji face draws into two.
- *
- * Private Use Area Nerd Font icons (branch, VS Code, console, pencil) are counted
- * as one cell: Symbols Nerd Font renders them single-width in the configured
- * terminal, so an exact measurement lets a ledger line seated after an icon-laden
- * left row land on the same column as one seated after a plain-text row — the
- * over-inclusive double-width guess used to shift the icon rows left and break the
- * ledger's alignment. A terminal whose font draws those icons double would measure
- * them a cell too narrow and drift the seated row *right*; the pinned block reserves
- * a right margin (see `composeColumns`) to absorb that rather than wrap. Every other
- * glyph the bar uses (◆ ◇ █ ░ ≡ · ✓ × ⠀ Σ ↑ ↓ ±) is single-width and verified
- * against the terminal face, so the default of one is correct for them.
+ * cursor by. Zero-cell sequences are removed first: OSC-8 hyperlink wrappers (the
+ * visible label between them is kept) and SGR color runs. Each surviving code
+ * point then counts as one cell, except real emoji, which the emoji face draws
+ * into two. Nerd Font Private Use Area icons render single-width in the
+ * configured terminal and count as one.
  */
 export function visibleWidth(input: string): number {
     const stripped = input

@@ -7,7 +7,7 @@ import { parse } from 'yaml';
 import { build, checkOutput, projectContent } from '../src/compiler.js';
 
 const CLASSES = ['mechanical', 'exploration', 'standard', 'reviewer', 'advanced', 'frontier'] as const;
-const CAPABILITIES = ['read', 'search', 'shell', 'write', 'browser', 'context', 'web'] as const;
+const CAPABILITIES = ['read', 'search', 'shell', 'write', 'browser', 'web'] as const;
 const temporaryRoots: string[] = [];
 async function temporaryRoot(prefix: string): Promise<string> {
   const root = await mkdtemp(path.join(tmpdir(), prefix));

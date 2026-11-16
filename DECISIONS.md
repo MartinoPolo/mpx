@@ -34,6 +34,8 @@ conventions belong in `AGENTS.md`; rollout evidence and recovery belong in `migr
 - **Keep discovery mechanics with the explorer.** Global agent guidance states only delegation
   essentials; native harnesses supply resource resolution and delegation mechanics. Model and effort
   defaults belong in structured agent metadata and runtime mappings, not repeated policy tables.
+- **Ground external APIs in cloned source, then public docs.** No documentation MCP: Context7 went
+  unused and was removed, so agents read a matching clone under `MPX_CLONED` first.
 - **Use packs for relevance, not security.** Repository selection adds MPX resources through native
   discovery without suppressing native account, package, or project resources or mutating account-wide
   links. An empty selection disables only MPX global packs.
@@ -43,8 +45,10 @@ conventions belong in `AGENTS.md`; rollout evidence and recovery belong in `migr
 - **Propagate selected packs to subagents.** Parent and child sessions need the same effective
   workflow vocabulary; discovery and named-skill preloading must preserve that selection.
 - **Deliver each instruction once, scoped natively.** Claude imports shared `AGENTS.md` through the
-  account `CLAUDE.md`, which also reaches subagents; the SessionStart hook adds only compaction
-  guidance and machine roots. File-specific rules declare Claude `paths` alongside `applyTo`.
+  account `CLAUDE.md`, which also reaches subagents; the SessionStart hook adds only machine roots,
+  plus a restart instruction after compaction. Compaction guidance goes to the summarizer itself
+  (Claude PreCompact stdout, Pi custom instructions), after the user's own `/compact` text.
+  File-specific rules declare Claude `paths` alongside `applyTo`.
 - **Split UI guidance into a path-scoped rule and a values skill.** A short global rule states
   principles whenever UI files are touched, because quick edits rarely invoke a skill; the
   model-invoked skill holds values and patterns, and project tokens own the numbers. Design-stage
@@ -61,8 +65,10 @@ conventions belong in `AGENTS.md`; rollout evidence and recovery belong in `migr
   check overrides precede deterministic discovery; unresolved discovery goes to the checker.
 - **Separate shipping from repair.** One standard-class shipper owns delivery; main evaluates failures
   and authorizes repairs under a shared attempt budget that survives continuation.
-- **Make delivery intent explicit.** `pr` publishes a draft for human-controlled readiness. Execute
-  leaves work PRs unmerged and autonomously merges personal work when authorized and verified.
+- **Make delivery intent explicit.** Finished work is committed and pushed without asking. The
+  project path, not the account, decides the rest: personal projects (`MPX_PROJECTS`) merge
+  autonomously once verified; work projects (`MPX_WORK`) stop at a draft PR/MR and never merge;
+  Verotel keeps its own Gerrit workflow. `pr` publishes a draft for human-controlled readiness.
   Post-merge base updates are manual so checkout-availability prompts cannot block completed delivery.
 - **Treat tests as evidence of requirements.** New acceptance criteria take priority over obsolete
   tests. `--no-tdd` excludes test creation during implementation, not existing verification.
@@ -129,9 +135,10 @@ conventions belong in `AGENTS.md`; rollout evidence and recovery belong in `migr
   optional bounded child details behind expansion.
   Configure upstream agent widgets off so one lifecycle-driven live display owns active agents and
   disappears when idle. Omit unavailable prices, parent cumulative token totals, ports, branch-state
-  counts, and shortcut hints. Claude retains native status-line and subagent payloads; renderers own
-  presentation and bounded caches, not services.
-  Use native location links rather than generated editor launchers.
+  counts, and shortcut hints. Claude's status line keeps three rows (identity and folder; model,
+  effort, context, and compaction count; quota) plus one tasks-panel row while agents run. Its
+  renderers own presentation and bounded local caches only: no network, background refreshers,
+  merge-request or cost display, or generated editor launchers; locations use native file links.
 - **Use native account quota data without reading credential files.** Bounded selected-account
   requests and response headers may update usage; missing data stays explicit and never blocks work.
 - **Aggregate activity before reporting completion.** A parent waiting for children or follow-up work
