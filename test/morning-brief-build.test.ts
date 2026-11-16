@@ -12,7 +12,7 @@ const samplePath = resolve('content/skills/morning-brief/templates/brief.sample.
 const BRIEF_DAY = '2026-10-16';
 
 type Beat = { say: string; note: string; targets?: string[] };
-type Chapter = { id: string; type: string; status: string; beats?: Beat[]; data?: Record<string, any> };
+type Chapter = { id: string; type: string; status: string; beats?: Beat[]; apps?: unknown; data?: Record<string, any> };
 type Brief = { date: string; process?: { token?: string; account?: string }; chapters: Chapter[] };
 type BuildResult = { exitCode: number; stderr: string };
 
@@ -151,6 +151,25 @@ test('a null parameter entry is rejected without a crash', async () => {
   const result = await build(brief);
   assert.equal(result.exitCode, 1);
   assert.match(result.stderr, new RegExp(`action "${firstAction.id}" parameters\\[0\\]: must be an object`));
+  assert.doesNotMatch(result.stderr, /TypeError/);
+});
+
+test('chapter apps need app and url, a known scope and no other keys', async () => {
+  const brief = await sampleBrief();
+  chapterOfType(brief, 'calendar').apps = [
+    { app: 'googlecalendar', scope: 'home', url: 'https://calendar.google.com/' },
+    { app: 'googlecalendar', scope: 'work' },
+    { app: 'googlecalendar', url: 'https://calendar.google.com/', label: 'Calendar' },
+    null,
+  ];
+  chapterOfType(brief, 'slack').apps = { app: 'slack', url: 'https://example.slack.com/' };
+  const result = await build(brief);
+  assert.equal(result.exitCode, 1);
+  assert.match(result.stderr, /chapters\[0\] \(calendar\) apps\[0\]: scope must be one of personal, work/);
+  assert.match(result.stderr, /chapters\[0\] \(calendar\) apps\[1\]: app and url are required/);
+  assert.match(result.stderr, /chapters\[0\] \(calendar\) apps\[2\]: unknown key label; use app, scope and url/);
+  assert.match(result.stderr, /chapters\[0\] \(calendar\) apps\[3\]: must be an object/);
+  assert.match(result.stderr, /\(slack\): apps must be an array/);
   assert.doesNotMatch(result.stderr, /TypeError/);
 });
 

@@ -21,6 +21,10 @@
   "chapters": [
     {
       "id": "calendar", "type": "calendar", "name": "Calendar", "title": "Standup, the accountant, then the dentist", "status": "fyi", "count": 6,
+      "apps": [
+        { "app": "googlecalendar", "scope": "personal", "url": "https://calendar.google.com/calendar/r?authuser=me@example.com" },
+        { "app": "googlecalendar", "scope": "work", "url": "https://calendar.google.com/calendar/r?authuser=me@example.org" }
+      ],
       "data": {
         "calendars": [
           { "id": "personal", "name": "Personal", "account": "personal", "access": "owner", "color": "#039be5" },
@@ -146,6 +150,7 @@
     },
     {
       "id": "slack", "type": "slack", "name": "Slack", "title": "One request waits on you", "status": "needs", "count": 1,
+      "apps": [{ "app": "slack", "url": "https://example.slack.com/" }],
       "data": {
         "unaddressed": [
           { "id": "s1", "channel": "#team-ui", "author": "Alex", "when": "16:40", "text": "@you could you look at !321 before Monday? Keyboard nav is the part I am unsure about.", "replies": 0, "url": "https://example.slack.com/archives/C1/p1" }
@@ -170,6 +175,10 @@
     },
     {
       "id": "mail", "type": "mail", "name": "Mail", "title": "Two emails to act on", "status": "needs", "count": 2,
+      "apps": [
+        { "app": "gmail", "scope": "personal", "url": "https://mail.google.com/mail/u/me@example.com/" },
+        { "app": "gmail", "scope": "work", "url": "https://mail.google.com/mail/u/me@example.org/" }
+      ],
       "data": {
         "rows": [
           { "id": "token", "account": "work", "from": "GitLab", "subject": "Your personal access token expires soon", "snippet": "The GitLab Workflow token expires on 21 Oct.", "when": "Oct 15", "action": "Renew", "url": "https://mail.google.com/" },

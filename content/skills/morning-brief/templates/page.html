@@ -93,6 +93,12 @@ svg { flex: none; display: block; }
 .process-area { position: relative; display: flex; align-items: center; gap: var(--space-2); align-self: flex-start; }
 .process-area .text-button { padding: 5px 12px; font-size: 14px; white-space: nowrap; }
 .sheet-head .position { white-space: nowrap; }
+/* Open-the-app links, one per account; a letter marks work or personal so colour is never the only cue. */
+.chapter-apps { display: flex; gap: 2px; margin-left: auto; align-self: flex-start; }
+.chapter-apps:empty { display: none; }
+.chapter-apps:not(:empty) + .position { margin-left: 0; }
+.chapter-app { position: relative; }
+.scope-marker { position: absolute; right: 0; bottom: 0; min-width: 14px; height: 14px; padding: 0 2px; border-radius: 4px; font: 700 10px/14px var(--font-mono); text-align: center; color: var(--ink); background: var(--paper); box-shadow: inset 0 0 0 1px var(--ink); }
 .process-status { position: absolute; top: calc(100% + 2px); right: 0; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 1.3; color: var(--ink-soft); }
 .process-status.problem { position: static; white-space: normal; text-align: right; font-size: 13px; color: var(--ink); background: var(--fill-progress); border-radius: var(--radius-button); padding: 3px 8px; }
 .inline-link { font-weight: 650; text-decoration: underline; text-underline-offset: 2px; }
@@ -498,6 +504,7 @@ a.skill-chip:hover { box-shadow: inset 0 0 0 1.5px var(--ink); }
 			<header class="sheet-head">
 				<span id="chapter-icon"></span>
 				<div><div class="kicker" id="chapter-kicker"></div><h1 id="chapter-title"></h1></div>
+				<span class="chapter-apps" id="chapter-apps"></span>
 				<span class="position" id="chapter-position"></span>
 				<div class="process-area" id="process-area">
 					<span class="process-status" id="process-status" aria-live="polite"></span>
@@ -1390,6 +1397,10 @@ function renderHeader() {
 	byId('chapter-icon').innerHTML = icon(CHAPTER_ICONS[chapter.type] ?? 'sunrise', 30);
 	byId('chapter-kicker').textContent = chapter.name;
 	byId('chapter-title').textContent = chapter.title;
+	byId('chapter-apps').innerHTML = (chapter.apps ?? []).map(({ app, scope, url }) => {
+		const marker = scope ? `<span class="scope-marker" aria-hidden="true">${escapeHtml(scope[0].toUpperCase())}</span>` : '';
+		return iconLink(url, `Open ${scope ? `${scope} ` : ''}${APP_NAMES[app] ?? app}`, `${appIcon(app)}${marker}`, 'chapter-app');
+	}).join('');
 	byId('chapter-position').textContent = `${String(state.chapter + 1).padStart(2, '0')} / ${String(chapters.length).padStart(2, '0')}`;
 }
 function renderOutline() {

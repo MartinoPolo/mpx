@@ -151,7 +151,12 @@ A top-level `process` holds `token`, which `build.mjs` generates, and `account`,
 `work` (default), the account the processing session runs in; every build copies both to
 `<dayDirectory>/process.json`. Each chapter has `id`, `type`, `name`, `title`, `status` (`needs`,
 `fyi`, `quiet`, `unavailable`), `count`, `beats`, and `data` for its type; quiet and unavailable
-chapters carry `detail` instead. Calendar days use ISO dates as `id`; give each calendar a distinct
+chapters carry `detail` instead. A chapter whose items live in an app with a home page (calendar,
+mail, Slack, a board one URL covers) lists `apps` for the header, one per account: `app` (brand
+icon), `scope` (`personal` or `work`, omitted for a single account) and `url`:
+`https://calendar.google.com/calendar/r?authuser=<address>`, `https://mail.google.com/mail/u/<address>/`
+(address from the mail links or primary calendar id), or the Slack workspace root from the message
+links. Calendar days use ISO dates as `id`; give each calendar a distinct
 Google colour, list only calendars with events, and prefer a titled event over its busy-only copy.
 Calendars keep `access` from the gatherers: `owner` marks mine, and another person's calendar shared
 with me is `reader`.

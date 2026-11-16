@@ -12,8 +12,9 @@ import { parseArgs } from 'node:util';
 
 const CHAPTER_TYPES = ['calendar', 'overnight', 'work', 'issues', 'slack', 'mail', 'triage', 'retro', 'instructions', 'news', 'actions'];
 const PARAMETER_TYPES = ['select', 'text', 'textarea'];
-const PROCESS_ACCOUNTS = ['personal', 'work'];
-const DEFAULT_PROCESS_ACCOUNT = PROCESS_ACCOUNTS[1];
+const ACCOUNTS = ['personal', 'work'];
+const DEFAULT_PROCESS_ACCOUNT = ACCOUNTS[1];
+const APP_LINK_KEYS = ['app', 'scope', 'url'];
 const MAXIMUM_INSTRUCTION_HIGHLIGHTS = 2;
 const STATUSES = ['needs', 'fyi', 'quiet', 'unavailable'];
 const NOTE_MAXIMUM_WORDS = 4;
@@ -51,6 +52,17 @@ for (const [index, chapter] of (brief.chapters ?? []).entries()) {
     if (String(beat.note ?? '').split(/\s+/).length > NOTE_MAXIMUM_WORDS) problems.push(`${where}: note "${beat.note}" must be a label of at most ${NOTE_MAXIMUM_WORDS} words`);
     if (/—/.test(`${beat.say ?? ''}${chapter.title ?? ''}`)) problems.push(`${where}: replace em dashes in title and say with commas or full stops`);
     if (narrated && !beat.hold && !beat.targets?.length) problems.push(`${where}: beat "${beat.note}" names no targets; every spoken point lights what it is about`);
+  }
+  if (chapter.apps !== undefined && !Array.isArray(chapter.apps)) problems.push(`${where}: apps must be an array`);
+  for (const [index, appLink] of (Array.isArray(chapter.apps) ? chapter.apps : []).entries()) {
+    if (typeof appLink !== 'object' || appLink === null) {
+      problems.push(`${where} apps[${index}]: must be an object`);
+      continue;
+    }
+    const unknownKeys = Object.keys(appLink).filter((key) => !APP_LINK_KEYS.includes(key));
+    if (unknownKeys.length) problems.push(`${where} apps[${index}]: unknown key ${unknownKeys.join(', ')}; use app, scope and url`);
+    if (!appLink.app || !appLink.url) problems.push(`${where} apps[${index}]: app and url are required`);
+    if (appLink.scope !== undefined && !ACCOUNTS.includes(appLink.scope)) problems.push(`${where} apps[${index}]: scope must be one of ${ACCOUNTS.join(', ')}`);
   }
 }
 for (const source of brief.sources ?? []) {
@@ -94,7 +106,7 @@ if (brief.process !== undefined) {
   if (typeof brief.process !== 'object' || brief.process === null) problems.push('process must be an object with token and account');
   else {
     if (brief.process.token !== undefined && (typeof brief.process.token !== 'string' || !brief.process.token)) problems.push('process.token must be a non-empty string');
-    if (brief.process.account !== undefined && !PROCESS_ACCOUNTS.includes(brief.process.account)) problems.push(`process.account must be one of ${PROCESS_ACCOUNTS.join(', ')}`);
+    if (brief.process.account !== undefined && !ACCOUNTS.includes(brief.process.account)) problems.push(`process.account must be one of ${ACCOUNTS.join(', ')}`);
   }
 }
 const calendarChapter = brief.chapters?.find((chapter) => chapter.type === 'calendar' && isNarrated(chapter));
