@@ -45,6 +45,10 @@ conventions belong in `AGENTS.md`; rollout evidence and recovery belong in `migr
 - **Deliver each instruction once, scoped natively.** Claude imports shared `AGENTS.md` through the
   account `CLAUDE.md`, which also reaches subagents; the SessionStart hook adds only compaction
   guidance and machine roots. File-specific rules declare Claude `paths` alongside `applyTo`.
+- **Split UI guidance into a path-scoped rule and a values skill.** A short global rule states
+  principles whenever UI files are touched, because quick edits rarely invoke a skill; the
+  model-invoked skill holds values and patterns, and project tokens own the numbers. Design-stage
+  skills point to that skill rather than restating values.
 
 ## Execution and delivery
 

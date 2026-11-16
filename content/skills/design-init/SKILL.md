@@ -45,8 +45,9 @@ emotional tone.
 - **Font pairing** — a specific heading + body pair with a personality that fits. Google Fonts for
   availability. System fonts only when the app demands maximum performance.
 - **Density** — data-heavy → dense; reading/content → airy; mixed → medium.
-- **Motion** — utility → subtle (150–200ms ease-out); consumer → expressive (spring, ~300ms);
-  dashboard → minimal (loading states only).
+- **Motion** — how much the app moves: utility → functional feedback only; consumer → adds
+  decorative accents; dashboard → loading states only. Durations, easings, and patterns come from
+  the `{{MPX_SKILL_PREFIX}}ui-motion` skill; propose only deliberate deviations.
 - **Radius** — consumer → 8–12px; utility → 4–6px; technical → 0–2px.
 - **Elevation** — flat light mode → borders over shadows; elevated light mode → layered shadows;
   dark mode → lighter surfaces for elevation.
@@ -81,7 +82,7 @@ OKLCH colors for perceptual uniformity. Google Fonts `@import` at the top.
   --color-primary: oklch(...);
   /* … full semantic set … */
 
-  /* Spacing scale, radii, shadows, motion */
+  /* Spacing scale, radii, shadows, motion tokens from ui-motion */
   --space-1: 4px;
 }
 
@@ -99,7 +100,8 @@ The reference the other three skills read. Cover:
 - **Spacing & layout** — the scale, when to use each step, grid/flex preferences, density rules
 - **Component patterns** — how to use the project's component library within this language, variant
   preferences, icon sizing
-- **Motion** — timing functions, durations, what animates and what does not
+- **Motion** — the chosen motion character, what animates and what does not, and any deviation
+  from `{{MPX_SKILL_PREFIX}}ui-motion` values
 
 ## Step 7: Record decisions
 

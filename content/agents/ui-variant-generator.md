@@ -21,6 +21,7 @@ parent's output contract exactly; several agents may write separate variants in 
 The parent provides:
 
 - **Style definition** — discovered project typography, palette tokens, layout, density, and motion
+  tokens and patterns from the `{{MPX_SKILL_PREFIX}}ui-motion` skill
 - **Functional requirements** — behavior, surrounding context, and required states
 - **Framework** — Svelte, React, Vue, or HTML
 - **Output contract** — either an exact output file or an output folder and component/page name
@@ -40,7 +41,8 @@ brief's ownership boundary between the component and surrounding chrome.
 Every visual decision must trace to the supplied project style. Use its typography, color tokens,
 spacing/density, radius, elevation, and motion rules. Do not introduce remote fonts, a fixed spacing
 grid, prescribed shadows, tight heading metrics, ghost buttons, or animations unless the supplied
-style or requirements call for them. Prefer reduced motion when appropriate.
+style or requirements call for them. Animate only with the supplied motion tokens and patterns, and
+gate movement behind `prefers-reduced-motion: no-preference`.
 
 ### 3. Generate the requested output
 

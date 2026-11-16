@@ -132,7 +132,7 @@ From `designs/tokens.css` (or the project's global stylesheet when no tokens fil
 ## 9. Design Freedom
 
 - Layout arrangement options
-- Animation and transition choices
+- Animation and transition choices within the `{{MPX_SKILL_PREFIX}}ui-motion` values and patterns
 - Visual emphasis approaches
 - Information hierarchy within the constraints
 - Aesthetic latitude: shadows, borders, gradients
