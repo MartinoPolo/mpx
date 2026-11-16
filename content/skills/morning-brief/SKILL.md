@@ -41,8 +41,8 @@ Keep the turn open until the page is built: an Orca automation run closes its te
 process in it, as soon as the agent stops. Wait for background commands with a bounded foreground
 wait, never by ending the turn.
 
-1. `node "<skill-dir>/scripts/start.mjs"` prints `date`, `dayDirectory`, `since` and `until`. All
-   files of this run go into `dayDirectory`; source files go into its `sources/`.
+1. `node "<skill-dir>/scripts/start.mjs"` prints `date`, `dayDirectory`, `since`, `until` and
+   `calendarDays`. All files of this run go into `dayDirectory`; source files go into its `sources/`.
 2. Start these together, the first in the background:
    - `node "<skill-dir>/scripts/gather.mjs" <dayDirectory> --since <since> --until <until>` runs
      one headless connector session per account ([personal](gatherers/personal.md): Gmail and
@@ -106,6 +106,11 @@ wait, never by ending the turn.
   changes to `Ideas.md`. Unchecked dump bullets and tasks not yet under a capture heading become
   items with a proposed destination (a `## Inbox`, `## Ideas` or `## Tasks` section of
   `_Projekty/<project>/<project>.md`, or a daily capture heading) and priority. Link each to its note with `obsidian://open?vault=<vault>&file=<path>`.
+  Before proposing a capture, check the vault for it: one already filed, done or superseded gets
+  `resolved: true` and a `resolution` of a few words with the evidence. Resolved captures stay
+  listed, shown as done; they count neither in `count` nor toward `needs`. I can mark any capture
+  already done. The triage point files the open captures as chosen and resolves the done ones: it
+  ticks a task, removes a plain bullet, and never files them.
 - **AI retro** (`sessions.json`): problems in sessions of both accounts and harnesses: tool errors,
   hook blocks, my corrections, repeated attempts at one step. At most five, ranked by cost, each with
   the transcript lines that show it, a concrete fix, the file it belongs in, and a prompt for a
@@ -126,8 +131,9 @@ wait, never by ending the turn.
 whose, news taste); the main session and every area follow it, and the processing session adds to it.
 
 Calendar, Slack and mail come from the gatherers; the main session shapes them into chapters.
-The calendar shows one column per day: earlier days the window covers (greyed as history), today,
-and all of tomorrow; a day without events gets no column, only a clause in the narration. Events are
+The calendar has one column per `calendarDays` entry, even when the day has no events and the
+narration skips it: yesterday, today and tomorrow, after up to two earlier days no brief showed.
+The page names each column by its date and greys the days before today as history. Events are
 coloured by calendar and busy-only work blocks stay untitled. Every titled meeting with other
 attendees today on my own personal and work calendars is narrated with at least its time and title,
 and the beat targets it (a sentence naming two meetings targets both); `build.mjs` rejects a missed
@@ -156,7 +162,7 @@ mail, Slack, a board one URL covers) lists `apps` for the header, one per accoun
 icon), `scope` (`personal` or `work`, omitted for a single account) and `url`:
 `https://calendar.google.com/calendar/r?authuser=<address>`, `https://mail.google.com/mail/u/<address>/`
 (address from the mail links or primary calendar id), or the Slack workspace root from the message
-links. Calendar days use ISO dates as `id`; give each calendar a distinct
+links. Calendar days use ISO dates as `id`, and today has `focus`; give each calendar a distinct
 Google colour, list only calendars with events, and prefer a titled event over its busy-only copy.
 Calendars keep `access` from the gatherers: `owner` marks mine, and another person's calendar shared
 with me is `reader`.
@@ -225,7 +231,8 @@ With `--apply <date>`, in the day folder, one apply session at a time:
    action ids present in `brief.json` and on parameters within their declared options or types.
    The latest decision per id wins.
 2. Act on each accepted point whose `id`, `decision` and `parameters` (compact JSON, sorted keys)
-   are not yet in `processed.json`, using its parameters and the triage choices. Decide how to run
+   are not yet in `processed.json`, using its parameters and the triage choices (a `resolved`
+   capture is resolved in its note, not filed). Decide how to run
    the work: directly, or one subagent per project. Accepted manual points only get a reminder in the
    report. Skips are recorded, never acted on.
 3. Process only feedback text not already recorded. Per note decide: a preference for the brief goes

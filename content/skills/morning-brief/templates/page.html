@@ -178,21 +178,23 @@ select.small-select:hover { border-color: var(--ink); }
 .calendar-grid { --gutter: 52px; --day-gap: 8px; margin-inline: auto; min-width: calc(var(--gutter) + var(--day-count) * (var(--minimum-day-width) + var(--day-gap))); max-width: calc(var(--gutter) + var(--day-count) * 380px); }
 .calendar-days, .calendar-all-day, .calendar-body { display: grid; grid-template-columns: var(--gutter) repeat(var(--day-count), minmax(0, 1fr)); column-gap: var(--day-gap); }
 .calendar-day-head { display: flex; flex-direction: column; align-items: center; gap: 2px; padding-bottom: 6px; }
-.calendar-day-head .weekday { font-size: 13px; font-weight: 650; letter-spacing: 0.04em; color: var(--ink-soft); }
-.calendar-day-head .date { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; font: 600 22px var(--font-head); }
-.calendar-day-head.focus .weekday { color: var(--google-calendar); }
+.calendar-day-head .relative { min-height: 1.45em; font-size: 13px; font-weight: 650; letter-spacing: 0.04em; color: var(--ink-soft); }
+.calendar-day-head .date { padding: 3px 12px; border-radius: 999px; font: 600 18px/1.25 var(--font-head); white-space: nowrap; }
+.calendar-day-head.focus .relative { color: var(--google-calendar); }
 .calendar-day-head.focus .date { background: var(--google-calendar); color: #ffffff; }
-.calendar-day-head.past .date, .calendar-day-head.past .weekday { color: var(--ink-soft); }
+.calendar-day-head.past .date, .calendar-day-head.past .relative { color: var(--ink-soft); }
+/* The hour gutter stays in place when a narrow screen scrolls the days sideways. */
+.calendar-days > :first-child, .calendar-all-day .label, .hour-labels { position: sticky; left: 0; z-index: 35; background: var(--paper); }
 .calendar-all-day { padding: 2px 0 8px; min-height: 12px; }
 .calendar-all-day .label { font: 400 12px var(--font-mono); color: var(--ink-soft); align-self: center; text-align: right; padding-right: 6px; }
 .all-day-cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .all-day-chip { text-align: left; font-size: 14px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background: var(--event-color); color: var(--event-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .calendar-body { position: relative; padding-top: 10px; }
-.hour-labels { position: relative; }
 .hour-label { position: absolute; right: 8px; transform: translateY(-50%); font: 400 13px var(--font-mono); color: var(--ink-soft); }
 .day-track { position: relative; min-width: 0; }
 .day-track .hour-line { position: absolute; left: 0; right: 0; border-top: 1px solid color-mix(in srgb, var(--ink) 11%, transparent); }
 .day-track.past { background: color-mix(in srgb, var(--ink) 3%, transparent); border-radius: 6px; }
+.day-track.focus { background: color-mix(in srgb, var(--google-calendar) 5%, transparent); border-radius: 6px; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--google-calendar) 30%, transparent); }
 .calendar-event { position: absolute; z-index: var(--stack, 1); display: flex; flex-direction: column; justify-content: flex-start; text-align: left; overflow: hidden; padding: 3px 7px; border-radius: 6px; background: var(--event-color); color: var(--event-text); font-size: 14px; line-height: 1.25; box-shadow: 0 0 0 1.5px var(--paper); }
 .calendar-event:hover { filter: brightness(0.95); }
 .calendar-event.busy { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--event-color) 45%, white) 0 6px, color-mix(in srgb, var(--event-color) 30%, white) 6px 12px); color: var(--ink); }
@@ -328,10 +330,18 @@ details.project-group:not([open]) > .project-head { border-radius: 14px; }
 .note-head { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 2px 0 12px; border-radius: 10px; background: color-mix(in srgb, var(--obsidian) 12%, white); font: 600 14px var(--font-mono); margin-bottom: var(--space-2); }
 .note-head .icon-link { margin-left: auto; width: 30px; height: 30px; }
 .capture { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: var(--space-3); align-items: center; min-height: 44px; padding: 4px 8px 4px 12px; border-radius: 10px; background: var(--paper); }
-/* A bullet, not a checkbox: captures are filed by the decision below, never ticked here. */
+/* A bullet, not a checkbox: the triage point files captures and ticks the ones marked done, never this page. */
 .capture .box { width: 8px; height: 8px; margin-left: 4px; border-radius: 50%; background: var(--obsidian); }
 .capture .text { font-size: 16px; }
-.capture .selects { display: flex; gap: 6px; }
+.capture .selects { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+/* A resolved capture needs nothing from me: green and quiet, reopened by its toggle. */
+.capture.resolved { background: color-mix(in srgb, var(--fill-merged) 70%, white); }
+.capture.resolved .text { font-size: 15px; color: var(--ink-soft); }
+.capture.resolved .box { width: 18px; height: 18px; margin-left: 0; padding: 2px; color: #ffffff; background: var(--done); }
+.capture .resolution { display: block; font-size: 13px; }
+.done-toggle { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: var(--radius-button); font-size: 13px; font-weight: 650; color: var(--ink-soft); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ink) 30%, transparent); white-space: nowrap; }
+.done-toggle:hover { color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--ink); }
+.done-toggle[aria-pressed="true"] { background: var(--fill-ready); color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--ink); }
 
 /* Retro: evidence as a terminal, fix as a diff, the fix session decided in the head. */
 .retro-item { border-radius: 12px; background: var(--fill-draft); }
@@ -482,7 +492,7 @@ a.skill-chip:hover { box-shadow: inset 0 0 0 1.5px var(--ink); }
 	.project-head { flex-wrap: wrap; }
 	.mail-row { grid-template-columns: minmax(0, 1fr) auto auto; }
 	.capture .box, .news-item > svg, .run .mono, .time { display: none; }
-	.capture .selects { grid-column: 1 / -1; flex-wrap: wrap; }
+	.capture .selects { grid-column: 1 / -1; justify-content: flex-start; }
 	.run { grid-template-columns: auto minmax(0, 1fr) 34px; }
 	.event-popover { position: static; width: auto; margin-top: var(--space-3); }
 }
@@ -530,6 +540,7 @@ a.skill-chip:hover { box-shadow: inset 0 0 0 1.5px var(--ink); }
 <script type="application/json" id="brief-data">{"placeholder":true}</script>
 <script>
 const brief = JSON.parse(document.getElementById('brief-data').textContent);
+const briefDate = new Date(`${brief.date}T12:00:00`);
 const byId = (id) => document.getElementById(id);
 const stage = byId('stage');
 
@@ -639,7 +650,7 @@ const TRIAGE_FIELDS = ['project', 'heading', 'priority'];
 const NEWS_VOTES = ['up', 'down'];
 const DECISION_LABELS = { accept: 'Accept', skip: 'Skip' };
 const choices = { decisions: {}, feedback: '', news: {}, triage: {}, autoHandled: {}, sent: {}, lastSentAt: undefined, unchangedSinceSend: false };
-for (const group of chapterOfType('triage')?.data?.groups ?? []) for (const item of group.items) choices.triage[item.id] = { project: item.project ?? '', heading: item.heading ?? '', priority: item.priority ?? '' };
+for (const group of chapterOfType('triage')?.data?.groups ?? []) for (const item of group.items) choices.triage[item.id] = { project: item.project ?? '', heading: item.heading ?? '', priority: item.priority ?? '', resolved: item.resolved === true };
 for (const item of chapterOfType('work')?.data?.autoHandled ?? []) choices.autoHandled[item.id] = true;
 restoreChoices();
 // Stored state is only trusted for this brief's token, and only for ids and values the brief still has.
@@ -667,7 +678,11 @@ function restoreChoices() {
 	for (const item of chapterOfType('news')?.data?.items ?? []) if (NEWS_VOTES.includes(stored.news?.[item.id])) choices.news[item.id] = stored.news[item.id];
 	for (const [id, defaults] of Object.entries(choices.triage)) {
 		const entry = stored.triage?.[id];
-		if (isRecord(entry)) choices.triage[id] = { ...defaults, ...Object.fromEntries(TRIAGE_FIELDS.filter((field) => typeof entry[field] === 'string').map((field) => [field, entry[field]])) };
+		if (isRecord(entry)) choices.triage[id] = {
+			...defaults,
+			...Object.fromEntries(TRIAGE_FIELDS.filter((field) => typeof entry[field] === 'string').map((field) => [field, entry[field]])),
+			...(typeof entry.resolved === 'boolean' && { resolved: entry.resolved }),
+		};
 	}
 	for (const id of Object.keys(choices.autoHandled)) if (typeof stored.autoHandled?.[id] === 'boolean') choices.autoHandled[id] = stored.autoHandled[id];
 	if (typeof stored.lastSentAt === 'string') choices.lastSentAt = stored.lastSentAt;
@@ -896,6 +911,20 @@ function board(columns, targetPrefix) {
 	</div>`;
 }
 const slug = (text) => String(text).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+const RELATIVE_DAY_NAMES = { '-1': 'Yesterday', 0: 'Today', 1: 'Tomorrow' };
+const MILLISECONDS_PER_DAY = 86400000;
+// A calendar day is named relative to the brief and by its full date; a day without an ISO id (older
+// briefs) keeps the label and date it was written with.
+function dayHeading(day) {
+	if (!ISO_DAY.test(day.id)) return { relative: day.focus ? RELATIVE_DAY_NAMES[0] : '', date: [day.label, day.date].filter(Boolean).join(' ') };
+	const date = new Date(`${day.id}T12:00:00`);
+	const offset = Math.round((date - briefDate) / MILLISECONDS_PER_DAY);
+	return {
+		relative: RELATIVE_DAY_NAMES[offset] ?? (offset < 0 ? `${-offset} days ago` : `In ${offset} days`),
+		date: date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }),
+	};
+}
 
 /* Chapter renderers, keyed by chapter type. Each returns markup for the sheet body. */
 const RENDERERS = {
@@ -904,8 +933,8 @@ const RENDERERS = {
 		const colorOf = (event) => calendars.get(event.calendarId)?.color ?? '#039be5';
 		const eventStyle = (event) => `--event-color:${escapeHtml(colorOf(event))};--event-text:${textOn(colorOf(event))}`;
 		const events = data.events ?? [];
-		// A day without events is a wasted column; the focus day always stays.
-		const days = (data.days ?? []).filter((day) => day.focus || events.some((event) => event.day === day.id));
+		// Every listed day keeps its column, with or without events, so the dates never shift.
+		const days = data.days ?? [];
 		const timed = events.filter((event) => !event.allDay && event.start && event.end);
 		const nowMatch = String(brief.now ?? brief.window?.until ?? '').match(/T(\d\d):(\d\d)/);
 		const nowHours = nowMatch ? Number(nowMatch[1]) + Number(nowMatch[2]) / 60 : undefined;
@@ -922,7 +951,8 @@ const RENDERERS = {
 		const pixelsAt = (time) => (minutesOf(time) / 60 - firstHour) * hourHeight;
 		// The sheet widens until every day gets a comfortable column; the grid's minimum day width holds below that.
 		const COMFORTABLE_DAY_WIDTH = 200;
-		const MINIMUM_DAY_WIDTH = 160;
+		// A phone shows two days side by side and scrolls to the others.
+		const MINIMUM_DAY_WIDTH = matchMedia('(max-width: 759px)').matches ? 128 : 160;
 		requestWidth(52 + days.length * (COMFORTABLE_DAY_WIDTH + 8));
 
 		/* Overlapping events cascade instead of splitting the column: each later one is indented a step and
@@ -976,18 +1006,18 @@ const RENDERERS = {
 			}).join('');
 			const nowLine = day.focus && nowHours !== undefined && nowHours >= firstHour && nowHours <= lastHour
 				? `<div class="now-line" style="top:${(nowHours - firstHour) * hourHeight}px" role="img" aria-label="Now"></div>` : '';
-			return `<div class="day-track ${past ? 'past' : ''}" ${target(`day-${day.id}`)} style="height:${trackHeight}px">${hours.map((hour) => `<div class="hour-line" style="top:${(hour - firstHour) * hourHeight}px"></div>`).join('')}${blocks}${nowLine}</div>`;
+			return `<div class="day-track ${past ? 'past' : ''} ${day.focus ? 'focus' : ''}" ${target(`day-${day.id}`)} style="height:${trackHeight}px">${hours.map((hour) => `<div class="hour-line" style="top:${(hour - firstHour) * hourHeight}px"></div>`).join('')}${blocks}${nowLine}</div>`;
 		};
 
 		const selected = timed.find((event) => event.id === chapter.selected && days.some((day) => day.id === event.day));
 		const popover = selected ? (() => {
-			const day = days.find((item) => item.id === selected.day);
+			const heading = dayHeading(days.find((item) => item.id === selected.day));
 			return `
 			<aside class="event-popover" ${target('event-detail')} data-anchor="${escapeHtml(selected.id)}" aria-label="Selected event">
 				<div class="head"><span class="swatch" style="--event-color:${escapeHtml(colorOf(selected))}"></span>${escapeHtml(calendars.get(selected.calendarId)?.name ?? '')}
 					<span class="actions">${iconLink(selected.url, 'Open in Google Calendar')}<button class="icon-link" type="button" data-action="close-event" aria-label="Close event" title="Close event">${icon('cross', 18)}</button></span></div>
 				<h2>${escapeHtml(eventTitle(selected))}</h2>
-				<div class="meta">${escapeHtml(`${day.label} ${day.date}`)} · ${escapeHtml(selected.start)}–${escapeHtml(selected.end)}</div>
+				<div class="meta">${escapeHtml([heading.relative, heading.date].filter(Boolean).join(', '))} · ${escapeHtml(selected.start)}–${escapeHtml(selected.end)}</div>
 				${selected.place ? `<div>${escapeHtml(selected.place)}</div>` : ''}
 				${(selected.notes ?? []).map((note) => `<div class="note">${escapeHtml(note)}</div>`).join('')}
 			</aside>`; })() : '';
@@ -995,7 +1025,7 @@ const RENDERERS = {
 		return `
 			<ul class="calendar-legend">${[...calendars.values()].map((calendar) => `<li><span class="swatch" style="--event-color:${escapeHtml(calendar.color)}"></span>${escapeHtml(calendar.name)}${calendar.busyOnly ? ' <span class="mono" style="color:var(--ink-soft);font-size:13px">busy only</span>' : ''}</li>`).join('')}</ul>
 			<div class="calendar-grid" style="--day-count:${days.length};--minimum-day-width:${MINIMUM_DAY_WIDTH}px">
-				<div class="calendar-days"><span></span>${days.map((day, index) => `<div class="calendar-day-head ${day.focus ? 'focus' : ''} ${index < focusIndex ? 'past' : ''}"><span class="weekday">${escapeHtml(day.label)}</span><span class="date">${escapeHtml(day.date)}</span></div>`).join('')}</div>
+				<div class="calendar-days"><span></span>${days.map((day, index) => { const heading = dayHeading(day); return `<div class="calendar-day-head ${day.focus ? 'focus' : ''} ${index < focusIndex ? 'past' : ''}"><span class="relative">${escapeHtml(heading.relative)}</span><span class="date">${escapeHtml(heading.date)}</span></div>`; }).join('')}</div>
 				${allDayEvents.length ? `<div class="calendar-all-day"><span class="label">all day</span>${days.map((day) => `<div class="all-day-cell">${allDayEvents.filter((event) => event.day === day.id).map((event) => `<button class="all-day-chip" type="button" data-event="${escapeHtml(event.id)}" ${target(`event-${event.id}`)} style="${eventStyle(event)}" title="${escapeHtml(event.title)}">${escapeHtml(event.title)}</button>`).join('')}</div>`).join('')}</div>` : ''}
 				<div class="calendar-body">
 					<div class="hour-labels" style="height:${trackHeight}px">${hours.map((hour) => `<span class="hour-label" style="top:${(hour - firstHour) * hourHeight}px">${String(hour).padStart(2, '0')}:00</span>`).join('')}</div>
@@ -1162,14 +1192,16 @@ const RENDERERS = {
 				<div class="note-head">${icon('note', 16)}<span>${escapeHtml(group.note)}</span>${iconLink(group.url, `Open ${group.note} in Obsidian`, 'obsidian')}</div>
 				<ul class="row-list">${group.items.map((item) => {
 					const choice = choices.triage[item.id];
-					return `
-					<li class="capture" ${target(`task-${item.id}`)}>
-						<span class="box" aria-hidden="true"></span>
-						<span class="text">${escapeHtml(item.text)}</span>
-						<span class="selects">
+					const filing = choice.resolved ? '' : `
 							<select class="small-select" data-triage="${escapeHtml(item.id)}" data-field="project" aria-label="Project for ${escapeHtml(item.text)}" title="Project">${options(['', ...(data.projects ?? [])], choice.project, (value) => value || 'No project')}</select>
 							<select class="small-select" data-triage="${escapeHtml(item.id)}" data-field="heading" aria-label="Heading for ${escapeHtml(item.text)}" title="Heading">${options(data.headings ?? [], choice.heading)}</select>
-							<select class="small-select" data-triage="${escapeHtml(item.id)}" data-field="priority" aria-label="Priority for ${escapeHtml(item.text)}" title="Priority">${options(PRIORITIES, choice.priority)}</select>
+							<select class="small-select" data-triage="${escapeHtml(item.id)}" data-field="priority" aria-label="Priority for ${escapeHtml(item.text)}" title="Priority">${options(PRIORITIES, choice.priority)}</select>`;
+					return `
+					<li class="capture ${choice.resolved ? 'resolved' : ''}" ${target(`task-${item.id}`)}>
+						<span class="box" aria-hidden="true">${choice.resolved ? icon('check', 14) : ''}</span>
+						<span class="text">${escapeHtml(item.text)}${choice.resolved && item.resolution ? `<span class="resolution">${escapeHtml(item.resolution)}</span>` : ''}</span>
+						<span class="selects">${filing}
+							<button class="done-toggle" type="button" data-triage-done="${escapeHtml(item.id)}" aria-pressed="${choice.resolved}" aria-label="${escapeHtml(`Already done: ${item.text}`)}" title="Tick it as resolved instead of filing it">${icon('check', 14)}Already done</button>
 						</span>
 					</li>`; }).join('')}</ul>
 			</section>`).join('');
@@ -1337,7 +1369,7 @@ function renderStage(scrollTop = stage.scrollTop) {
 }
 // A re-render replaces every control in the stage; focus moves to the new copy of the focused one so
 // keyboard users keep their place.
-const CONTROL_ATTRIBUTES = ['data-decide', 'data-value', 'data-news', 'data-vote', 'data-scope', 'data-event', 'data-retro-open', 'data-action', 'data-goto'];
+const CONTROL_ATTRIBUTES = ['data-decide', 'data-value', 'data-news', 'data-vote', 'data-scope', 'data-event', 'data-retro-open', 'data-action', 'data-goto', 'data-triage-done'];
 function equivalentControlSelector(element) {
 	if (!element || !stage.contains(element)) return '';
 	return CONTROL_ATTRIBUTES.filter((name) => element.hasAttribute(name)).map((name) => `[${name}="${CSS.escape(element.getAttribute(name))}"]`).join('');
@@ -1459,14 +1491,16 @@ function scrollTargetsIntoView(targets) {
 	if (!elements.length) return;
 	const stageBox = stage.getBoundingClientRect();
 	const ringMargin = 12;
-	const scrollFor = (start, end, scrolled, visible) => {
-		const first = Math.min(...elements.map((element) => element.getBoundingClientRect()[start])) - stageBox[start] + scrolled - ringMargin;
+	const scrollFor = (start, end, scrolled, visible, leadingInset = 0) => {
+		const first = Math.min(...elements.map((element) => element.getBoundingClientRect()[start])) - stageBox[start] + scrolled - ringMargin - leadingInset;
 		const last = Math.max(...elements.map((element) => element.getBoundingClientRect()[end])) - stageBox[start] + scrolled + ringMargin;
 		if (last - first > visible || first < scrolled) return first;
 		return last > scrolled + visible ? last - visible : scrolled;
 	};
 	const top = scrollFor('top', 'bottom', stage.scrollTop, stage.clientHeight);
-	const left = scrollFor('left', 'right', stage.scrollLeft, stage.clientWidth);
+	// Days scroll sideways under the calendar's sticky hour gutter, so a lit day stops beside it.
+	const gutter = stage.querySelector('.hour-labels');
+	const left = scrollFor('left', 'right', stage.scrollLeft, stage.clientWidth, gutter ? gutter.getBoundingClientRect().right - stageBox.left : 0);
 	if (top !== stage.scrollTop || left !== stage.scrollLeft) stage.scrollTo({ top, left, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
 }
 function setChapter(index, beatIndex = 0) {
@@ -1635,7 +1669,7 @@ byId('beat-panel').addEventListener('click', (event) => {
 });
 stage.addEventListener('click', (event) => {
 	const chapter = currentChapter();
-	const element = event.target.closest('[data-goto], [data-event], [data-scope], [data-retro-open], [data-news], [data-decide], [data-action]');
+	const element = event.target.closest('[data-goto], [data-event], [data-scope], [data-retro-open], [data-news], [data-decide], [data-triage-done], [data-action]');
 	if (!element) return;
 	// Controls in a group's head must not fold the group.
 	if (element.closest('summary') && !element.matches('summary')) event.preventDefault();
@@ -1651,6 +1685,13 @@ stage.addEventListener('click', (event) => {
 	if (element.dataset.decide) {
 		const id = element.dataset.decide;
 		updateDecision(id, { decision: decisionOf(id) === element.dataset.value ? undefined : element.dataset.value, decidedAt: new Date().toISOString() });
+		recordChange();
+		return renderStage();
+	}
+	if (element.dataset.triageDone) {
+		const triageChoice = choices.triage[element.dataset.triageDone];
+		if (!triageChoice) return;
+		triageChoice.resolved = !triageChoice.resolved;
 		recordChange();
 		return renderStage();
 	}
@@ -1703,7 +1744,6 @@ document.addEventListener('keydown', (event) => {
 	}
 });
 
-const briefDate = new Date(`${brief.date}T12:00:00`);
 document.title = `Morning brief, ${briefDate.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}`;
 byId('rail-date').textContent = briefDate.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 const since = new Date(brief.window?.since ?? '');

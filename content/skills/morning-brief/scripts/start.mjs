@@ -1,9 +1,10 @@
 #!/usr/bin/env node
-// Prints the brief's day folder and covered window as JSON, creating the folder.
+// Prints the brief's day folder, covered window and calendar days as JSON, creating the folder.
 import { mkdir, readFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 
 const MAXIMUM_WINDOW_DAYS = 7;
+const MAXIMUM_CATCH_UP_DAYS = 2;
 
 const retainedRoot = process.env.MPX_AI_RETAINED;
 if (!retainedRoot || !isAbsolute(retainedRoot)) {
@@ -20,10 +21,18 @@ try {
 } catch {
   lastSuccess = undefined;
 }
+if (lastSuccess && Number.isNaN(lastSuccess.getTime())) lastSuccess = undefined;
 // The window starts at the last brief, but always covers the whole previous day.
 let since = startOfDay(-1);
-if (lastSuccess && !Number.isNaN(lastSuccess.getTime()) && lastSuccess < since) {
+if (lastSuccess && lastSuccess < since) {
   since = lastSuccess < startOfDay(-MAXIMUM_WINDOW_DAYS) ? startOfDay(-MAXIMUM_WINDOW_DAYS) : lastSuccess;
+}
+// Yesterday, today and tomorrow, after the days before yesterday that began after the last brief, so
+// no brief showed them.
+const calendarOffsets = [-1, 0, 1];
+for (let offset = -2; offset >= -1 - MAXIMUM_CATCH_UP_DAYS; offset--) {
+  if (!lastSuccess || lastSuccess >= startOfDay(offset)) break;
+  calendarOffsets.unshift(offset);
 }
 
 const pad = (value) => String(value).padStart(2, '0');
@@ -43,5 +52,6 @@ console.log(JSON.stringify({
   since: localIso(since),
   until: localIso(now),
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-  lastSuccess: lastSuccess && !Number.isNaN(lastSuccess.getTime()) ? localIso(lastSuccess) : null,
+  lastSuccess: lastSuccess ? localIso(lastSuccess) : null,
+  calendarDays: calendarOffsets.map((offset) => localDate(startOfDay(offset))),
 }, null, 2));

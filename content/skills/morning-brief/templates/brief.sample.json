@@ -1,6 +1,6 @@
 {
   "date": "2026-10-16",
-  "window": { "since": "2026-10-15T06:05:00+02:00", "until": "2026-10-16T06:00:00+02:00", "label": "Thu 15 Oct 06:05 → Fri 16 Oct 06:00" },
+  "window": { "since": "2026-10-12T06:05:00+02:00", "until": "2026-10-16T06:00:00+02:00", "label": "Mon 12 Oct 06:05 → Fri 16 Oct 06:00" },
   "now": "2026-10-16T06:00:00+02:00",
   "process": { "account": "work" },
   "sources": [
@@ -32,26 +32,30 @@
           { "id": "work", "name": "Work", "account": "work", "access": "freeBusy", "color": "#7986cb", "busyOnly": true }
         ],
         "days": [
-          { "id": "2026-10-15", "label": "Thu", "date": "15" },
-          { "id": "today", "label": "Fri", "date": "16", "focus": true },
-          { "id": "tomorrow", "label": "Sat", "date": "17" }
+          { "id": "2026-10-13" },
+          { "id": "2026-10-14" },
+          { "id": "2026-10-15" },
+          { "id": "2026-10-16", "focus": true },
+          { "id": "2026-10-17" }
         ],
         "events": [
+          { "id": "parents-evening", "calendarId": "family", "day": "2026-10-13", "start": "18:00", "end": "19:00", "title": "Parents' evening", "url": "https://calendar.google.com/" },
           { "id": "retro-meeting", "calendarId": "work", "day": "2026-10-15", "start": "14:00", "end": "15:00", "busyOnly": true },
           { "id": "swim", "calendarId": "family", "day": "2026-10-15", "start": "17:00", "end": "18:00", "title": "Swimming lesson", "url": "https://calendar.google.com/" },
-          { "id": "standup", "calendarId": "work", "day": "today", "start": "09:30", "end": "09:45", "busyOnly": true },
-          { "id": "accountant", "calendarId": "personal", "day": "today", "start": "11:00", "end": "11:30", "title": "Tax return call with Dana", "attendees": 1, "url": "https://calendar.google.com/" },
-          { "id": "planning", "calendarId": "work", "day": "today", "start": "13:00", "end": "14:00", "busyOnly": true },
-          { "id": "dentist", "calendarId": "personal", "day": "today", "start": "16:00", "end": "17:00", "title": "Dentist", "place": "Downtown", "notes": ["Leave by 15:30"], "url": "https://calendar.google.com/" },
-          { "id": "pickup", "calendarId": "family", "day": "today", "start": "17:30", "end": "18:00", "title": "Kindergarten pickup", "url": "https://calendar.google.com/" },
-          { "id": "nameday", "calendarId": "family", "day": "today", "allDay": true, "title": "Name day: Havel" },
-          { "id": "run", "calendarId": "personal", "day": "tomorrow", "start": "08:00", "end": "09:00", "title": "Park run", "url": "https://calendar.google.com/" },
-          { "id": "market", "calendarId": "family", "day": "tomorrow", "start": "10:00", "end": "12:00", "title": "Farmers market", "url": "https://calendar.google.com/" },
-          { "id": "birthday", "calendarId": "family", "day": "tomorrow", "start": "15:00", "end": "19:00", "title": "Birthday party at Sam's", "place": "Oak Park", "url": "https://calendar.google.com/" }
+          { "id": "standup", "calendarId": "work", "day": "2026-10-16", "start": "09:30", "end": "09:45", "busyOnly": true },
+          { "id": "accountant", "calendarId": "personal", "day": "2026-10-16", "start": "11:00", "end": "11:30", "title": "Tax return call with Dana", "attendees": 1, "url": "https://calendar.google.com/" },
+          { "id": "planning", "calendarId": "work", "day": "2026-10-16", "start": "13:00", "end": "14:00", "busyOnly": true },
+          { "id": "dentist", "calendarId": "personal", "day": "2026-10-16", "start": "16:00", "end": "17:00", "title": "Dentist", "place": "Downtown", "notes": ["Leave by 15:30"], "url": "https://calendar.google.com/" },
+          { "id": "pickup", "calendarId": "family", "day": "2026-10-16", "start": "17:30", "end": "18:00", "title": "Kindergarten pickup", "url": "https://calendar.google.com/" },
+          { "id": "nameday", "calendarId": "family", "day": "2026-10-16", "allDay": true, "title": "Name day: Havel" },
+          { "id": "run", "calendarId": "personal", "day": "2026-10-17", "start": "08:00", "end": "09:00", "title": "Park run", "url": "https://calendar.google.com/" },
+          { "id": "market", "calendarId": "family", "day": "2026-10-17", "start": "10:00", "end": "12:00", "title": "Farmers market", "url": "https://calendar.google.com/" },
+          { "id": "birthday", "calendarId": "family", "day": "2026-10-17", "start": "15:00", "end": "19:00", "title": "Birthday party at Sam's", "place": "Oak Park", "url": "https://calendar.google.com/" }
         ]
       },
       "beats": [
-        { "say": "Good morning. Yesterday, in grey, ended with the swimming lesson.", "note": "Yesterday", "targets": ["event-swim"] },
+        { "say": "Good morning. Since Monday's brief, Tuesday had the parents' evening and Wednesday was empty.", "note": "Since Monday", "targets": ["event-parents-evening", "day-2026-10-14"] },
+        { "say": "Yesterday, in grey, ended with the swimming lesson.", "note": "Yesterday", "targets": ["event-swim"] },
         { "say": "Standup at half past nine, planning at one.", "note": "Work blocks", "targets": ["event-standup", "event-planning"] },
         { "say": "Between them, at eleven, the tax return call with Dana.", "note": "Tax call", "targets": ["event-accountant"] },
         { "say": "The dentist is at four; leave by half past three.", "note": "Dentist", "targets": ["event-dentist"], "select": "dentist" },
@@ -195,7 +199,7 @@
       ]
     },
     {
-      "id": "triage", "type": "triage", "name": "Obsidian triage", "title": "Three captures to file", "status": "fyi", "count": 3,
+      "id": "triage", "type": "triage", "name": "Obsidian triage", "title": "Three captures to file, two already done", "status": "fyi", "count": 3,
       "data": {
         "vault": "ObsidianMP",
         "projects": ["mpx", "orca", "prejemesi", "skills", "videoLab"],
@@ -203,17 +207,20 @@
         "groups": [
           { "id": "daily", "note": "Daily/2026-10-15", "url": "obsidian://open?vault=ObsidianMP&file=Daily%2F2026-10-15", "items": [
             { "id": "t1", "text": "Morning brief should move KF tickets", "project": "mpx", "heading": "#tooling", "priority": "high" },
-            { "id": "t2", "text": "Buy a birthday present for Sam", "project": "", "heading": "#todo", "priority": "highest" }
+            { "id": "t2", "text": "Buy a birthday present for Sam", "project": "", "heading": "#todo", "priority": "highest" },
+            { "id": "t4", "text": "Book the car service", "project": "", "heading": "#todo", "priority": "medium", "resolved": true, "resolution": "Booked: Car service on 22 Oct in Personal calendar" }
           ] },
           { "id": "ideas", "note": "Ideas", "url": "obsidian://open?vault=ObsidianMP&file=Ideas", "items": [
-            { "id": "t3", "text": "True crime videos with realistic animations", "project": "videoLab", "heading": "#AI", "priority": "low" }
+            { "id": "t3", "text": "True crime videos with realistic animations", "project": "videoLab", "heading": "#AI", "priority": "low" },
+            { "id": "t5", "text": "Brief should skip routine Orca runs", "project": "mpx", "heading": "#tooling", "priority": "medium", "resolved": true, "resolution": "Filed: mpx ## Tasks, done 14 Oct" }
           ] }
         ]
       },
       "beats": [
         { "say": "From yesterday's note: KF moves for the brief, and Sam's present, which is due tomorrow.", "note": "Daily note", "targets": ["task-t1", "task-t2"] },
         { "say": "One idea: true crime animations, parked as low priority.", "note": "Ideas", "targets": ["task-t3"] },
-        { "say": "Once the projects look right, the agent files all three.", "note": "File them", "targets": ["action-file"] }
+        { "say": "The car service and the Orca runs rule are already done.", "note": "Already done", "targets": ["task-t4", "task-t5"] },
+        { "say": "Once the projects look right, the agent files the three and ticks the two done ones.", "note": "File them", "targets": ["action-file"] }
       ]
     },
     {
@@ -297,7 +304,7 @@
           },
           { "id": "action-merge", "project": "ui-components", "text": "Merge !318", "detail": "Approved and green", "app": "gitlab", "url": "https://example.com/mr/318", "chapter": "work", "source": "card-mr-318" },
           { "id": "action-move-t102", "project": "ui-components", "text": "Move T-102 to Approved", "detail": "Still in review; !318 is approved and green", "app": "kanbanflow", "url": "https://kanbanflow.com/", "chapter": "issues", "source": "issue-T-102" },
-          { "id": "action-file", "project": "personal", "text": "File the three captures as set", "detail": "Project, heading and priority per capture", "app": "obsidian", "chapter": "triage" },
+          { "id": "action-file", "project": "personal", "text": "File three captures, tick two done", "detail": "Project, heading and priority per open capture; done ones ticked in their note", "app": "obsidian", "chapter": "triage" },
           { "id": "action-fix-substitution", "project": "mpx", "text": "Fix the arithmetic hook", "detail": "Fix session: Claude Code in mpx", "app": "claude", "chapter": "retro", "source": "retro-substitution" }
         ]
       },

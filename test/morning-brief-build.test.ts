@@ -209,7 +209,7 @@ test('a meeting today on my calendar must be narrated; one on a reader calendar 
   const shared = await sampleBrief();
   const sharedCalendar = chapterOfType(shared, 'calendar');
   sharedCalendar.data!.calendars.push({ id: 'partner', name: 'Alex', account: 'personal', access: 'reader', color: '#e67c73' });
-  sharedCalendar.data!.events.push({ id: 'alex-review', calendarId: 'partner', day: 'today', start: '10:00', end: '11:00', title: 'Design review', attendees: 4 });
+  sharedCalendar.data!.events.push({ id: 'alex-review', calendarId: 'partner', day: BRIEF_DAY, start: '10:00', end: '11:00', title: 'Design review', attendees: 4 });
   const sharedResult = await build(shared);
   assert.equal(sharedResult.exitCode, 0, sharedResult.stderr);
 });
