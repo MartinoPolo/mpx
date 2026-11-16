@@ -260,14 +260,21 @@ function closingBacktick(command: string, start: number): number {
   return -1;
 }
 
-/** Separates command and process substitutions so their inner commands are inspected on their own. */
-function extractSubstitutions(command: string, dialect: ShellDialect): Substitutions {
+/**
+ * Separates command and process substitutions so their inner commands are inspected on their own.
+ * In an unquoted heredoc body quotes are plain text, so substitutions inside them still run.
+ */
+function extractSubstitutions(command: string, dialect: ShellDialect, heredocBody = false): Substitutions {
   const inner: string[] = [];
   let outer = '';
   let quote: "'" | '"' | undefined;
   for (let index = 0; index < command.length; index += 1) {
     const character = command[index] ?? '';
     const next = command[index + 1];
+    if (heredocBody && (character === "'" || character === '"' || character === '<' || character === '>')) {
+      outer += character;
+      continue;
+    }
     if (quote === "'") {
       if (character === "'") quote = undefined;
       outer += character;
@@ -306,6 +313,111 @@ function extractSubstitutions(command: string, dialect: ShellDialect): Substitut
   return { outer, inner };
 }
 
+interface Heredoc {
+  readonly body: string;
+  /** A quoted delimiter (`<<'EOF'`, `<<\EOF`) keeps the body free of expansions. */
+  readonly literal: boolean;
+}
+
+const HEREDOC_PLACEHOLDER = /^<<__mpx_heredoc_(\d+)__$/u;
+
+/** Moves heredoc bodies out of the command text, leaving a placeholder word where each one is redirected. */
+function separateHeredocs(command: string, heredocs: Heredoc[]): string {
+  let output = '';
+  let quote: "'" | '"' | undefined;
+  const pending: { index: number; delimiter: string; stripTabs: boolean; literal: boolean }[] = [];
+  for (let index = 0; index < command.length; index += 1) {
+    const character = command[index] ?? '';
+    if (quote === "'") {
+      if (character === "'") quote = undefined;
+      output += character;
+      continue;
+    }
+    if (character === '\\') {
+      output += command.slice(index, index + 2);
+      index += 1;
+      continue;
+    }
+    if (quote === '"') {
+      if (character === '"') quote = undefined;
+      output += character;
+      continue;
+    }
+    if (character === "'" || character === '"') {
+      quote = character;
+      output += character;
+      continue;
+    }
+    if (character === '#' && (index === 0 || /[\s;&|(]/u.test(command[index - 1] ?? ''))) {
+      const end = command.indexOf('\n', index);
+      output += command.slice(index, end < 0 ? command.length : end);
+      index = (end < 0 ? command.length : end) - 1;
+      continue;
+    }
+    if (character === '\n' && pending.length > 0) {
+      output += character;
+      let cursor = index + 1;
+      for (const heredoc of pending) {
+        const lines: string[] = [];
+        while (cursor < command.length) {
+          const end = command.indexOf('\n', cursor);
+          const lineEnd = end < 0 ? command.length : end;
+          const line = command.slice(cursor, lineEnd).replace(/\r$/u, '');
+          cursor = lineEnd + 1;
+          if ((heredoc.stripTabs ? line.replace(/^\t+/u, '') : line) === heredoc.delimiter) break;
+          lines.push(line);
+        }
+        heredocs[heredoc.index] = { body: lines.join('\n'), literal: heredoc.literal };
+      }
+      pending.length = 0;
+      index = cursor - 1;
+      continue;
+    }
+    // A placeholder left by an enclosing command's separation already refers to its body.
+    const placeholder = /^<<__mpx_heredoc_\d+__/u.exec(command.slice(index, index + 32))?.[0];
+    if (placeholder) {
+      output += placeholder;
+      index += placeholder.length - 1;
+      continue;
+    }
+    const redirect = character === '<' && command[index + 1] === '<' && command[index + 2] !== '<' && command[index - 1] !== '<'
+      ? /^<<(-?)[ \t]*((?:'[^'\n]*'|"[^"\n]*"|\\.|[^\s;&|<>()'"\\])+)/u.exec(command.slice(index))
+      : null;
+    const delimiterWord = redirect?.[2] ?? '';
+    const delimiter = delimiterWord.replace(/\\(.)|['"]/gu, '$1');
+    if (redirect && /^[A-Za-z_]/u.test(delimiter)) {
+      // Bash also treats `<<"EOF"` as literal; inspecting it as expanding only inspects more.
+      pending.push({ index: heredocs.length, delimiter, stripTabs: redirect[1] === '-', literal: /['\\]/u.test(delimiterWord) });
+      output += ` <<__mpx_heredoc_${heredocs.length}__ `;
+      heredocs.push({ body: '', literal: true });
+      index += redirect[0].length - 1;
+      continue;
+    }
+    output += character;
+  }
+  return output;
+}
+
+function interpreterFamily(name: string): 'node' | 'python' | undefined {
+  if (name === 'node') return 'node';
+  return /^(?:python(?:\d+(?:\.\d+)*)?|pythonw|py)$/u.test(name) ? 'python' : undefined;
+}
+
+const POWERSHELL_AUTOMATIC_VARIABLES = new Set(['_', 'psitem', 'this', 'args', 'input', 'matches', 'true', 'false', 'null', 'pwd', 'home', 'pid', 'psscriptroot', 'pscommandpath', 'lastexitcode', 'error', 'host', 'psversiontable']);
+const POWERSHELL_SAFE_METHODS = new Set(['substring', 'replace', 'split', 'trim', 'trimstart', 'trimend', 'tostring', 'tolower', 'toupper', 'tolowerinvariant', 'toupperinvariant', 'contains', 'startswith', 'endswith', 'indexof', 'lastindexof', 'padleft', 'padright', 'equals', 'compareto', 'gettype']);
+
+// A PowerShell statement that starts with a variable is an expression, not a command call. Automatic
+// variables such as `$_` only yield values; a method call on them runs only when its name is known safe.
+function powerShellAutomaticExpression(value: string, terminator: string | undefined): boolean {
+  // A subexpression's commands were inspected on their own; at a statement start it only yields a value.
+  if (value.startsWith(SUBSTITUTION_PLACEHOLDER)) return terminator !== '(';
+  const match = /^\$(?:([A-Za-z_]\w*)|env:\w+)((?:\.\w+|\[[^\]]*\])*)(.*)$/su.exec(value);
+  if (!match || (match[1] !== undefined && !POWERSHELL_AUTOMATIC_VARIABLES.has(match[1].toLowerCase()))) return false;
+  if (terminator !== '(') return true;
+  const method = /\.(\w+)$/u.exec(match[2] ?? '')?.[1];
+  return match[3] === '' && method !== undefined && POWERSHELL_SAFE_METHODS.has(method.toLowerCase());
+}
+
 interface Segment {
   readonly words: Word[];
   /** The operator that ended the segment; `(` means a PowerShell method call follows. */
@@ -336,6 +448,26 @@ function commandSegments(tokens: readonly Token[]): Segment[] {
   }
   if (words.length > 0) segments.push({ words });
   return segments;
+}
+
+// A PowerShell scriptblock starts new statements, so `ForEach-Object { . $_ }` runs `. $_` as a command.
+function splitPowerShellBlocks(segments: readonly Segment[]): Segment[] {
+  const statements: Segment[] = [];
+  for (const segment of segments) {
+    let words: Word[] = [];
+    const statementCount = statements.length;
+    for (const word of segment.words) {
+      if (word.dynamic || (word.value !== '{' && word.value !== '}')) {
+        words.push(word);
+        continue;
+      }
+      if (words.length > 0) statements.push({ words });
+      words = [];
+    }
+    if (words.length > 0) statements.push({ words, terminator: segment.terminator });
+    else if (statements.length > statementCount) statements.push({ ...(statements.pop() as Segment), terminator: segment.terminator });
+  }
+  return statements;
 }
 
 interface PowerShellAssignment {
@@ -841,7 +973,7 @@ function wrapperScript(words: readonly Word[]): { kind: string; family?: 'node' 
   if (['ruby', 'perl'].includes(name) && words.some(word => ['-e', '-c', '-p', '-pe', '--eval', '--execute', '--print'].includes(word.value))) {
     return { kind: name, opaque: true };
   }
-  const family = name === 'node' ? 'node' : /^(?:python(?:\d+(?:\.\d+)*)?|pythonw|py)$/u.test(name) ? 'python' : undefined;
+  const family = interpreterFamily(name);
   if (!family) return undefined;
   for (let index = 1; index < words.length; index += 1) {
     const value = words[index]?.value ?? '';
@@ -862,7 +994,47 @@ function block(reason: string): string {
 
 const DELETION_ALTERNATIVE = 'delete only generated/cache or temp paths, or ask the user to remove it';
 
-async function inspect(command: string, cwd: string, depth: number, blocks: string[], dialect: ShellDialect = 'posix'): Promise<void> {
+async function inspectSubstitutions(inner: readonly string[], cwd: string, depth: number, blocks: string[], dialect: ShellDialect, heredocs: Heredoc[]): Promise<void> {
+  for (const command of inner) {
+    const arithmetic = dialect === 'posix' ? /^\((.*)\)$/su.exec(command)?.[1] : undefined;
+    const nested = arithmetic === undefined ? undefined : extractSubstitutions(arithmetic, dialect);
+    // `$(( ))` evaluates an expression and runs only its nested substitutions; bash reparses text that
+    // reads like a command (`$((rm -rf x) )`) as a subshell, so that stays a command.
+    if (nested && !nested.failure && !/[A-Za-z_][\w./-]*\s+[-\w./'"$]/u.test(nested.outer)) {
+      for (const nestedCommand of nested.inner) await inspect(nestedCommand, cwd, depth + 2, blocks, dialect, heredocs);
+    } else {
+      await inspect(command, cwd, depth + 1, blocks, dialect, heredocs);
+    }
+  }
+}
+
+const SHELL_STDIN_READERS = new Set(['bash', 'sh', 'zsh', 'dash', 'ksh', 'ssh', 'source', '.', 'cmd']);
+const DATABASE_CLIENTS = new Set(['mysql', 'mariadb', 'psql', 'sqlcmd', 'sqlite', 'sqlite3']);
+
+/** A heredoc is data unless the command reading it runs its text as code. */
+async function inspectHeredocReader(words: readonly Word[], heredoc: Heredoc, cwd: string, depth: number, blocks: string[], heredocs: Heredoc[]): Promise<void> {
+  if (words.length === 0 || words[0]?.dynamic) return;
+  const name = executableName(words[0]?.value ?? '');
+  const family = interpreterFamily(name);
+  if (SHELL_STDIN_READERS.has(name)) {
+    await inspect(heredoc.body, cwd, depth + 1, blocks, 'posix', heredocs);
+  } else if (name === 'powershell' || name === 'pwsh') {
+    await inspect(heredoc.body, cwd, depth + 1, blocks, 'powershell', heredocs);
+  } else if (family) {
+    if (!heredoc.literal && /[$`]/u.test(heredoc.body)) {
+      blocks.push(block(`a ${name} script in an unquoted heredoc expands shell values and cannot be inspected; quote the delimiter (<<'EOF') or write a script file`));
+      return;
+    }
+    const hazard = inlineScriptHazard(family, heredoc.body);
+    if (hazard) blocks.push(block(`heredoc ${name} script uses ${hazard}, which can delete data or start processes; write it to a script file and run that`));
+  } else if (['ruby', 'perl'].includes(name)) {
+    blocks.push(block(`a ${name} script in a heredoc cannot be inspected; write it to a script file and run that`));
+  } else if (DATABASE_CLIENTS.has(name) && DESTRUCTIVE_SQL.test(heredoc.body)) {
+    blocks.push(block('destructive SQL in an executable database client command; ask the user to run it'));
+  }
+}
+
+async function inspect(command: string, cwd: string, depth: number, blocks: string[], dialect: ShellDialect = 'posix', heredocs: Heredoc[] = []): Promise<void> {
   if (depth > 4) {
     blocks.push(block('nested shell wrappers or substitutions exceed the inspection depth limit; run the inner command on its own or write a script file'));
     return;
@@ -871,24 +1043,22 @@ async function inspect(command: string, cwd: string, depth: number, blocks: stri
     blocks.push(block(`command exceeds the ${MAX_COMMAND_LENGTH}-byte inspection limit; write it to a script file and run that`));
     return;
   }
-  const substitutions = extractSubstitutions(command, dialect);
+  const firstHeredoc = heredocs.length;
+  const commandText = dialect === 'posix' ? separateHeredocs(command, heredocs) : command;
+  const substitutions = extractSubstitutions(commandText, dialect);
   if (substitutions.failure) {
     blocks.push(block(substitutions.failure));
     return;
   }
-  const changesDirectory = /(?:^|[;&]\s*)\b(?:cd|pushd|popd|set-location|sl|push-location|pop-location)\b/iu.test(command);
+  const changesDirectory = /(?:^|[;&]\s*)\b(?:cd|pushd|popd|set-location|sl|push-location|pop-location)\b/iu.test(commandText);
   // A substitution runs where the outer command has moved to, which is only known without directory changes.
   const substitutionCwd = changesDirectory ? path.parse(cwd).root : cwd;
-  for (const inner of substitutions.inner) {
-    const arithmetic = dialect === 'posix' ? /^\((.*)\)$/su.exec(inner)?.[1] : undefined;
-    const nested = arithmetic === undefined ? undefined : extractSubstitutions(arithmetic, dialect);
-    // `$(( ))` evaluates an expression and runs only its nested substitutions; bash reparses text that
-    // reads like a command (`$((rm -rf x) )`) as a subshell, so that stays a command.
-    if (nested && !nested.failure && !/[A-Za-z_][\w./-]*\s+[-\w./'"$]/u.test(nested.outer)) {
-      for (const command of nested.inner) await inspect(command, substitutionCwd, depth + 2, blocks, dialect);
-    } else {
-      await inspect(inner, substitutionCwd, depth + 1, blocks, dialect);
-    }
+  await inspectSubstitutions(substitutions.inner, substitutionCwd, depth, blocks, dialect, heredocs);
+  for (const heredoc of heredocs.slice(firstHeredoc)) {
+    if (heredoc.literal) continue;
+    const expanded = extractSubstitutions(heredoc.body, 'posix', true);
+    if (expanded.failure) blocks.push(block('an unquoted heredoc body has an unterminated substitution; quote the delimiter (<<\'EOF\') to keep its text literal'));
+    else await inspectSubstitutions(expanded.inner, substitutionCwd, depth, blocks, 'posix', heredocs);
   }
   const outer = substitutions.outer;
   const literal = tokenize(outer);
@@ -899,21 +1069,35 @@ async function inspect(command: string, cwd: string, depth: number, blocks: stri
   }
   if (hasNulRedirect(parsed.tokens)) blocks.push(block('a redirect targets Windows NUL; use /dev/null in Git Bash'));
 
-  const unquoted = command.replace(/(['"])(?:\\.|(?!\1)[^\\])*\1/gu, '');
+  const unquoted = commandText.replace(/(['"])(?:\\.|(?!\1)[^\\])*\1/gu, '');
   if (/:\s*\(\s*\)\s*\{[^}]*:\s*\|\s*:[^}]*\}/u.test(unquoted)) blocks.push(block('fork bomb; run a bounded command instead'));
-  if (/SetEnvironmentVariable\s*\(\s*(['"]?)PATH\1\s*[,)]/iu.test(command)) blocks.push(block('persistent Windows PATH mutation via PowerShell; change $env:PATH for the session only or ask the user'));
+  if (/SetEnvironmentVariable\s*\(\s*(['"]?)PATH\1\s*[,)]/iu.test(commandText)) blocks.push(block('persistent Windows PATH mutation via PowerShell; change $env:PATH for the session only or ask the user'));
   if (/>\s*(?:\/dev\/(?:sd[a-z]\d*|nvme\d+n\d+(?:p\d+)?|mmcblk\d+(?:p\d+)?)|\\\\\.\\PhysicalDrive\d+)/iu.test(unquoted)) {
     blocks.push(block('a redirect targets a raw device; redirect to a file instead'));
   }
 
   const directories = [...inspectStaticShell(outer, cwd).commands];
-  const segments = commandSegments(parsed.tokens);
+  const segments = dialect === 'powershell' ? splitPowerShellBlocks(commandSegments(parsed.tokens)) : commandSegments(parsed.tokens);
   const assignments = dialect === 'powershell' ? segments.map(powerShellAssignment) : [];
   const resolvable = resolvablePowerShellVariables(outer, assignments.filter((assignment): assignment is PowerShellAssignment => assignment !== undefined));
   const powerShellLiterals = new Map<string, string>();
+  const withoutHeredocs = (words: readonly Word[]): Word[] => words.filter(word => word.dynamic || !HEREDOC_PLACEHOLDER.test(word.value));
   for (const [index, segment] of segments.entries()) {
+    const heredocNumbers = segment.words.flatMap(word => {
+      const placeholder = word.dynamic ? null : HEREDOC_PLACEHOLDER.exec(word.value);
+      return placeholder ? [Number(placeholder[1])] : [];
+    });
+    // The body reaches this command and every later stage of its pipeline (`cat <<'EOF' | python -`).
+    for (let reader = index; heredocNumbers.length > 0 && reader < segments.length; reader += 1) {
+      const readerWords = unwrap(withoutHeredocs(segments[reader]?.words ?? []));
+      for (const number of heredocNumbers) {
+        const heredoc = heredocs[number];
+        if (heredoc) await inspectHeredocReader(readerWords, heredoc, cwd, depth, blocks, heredocs);
+      }
+      if (segments[reader]?.terminator !== '|') break;
+    }
     const assignment = assignments[index];
-    let rawWords: readonly Word[] = segment.words;
+    let rawWords: readonly Word[] = withoutHeredocs(segment.words);
     if (assignment) {
       if (assignment.literal !== undefined && resolvable.has(assignment.name)) powerShellLiterals.set(assignment.name, assignment.literal);
       rawWords = assignment.command;
@@ -925,7 +1109,9 @@ async function inspect(command: string, cwd: string, depth: number, blocks: stri
     });
     const words = unwrap(rawWords);
     if (words.length === 0) continue;
-    if (words[0]?.dynamic) {
+    const invoked = segments[index - 1]?.terminator === '&';
+    if (dialect === 'powershell' && words[0]?.dynamic && !invoked && powerShellAutomaticExpression(words[0].value, segment.terminator)) continue;
+    if (words[0]?.dynamic || (dialect === 'powershell' && words[0]?.value === '.' && words[1]?.dynamic)) {
       blocks.push(block('the executable is dynamic and cannot be inspected; call it by its literal name or path'));
       continue;
     }
@@ -944,8 +1130,14 @@ async function inspect(command: string, cwd: string, depth: number, blocks: stri
         blocks.push(block(`opaque ${wrapper.kind} interpreter command cannot be inspected; use a named script or directly inspectable command`));
       } else {
         const wrapperDialect = wrapper.kind === 'powershell' || wrapper.kind === 'pwsh' ? 'powershell' : 'posix';
-        await inspect(wrapper.script.value, changesDirectory ? (directories[0]?.cwd ?? path.parse(cwd).root) : cwd, depth + 1, blocks, wrapperDialect);
+        await inspect(wrapper.script.value, changesDirectory ? (directories[0]?.cwd ?? path.parse(cwd).root) : cwd, depth + 1, blocks, wrapperDialect, heredocs);
       }
+      continue;
+    }
+    if (dialect === 'powershell' && (name === 'invoke-expression' || name === 'iex')) {
+      const expression = words.slice(1).filter(word => word.value.toLowerCase() !== '-command');
+      if (expression.length === 1 && !expression[0]?.dynamic) await inspect(expression[0]?.value ?? '', cwd, depth + 1, blocks, 'powershell', heredocs);
+      else blocks.push(block('Invoke-Expression with a computed string cannot be inspected; run the command directly or write a script file'));
       continue;
     }
 

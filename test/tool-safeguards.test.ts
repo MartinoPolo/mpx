@@ -116,6 +116,41 @@ test('PowerShell assignments are values, and a variable resolves only from one l
   } finally { await rm(cwd, { recursive: true, force: true }); }
 });
 
+test('PowerShell automatic variables are values in scriptblocks but never an invoked executable', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'mpx-powershell-'));
+  const options = { isTrusted: () => false };
+  const evaluate = (command: string) => evaluateTool({ name: 'PowerShell', input: { command }, cwd }, options);
+  try {
+    for (const command of [
+      'Get-ChildItem | ForEach-Object { $_.Name }',
+      'Get-ChildItem | ForEach-Object { $_ }',
+      'Get-ChildItem | Where-Object { $_.Length -gt 0 }',
+      'Get-ChildItem | Where-Object { ($_.Length -gt 0) -and ($PSItem.Name -like "*.mp4") }',
+      "Get-PSDrive C,D | Select-Object Name,@{n='FreeGB';e={[math]::Round($_.Free/1GB)}}",
+      'Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId) $($_.CommandLine.Substring(0, [Math]::Min(170, $_.CommandLine.Length)))" }',
+      'Get-ChildItem | ForEach-Object { if ($_.Length -gt 330) { $_.Name.Substring(0,330) } else { $_ } }',
+      "Invoke-Expression 'Get-ChildItem'",
+    ]) {
+      assert.equal((await evaluate(command)).decision, 'allow', command);
+    }
+    for (const [command, reason] of [
+      ['Get-ChildItem | ForEach-Object { & $_ }', /executable is dynamic/],
+      ['Get-ChildItem *.ps1 | ForEach-Object { . $_ }', /executable is dynamic/],
+      ['Get-ChildItem | ForEach-Object { $_.Delete() }', /executable is dynamic/],
+      ['Get-ChildItem | ForEach-Object { Invoke-Expression $_ }', /Invoke-Expression/],
+      ['Get-Content cmds.txt | ForEach-Object { iex $_ }', /Invoke-Expression/],
+      ["Invoke-Expression 'Remove-Item -Recurse -Force src'", /forced recursive deletion/],
+      ['Get-ChildItem | ForEach-Object { Remove-Item -Recurse -Force src }', /forced recursive deletion/],
+      ['Get-ChildItem | ForEach-Object { $(Remove-Item -Recurse -Force src) }', /forced recursive deletion/],
+      ['$target.Delete()', /executable is dynamic/],
+    ] as const) {
+      const result = await evaluate(command);
+      assert.equal(result.decision, 'block', command);
+      assert.match(result.diagnostics.join('\n'), reason, command);
+    }
+  } finally { await rm(cwd, { recursive: true, force: true }); }
+});
+
 test('Claude native event transport preserves policy and nonblocking context fallbacks', async () => {
   const cwd = await mkdtemp(join(tmpdir(), 'mpx-claude-hooks-'));
   try {
