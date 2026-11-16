@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { evaluateTool } from '../src/safeguards/tools.js';
-import { handleClaudeHook } from '../src/claude-hooks.js';
+import { handleClaudeHook, POST_COMPACTION_RESTART } from '../src/claude-hooks.js';
 
 test('shared interception blocks NUL, dangerous commands, manager mismatches and uninspected commit mutations', async () => {
   const cwd = await mkdtemp(join(tmpdir(), 'mpx-tools-'));
@@ -84,16 +84,22 @@ test('Claude native event transport preserves policy and nonblocking context fal
   try {
     const blocked = await handleClaudeHook({ hook_event_name: 'PreToolUse', cwd, tool_name: 'Bash', tool_input: { command: 'git clean -f' } });
     assert.equal(JSON.parse(blocked.stdout).hookSpecificOutput.permissionDecision, 'deny');
-    const roots = await handleClaudeHook({ hook_event_name: 'SessionStart', cwd }, resolve('.'), { MPX_PROJECTS: 'C:/fixture' });
-    assert.match(roots.stdout, /C:\/fixture/);
-    assert.match(roots.stdout, /Conversation compaction only/);
-    assert.match(roots.stdout, /Key Decisions/);
-    assert.doesNotMatch(roots.stdout, /# Working principles/, 'shared instructions arrive through the native CLAUDE.md import');
-    assert.equal((await handleClaudeHook({ hook_event_name: 'PreCompact', cwd }, resolve('.'))).stdout, '', 'unsupported PreCompact stdout is not instruction delivery');
+    const startup = await handleClaudeHook({ hook_event_name: 'SessionStart', source: 'startup', cwd }, resolve('.'), { MPX_PROJECTS: 'C:/fixture' });
+    assert.match(startup.stdout, /C:\/fixture/);
+    assert.doesNotMatch(startup.stdout, /Key Decisions|compacted/, 'compaction guidance is summarizer input, not session context');
+    assert.doesNotMatch(startup.stdout, /# Working principles/, 'shared instructions arrive through the native CLAUDE.md import');
+    const afterCompaction = await handleClaudeHook({ hook_event_name: 'SessionStart', source: 'compact', cwd }, resolve('.'), { MPX_PROJECTS: 'C:/fixture' });
+    assert.ok(afterCompaction.stdout.startsWith(POST_COMPACTION_RESTART));
+    assert.match(afterCompaction.stdout, /C:\/fixture/);
+    assert.equal((await handleClaudeHook({ hook_event_name: 'SessionStart', source: 'startup', cwd }, resolve('.'), {})).stdout, '');
+    const guidance = await handleClaudeHook({ hook_event_name: 'PreCompact', cwd }, resolve('.'));
+    assert.match(guidance.stdout, /Key Decisions/);
+    assert.match(guidance.stdout, /Open Questions/);
+    assert.ok(guidance.stdout.length <= 10_000, 'Claude caps PreCompact instructions at 10,000 characters');
     const style = await handleClaudeHook({ hook_event_name: 'UserPromptSubmit', cwd });
     assert.match(style.stdout, /concise/);
-    const fallback = await handleClaudeHook({ hook_event_name: 'SessionStart', cwd }, cwd);
-    assert.equal(fallback.code, 0); assert.match(fallback.stderr, /native compaction/);
+    const fallback = await handleClaudeHook({ hook_event_name: 'PreCompact', cwd }, cwd);
+    assert.equal(fallback.code, 0); assert.equal(fallback.stdout, ''); assert.match(fallback.stderr, /native compaction/);
   } finally { await rm(cwd, { recursive: true, force: true }); }
 });
 

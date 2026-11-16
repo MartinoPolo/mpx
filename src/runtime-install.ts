@@ -112,6 +112,7 @@ function buildClaudeHookEntries(root: string, legacy = false): Record<string, un
     ['PreToolUse', 'Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|apply_patch', 40],
     ['PostToolUse', 'Write|Edit|MultiEdit|NotebookEdit|apply_patch', 6],
     ['SessionStart', 'startup|resume|compact', 5],
+    ['PreCompact', undefined, 5],
     ['UserPromptSubmit', undefined, 5],
     ['Stop', undefined, 5],
   ].map(([event, matcher, timeout]) => [event, [{ ...(matcher ? { matcher } : {}), hooks: [{ type: 'command', command: `${prefix} ${event}${!legacy && event === 'PreToolUse' ? ' || exit 2' : ''}`, timeout }] }]]));

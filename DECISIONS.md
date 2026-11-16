@@ -45,8 +45,10 @@ conventions belong in `AGENTS.md`; rollout evidence and recovery belong in `migr
 - **Propagate selected packs to subagents.** Parent and child sessions need the same effective
   workflow vocabulary; discovery and named-skill preloading must preserve that selection.
 - **Deliver each instruction once, scoped natively.** Claude imports shared `AGENTS.md` through the
-  account `CLAUDE.md`, which also reaches subagents; the SessionStart hook adds only compaction
-  guidance and machine roots. File-specific rules declare Claude `paths` alongside `applyTo`.
+  account `CLAUDE.md`, which also reaches subagents; the SessionStart hook adds only machine roots,
+  plus a restart instruction after compaction. Compaction guidance goes to the summarizer itself
+  (Claude PreCompact stdout, Pi custom instructions), after the user's own `/compact` text.
+  File-specific rules declare Claude `paths` alongside `applyTo`.
 - **Split UI guidance into a path-scoped rule and a values skill.** A short global rule states
   principles whenever UI files are touched, because quick edits rarely invoke a skill; the
   model-invoked skill holds values and patterns, and project tokens own the numbers. Design-stage

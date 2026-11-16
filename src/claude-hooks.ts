@@ -8,10 +8,12 @@ import { formatEditedFile } from './safeguards/format.js';
 import { claudePromptRunContext, recordClaudeStop, RUN_STATE_DIRECTORY, type ClaudeRunEvent } from './claude-run-attention.js';
 import { CLAUDE_UNFINISHED_PROMPT, saveUnfinished } from './unfinished-command.js';
 
-export interface ClaudeHookInput extends ClaudeRunEvent { hook_event_name: string; cwd?: string; transcript_path?: string; tool_name?: string; tool_input?: Record<string, unknown> }
+export interface ClaudeHookInput extends ClaudeRunEvent { hook_event_name: string; source?: string; cwd?: string; transcript_path?: string; tool_name?: string; tool_input?: Record<string, unknown> }
 export interface ClaudeHookResult { code: number; stdout: string; stderr: string }
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-/** Claude native context/tool transport. PreCompact stdout is not an instruction channel. */
+// Counters the native post-summary footer that says to continue without asking, which would skip open questions.
+export const POST_COMPACTION_RESTART = 'Context was just compacted. Before continuing, re-read the plan, state, and critical files the summary names, and check in-flight work by its IDs. If the summary lists open questions or pending approvals, wait for the user instead of continuing past them.';
+/** Claude native context/tool transport. Claude appends PreCompact stdout to the summarizer instructions, after any `/compact` arguments. */
 export async function handleClaudeHook(event: ClaudeHookInput, contentRoot = root, env = process.env, runStateDirectory = RUN_STATE_DIRECTORY): Promise<ClaudeHookResult> {
   const result: ClaudeHookResult = { code: 0, stdout: '', stderr: '' };
   if (event.hook_event_name === 'Stop') { await recordClaudeStop(event, runStateDirectory); return result; }
@@ -29,13 +31,13 @@ export async function handleClaudeHook(event: ClaudeHookInput, contentRoot = roo
     const runContext = await claudePromptRunContext(event, runStateDirectory);
     result.stdout = JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: runContext ? `${STYLE_REINFORCEMENT}\n\n${runContext}` : STYLE_REINFORCEMENT } });
 
-  } else if (event.hook_event_name === 'SessionStart') {
-    const roots = machineRootContext(env);
+  } else if (event.hook_event_name === 'PreCompact') {
     try {
-      const compact = await readFile(path.join(contentRoot, 'dist/claude/instructions/shared/COMPACT.md'), 'utf8');
-      result.stdout += `## Conversation compaction only\nWhen native manual or automatic compaction occurs, apply the following guidance. User-supplied compaction instructions take precedence; preserve native summary behavior. These instructions do not request a summary during ordinary work.\n\n${compact}`;
-    } catch { result.stderr += 'MPX compaction guidance unavailable; continuing with native compaction.\n'; }
-    if (roots) result.stdout += `\n\n${roots}`;
+      result.stdout = (await readFile(path.join(contentRoot, 'dist/claude/instructions/shared/COMPACT.md'), 'utf8')).trim();
+    } catch { result.stderr = 'MPX compaction guidance unavailable; continuing with native compaction.\n'; }
+  } else if (event.hook_event_name === 'SessionStart') {
+    const restart = event.source === 'compact' ? POST_COMPACTION_RESTART : undefined;
+    result.stdout = [restart, machineRootContext(env)].filter(Boolean).join('\n\n');
   } else if (event.hook_event_name === 'PreToolUse') {
     const policy = await evaluateTool({ name: event.tool_name ?? '', input: event.tool_input ?? {}, cwd }, { isTrusted });
     if (policy.decision === 'block') {
