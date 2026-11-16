@@ -250,6 +250,8 @@ Deletion targets must be literal paths or variables assigned a literal at the st
 (in PowerShell, by one earlier `$name = 'literal'`). Commands inside `$(...)`, backticks, and
 `<(...)` are inspected under the same rules. Inline `node -e`/`-p` and `python -c` scripts run unless
 they delete files, spawn processes, or evaluate dynamic code; such work belongs in a script file.
+A quoted heredoc (`<<'EOF'`) body is data, but the same rules check it when a shell, interpreter, or
+database client reads it. PowerShell `$_` and other automatic variables are values unless invoked.
 Every block names a safe alternative.
 
 For agent Bash calls without `timeout`, MPX supplies a 120-second default through Pi's tool-call

@@ -509,6 +509,43 @@ void test('allows inline node and python scripts unless they delete data or star
   });
 });
 
+void test('treats quoted heredoc bodies as data unless an interpreter or shell runs them', async () => {
+  await temporary(async cwd => {
+    for (const command of [
+      "cat > notes.md <<'EOF'\nIt's done: `pnpm test` passed, $(not run) and \"quotes\" stay text.\nEOF",
+      "cat > notes.md <<\\EOF\nDon't expand `this`.\nEOF\necho written",
+      "cat > notes.md <<-'EOF'\n\tit's tab-indented\n\tEOF",
+      "python - <<'EOF'\nimport json\nprint(json.dumps({'it': \"isn't\"}))\nEOF",
+      "node --input-type=module - <<'EOF'\nconst text = `template ${1 + 1}`;\nconsole.log(text, \"it's\");\nEOF",
+      "cat <<'EOF' | python -\nprint('ok')\nEOF",
+      "x=$(cat <<'EOF'\nit's a `body`\nEOF\n)",
+      "git commit -F - <<'EOF'\nfeat: it's `done`\nEOF",
+      'cat > out.txt <<EOF\nhead $(git rev-parse HEAD) isn\'t quoted\nEOF',
+      "echo $((1<<2))",
+    ]) {
+      assert.deepEqual(await evaluateDangerousCommand(command, cwd), { decision: 'allow', diagnostics: [] }, command);
+    }
+    for (const [command, reason] of [
+      ["cat <<'EOF' | python -\nimport shutil\nshutil.rmtree('src')\nEOF", /heredoc python script uses rmtree.*script file/],
+      ["python - <<'EOF'\nimport os; os.remove('a')\nEOF", /heredoc python script uses/],
+      ["x=$(python - <<'EOF'\nimport shutil; shutil.rmtree('src')\nEOF\n)", /heredoc python script uses rmtree/],
+      ["node - <<'EOF'\nrequire('child_process').execSync('git clean -fd')\nEOF", /heredoc node script uses child_process/],
+      ['python - <<EOF\nprint("$HOME")\nEOF', /unquoted heredoc expands shell values/],
+      ["bash <<'EOF'\nrm -rf src\nEOF", /forced recursive deletion/],
+      ["cat <<'EOF' | sh\ngit clean -fd\nEOF", /git clean/],
+      ["sqlite3 app.db <<'EOF'\nDROP TABLE users;\nEOF", /destructive SQL/],
+      ["ruby <<'EOF'\nputs 1\nEOF", /ruby script in a heredoc/],
+      ['cat > out.txt <<EOF\nnow $(rm -rf src)\nEOF', /forced recursive deletion/],
+      ["cat > out.txt <<EOF\nit's '$(rm -rf src)'\nEOF", /forced recursive deletion/],
+      ["cat > notes.md <<'EOF'\ntext\nEOF\nrm -rf src", /forced recursive deletion/],
+    ] as const) {
+      const result = await evaluateDangerousCommand(command, cwd);
+      assert.equal(result.decision, 'block', command);
+      assert.match(result.diagnostics.join('\n'), reason, command);
+    }
+  });
+});
+
 void test('fails closed on malformed and oversized inspection inputs', async () => {
   await temporary(async cwd => {
     const malformed = await evaluateDangerousCommand(`echo "unterminated`, cwd);
