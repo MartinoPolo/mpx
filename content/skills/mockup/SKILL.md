@@ -60,7 +60,8 @@ Output into `designs/<component-name>/variants/`.
 Use the project's fonts, available classes, and tokens; link `../../tokens.css` from each variant.
 If tokens are absent, inline only discovered custom properties. Limit custom CSS to the component
 and layout. Use realistic domain content without invented production claims. Preserve required
-states, responsive behavior, semantics, contrast, and keyboard focus. Label the variant and its
+states, responsive behavior, semantics, contrast, and keyboard focus. Any motion follows the
+`{{MPX_SKILL_PREFIX}}ui-motion` skill. Label the variant and its
 angle. Reproduce settled surrounding UI faithfully, mute unfinished neighbors as non-editable
 context, and preserve component/chrome ownership; a standalone component owns its complete chrome.
 Use approximately 1440×900 proportions for the desktop preview without losing responsive behavior.
@@ -70,8 +71,9 @@ Use approximately 1440×900 proportions for the desktop preview without losing r
 **N > 1** — spawn N `mpx-ui-variant-generator` agents in parallel, one per variant. Give each agent:
 
 - **Style definition** — the project's design language: font families, palette tokens, spacing
-  scale, radius, shadow and motion rules, all from `designs/DESIGN_SYSTEM.md` or the discovered
-  global stylesheet. Identical across variants: the design system is fixed.
+  scale, radius, and shadow, all from `designs/DESIGN_SYSTEM.md` or the discovered global
+  stylesheet, plus motion tokens and patterns from the `{{MPX_SKILL_PREFIX}}ui-motion` skill.
+  Identical across variants: the design system is fixed.
 - **Variant angle** — what makes this one distinct. Vary layout structure, information density,
   hierarchy and emphasis, and progressive disclosure. Keep the angles far apart, e.g. `a` dense
   table-first, `b` airy card grid, `c` split master-detail.
