@@ -390,8 +390,7 @@ void test('inspects literal shell wrappers, fails closed on opaque interpreters,
       'bash -lc "$COMMAND"',
       'cmd /c %COMMAND%',
       'powershell -EncodedCommand ZQBjAGgAbwA=',
-      `python -c 'print("safe")'`,
-      'printf `%s` value',
+      `ruby -e 'puts 1'`,
       '${RUNNER} harmless',
     ]) {
       const result = await evaluateDangerousCommand(command, cwd);
@@ -415,9 +414,106 @@ void test('inspects literal shell wrappers, fails closed on opaque interpreters,
   });
 });
 
+void test('inspects the commands inside command and process substitutions', async () => {
+  await temporary(async cwd => {
+    for (const command of [
+      'x=$(git rev-parse HEAD)',
+      'M=$(git merge-base HEAD cf9b7691); echo $M',
+      'echo "exit $? $(date +%T)"',
+      'for f in a b; do echo "$f: $(tail -n 1 $f)"; done',
+      'until [ $(ls *.md 2>/dev/null | wc -l) -ge 3 ]; do sleep 10; done',
+      'bash tools/step.sh `sed -n 16p commits.txt`',
+      'printf `%s` value',
+      'echo "$(echo "a b")"',
+      'echo $(basename $(git rev-parse --show-toplevel))',
+      'diff <(sort a.txt) <(sort b.txt)',
+      'echo $((1 + 2))',
+      'end=$(( $(date +%s) + 1700 )); echo $end',
+      "echo '$(rm -rf src)'",
+    ]) {
+      assert.deepEqual(await evaluateDangerousCommand(command, cwd), { decision: 'allow', diagnostics: [] }, command);
+    }
+    for (const command of [
+      'echo $(rm -rf src)',
+      'echo `rm -rf src`',
+      'x=$(echo $(git clean -fd))',
+      'echo "$(echo "$(rm -rf src)")"',
+      'cat <(rm -rf src)',
+      'tee >(git clean -fdx) < input.txt',
+      'echo $(bash -c "rm -rf src")',
+      'echo $(( $(rm -rf src) + 1 ))',
+      'echo $((rm -rf src) )',
+    ]) {
+      const result = await evaluateDangerousCommand(command, cwd);
+      assert.equal(result.decision, 'block', command);
+      assert.match(result.diagnostics.join('\n'), /forced recursive deletion|git clean/, command);
+    }
+    for (const [command, reason] of [
+      ['$(which rm) -rf src', /executable is dynamic.*literal name/],
+      ['rm -rf $(cat list.txt)', /forced recursive deletion.*ask the user/],
+      ['echo $(echo unterminated', /unterminated.*script file/],
+      ['echo `unterminated', /unterminated backtick.*script file/],
+      ['echo $(echo "unterminated)', /unterminated.*script file/],
+      ['echo $(echo $(echo $(echo $(echo $(echo hi)))))', /depth limit.*script file/],
+    ] as const) {
+      const result = await evaluateDangerousCommand(command, cwd);
+      assert.equal(result.decision, 'block', command);
+      assert.match(result.diagnostics.join('\n'), reason, command);
+    }
+  });
+});
+
+void test('allows inline node and python scripts unless they delete data or start processes', async () => {
+  await temporary(async cwd => {
+    for (const command of [
+      `node -e "console.log(require('./a.json').length)"`,
+      `node -p "JSON.parse(require('fs').readFileSync('music/plan.json','utf8')).cues.length"`,
+      'node -p process.execPath',
+      `node --eval='console.log(1)'`,
+      `node -e "const match = /a(b)/.exec('ab'); console.log(match[1])"`,
+      `python -c "import PIL; print(PIL.__version__)"`,
+      `python3 -c 'import re; print(re.compile("x").pattern)'`,
+      `py -3 -c "import json"`,
+      `/c/_MP_projects/videoLab/.venv/Scripts/python.exe -I -c "import PIL; print(PIL.__version__)"`,
+      `.venv/Scripts/python.exe -c 'from os import path; print(path.sep)'`,
+      `uv run --with numpy python -c "import numpy; print(numpy.__version__)"`,
+    ]) {
+      assert.deepEqual(await evaluateDangerousCommand(command, cwd), { decision: 'allow', diagnostics: [] }, command);
+    }
+    for (const command of [
+      `node -e "require('child_process').execSync('git clean -fd')"`,
+      `node -e "require('fs').rmSync('src', { recursive: true })"`,
+      `node -p "require('fs').unlinkSync('a')"`,
+      `node -e "import('node:fs').then(fs => fs.promises.rm('src'))"`,
+      `node -e "const name = 'child_' + 'process'; require(name)"`,
+      `node -e "eval(process.argv[1])"`,
+      `node --eval="require('node:child_process').spawn('git')"`,
+      `python -c "import shutil; shutil.rmtree('src')"`,
+      `python3 -c "import os; os.remove('a')"`,
+      `python -uc "import os; os.remove('a')"`,
+      `python -c "import subprocess; subprocess.run(['git', 'clean', '-fd'])"`,
+      `py -c "import os; os.system('rm -rf src')"`,
+      `python -c "__import__('os').remove('a')"`,
+      `uv run python -c "from pathlib import Path; Path('a').unlink()"`,
+      `.venv/Scripts/python.exe -I -c "exec(open('x.py').read())"`,
+    ]) {
+      const result = await evaluateDangerousCommand(command, cwd);
+      assert.equal(result.decision, 'block', command);
+      assert.match(result.diagnostics.join('\n'), /inline .* script uses .*write it to a script file/, command);
+    }
+    for (const command of [`node -e "console.log($HOME)"`, 'node -e "$(cat script.js)"', 'python -c "$SCRIPT"']) {
+      const result = await evaluateDangerousCommand(command, cwd);
+      assert.equal(result.decision, 'block', command);
+      assert.match(result.diagnostics.join('\n'), /expands shell values.*script file/, command);
+    }
+  });
+});
+
 void test('fails closed on malformed and oversized inspection inputs', async () => {
   await temporary(async cwd => {
-    assert.equal((await evaluateDangerousCommand(`echo "unterminated`, cwd)).decision, 'block');
+    const malformed = await evaluateDangerousCommand(`echo "unterminated`, cwd);
+    assert.equal(malformed.decision, 'block');
+    assert.match(malformed.diagnostics.join('\n'), /malformed.*heredoc.*script file/);
     const oversized = await evaluateDangerousCommand(`echo ${'x'.repeat(64 * 1024)}`, cwd);
     assert.equal(oversized.decision, 'block');
     assert.match(oversized.diagnostics.join('\n'), /inspection limit/i);
@@ -427,7 +523,7 @@ void test('fails closed on malformed and oversized inspection inputs', async () 
 void test('never executes inspected command text', async () => {
   await temporary(async cwd => {
     const marker = path.join(cwd, 'must-not-exist').replaceAll('\\', '/');
-    assert.equal((await evaluateDangerousCommand(`node -e "require('node:fs').writeFileSync('${marker}', 'ran')"`, cwd)).decision, 'block');
+    assert.equal((await evaluateDangerousCommand(`node -e "require('node:fs').writeFileSync('${marker}', 'ran')"`, cwd)).decision, 'allow');
     await assert.rejects(access(marker), /ENOENT/);
   });
 });

@@ -246,7 +246,11 @@ conversations between accounts. Orca owns worktrees, terminals, servers, and des
 MPX safeguards prevent accidents; they are not a security sandbox. Forced recursive deletion is
 allowed for generated and cache folders, children of the system temp, `MPX_TEMP`, and
 `MPX_TEMP_EXTRA`, orphaned worktree leftovers, and `__screenshots__` folders git can restore.
-Deletion targets must be literal paths or variables assigned a literal at the start of the command.
+Deletion targets must be literal paths or variables assigned a literal at the start of the command
+(in PowerShell, by one earlier `$name = 'literal'`). Commands inside `$(...)`, backticks, and
+`<(...)` are inspected under the same rules. Inline `node -e`/`-p` and `python -c` scripts run unless
+they delete files, spawn processes, or evaluate dynamic code; such work belongs in a script file.
+Every block names a safe alternative.
 
 For agent Bash calls without `timeout`, MPX supplies a 120-second default through Pi's tool-call
 hook. Explicit timeouts and native execution/settings remain unchanged; choose a longer timeout
