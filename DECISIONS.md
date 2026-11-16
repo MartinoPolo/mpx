@@ -48,6 +48,8 @@ conventions belong in `AGENTS.md`; rollout evidence and recovery belong in `migr
   account `CLAUDE.md`, which also reaches subagents; the SessionStart hook adds only machine roots,
   plus a restart instruction after compaction. Compaction guidance goes to the summarizer itself
   (Claude PreCompact stdout, Pi custom instructions), after the user's own `/compact` text.
+  Guided compaction replaces the archived handoff skill, whose manual `HANDOFF.md` went stale and
+  lost workflow state.
   File-specific rules declare Claude `paths` alongside `applyTo`.
 - **Split UI guidance into a path-scoped rule and a values skill.** A short global rule states
   principles whenever UI files are touched, because quick edits rarely invoke a skill; the

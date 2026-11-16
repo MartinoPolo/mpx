@@ -67,8 +67,8 @@ work is merged or abandoned, remove it. Prefer Orca: `orca worktree ps`, then
 `orca worktree rm --worktree path:<path> --delete-branch`; without Orca, use `git worktree remove`
 and `git branch -d`. Never remove a worktree with uncommitted changes, unmerged commits, or live
 sessions you did not start; report it instead. Before deleting a tree you created, stop the
-processes you started in it (browsers, servers, watchers) and leave it. If deletion still fails, or
-you are unsure it is safe, append the path with its reason and blocker to
+processes you started in it (browsers, servers, watchers) and leave it. If deletion still fails,
+you are unsure it is safe, or a kept worktree's work looks superseded or obsolete, append the path with its reason and blocker to
 `C:\_ALFRED\TO_BE_DELETED.md` instead of asking.
 
 Before any other `orca` command, read `$MPX_PROJECTS/mpx/content/instructions/shared/ORCA.md`.
