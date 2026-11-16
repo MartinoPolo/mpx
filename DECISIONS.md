@@ -131,9 +131,10 @@ conventions belong in `AGENTS.md`; rollout evidence and recovery belong in `migr
   optional bounded child details behind expansion.
   Configure upstream agent widgets off so one lifecycle-driven live display owns active agents and
   disappears when idle. Omit unavailable prices, parent cumulative token totals, ports, branch-state
-  counts, and shortcut hints. Claude retains native status-line and subagent payloads; renderers own
-  presentation and bounded caches, not services.
-  Use native location links rather than generated editor launchers.
+  counts, and shortcut hints. Claude's status line keeps three rows (identity and folder; model,
+  effort, context, and compaction count; quota) plus one tasks-panel row while agents run. Its
+  renderers own presentation and bounded local caches only: no network, background refreshers,
+  merge-request or cost display, or generated editor launchers; locations use native file links.
 - **Use native account quota data without reading credential files.** Bounded selected-account
   requests and response headers may update usage; missing data stays explicit and never blocks work.
 - **Aggregate activity before reporting completion.** A parent waiting for children or follow-up work

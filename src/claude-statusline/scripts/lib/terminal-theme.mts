@@ -286,20 +286,10 @@ export type Palette = {
     readonly contextYellow: string;
     readonly contextOrange: string;
     readonly contextRed: string;
-    readonly amber: string;
     /** Line-1 account badge: personal `P` (red), work `W` (blue). */
     readonly personal: string;
     readonly work: string;
-    readonly add: string;
-    readonly del: string;
-    readonly local: string;
-    readonly mr: string;
     readonly session: string;
-    readonly effortLow: string;
-    readonly effortMedium: string;
-    readonly effortHigh: string;
-    readonly effortXhigh: string;
-    readonly effortMax: string;
     readonly effortBudget: string;
     readonly tierHaiku: string;
 };
@@ -319,9 +309,7 @@ function derive(scheme: Scheme, background: Rgb): Palette {
     const brightWhite = color("brightWhite", foreground);
     const red = color("red", [197, 15, 31]);
     const brightRed = color("brightRed", red);
-    const green = color("green", [19, 161, 14]);
     const yellow = color("yellow", [193, 156, 0]);
-    const brightYellow = color("brightYellow", yellow);
     const cyan = color("cyan", [58, 150, 221]);
     const brightCyan = color("brightCyan", cyan);
     const blue = color("blue", [0, 55, 218]);
@@ -360,32 +348,16 @@ function derive(scheme: Scheme, background: Rgb): Palette {
         contextYellow: legible(yellow),
         contextOrange: legible(contextOrange),
         contextRed: legible(brightRed),
-        // Amber wants to sit above `yellow` in brightness without reaching the
-        // ramp's orange, so it is lifted toward brightYellow rather than mixed
-        // toward red — the one direction that stays clear of the ramp entirely.
-        amber: legible(mix(yellow, brightYellow, 0.35)),
         // The line-1 account badge (P/W), tuned to echo the pane background tint:
         // personal reddish, work blue. brightRed/brightBlue over the base tones so
         // a single letter stays legible against a very dark tinted background.
         personal: legible(brightRed),
         work: legible(brightBlue),
-        add: legible(green),
-        del: legible(red),
-        // Sand: "never left this machine". Pulled toward the foreground so it
-        // stays legible on schemes whose yellow is dark enough to vanish.
-        local: legible(mix(yellow, brightWhite, 0.45)),
-        mr: legible(cyan),
         session: legible(mix(brightPurple, brightWhite, 0.4)),
-        effortLow: legible(green),
-        effortMedium: legible(yellow),
-        effortHigh: legible(contextOrange),
-        effortXhigh: legible(brightRed),
-        effortMax: legible(mix(brightPurple, brightWhite, 0.45)),
         effortBudget: legible(brightCyan),
-        // Haiku's pink has to stay clear of both the session heading and `max`
-        // effort, which are the other two purples on screen; blending purple with
-        // red rather than with white moves it along hue instead of lightness,
-        // which is the axis those two already occupy.
+        // Haiku's pink has to stay clear of the session heading, the other purple
+        // on screen; blending purple with red rather than with white moves it
+        // along hue instead of lightness, which is the axis the heading occupies.
         tierHaiku: legible(mix(brightPurple, brightRed, 0.5))
     };
 }
@@ -393,7 +365,7 @@ function derive(scheme: Scheme, background: Rgb): Palette {
 let cached: Palette | undefined;
 
 /**
- * Memoized because all three renderer modules want the palette and each
+ * Memoized because both renderers want the palette and each
  * resolution parses Windows Terminal's settings plus a vendored scheme file. The
  * process is torn down and restarted every render tick, so a module-level cache
  * cannot go stale — a scheme change is picked up by the very next render.
