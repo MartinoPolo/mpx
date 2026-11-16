@@ -79,6 +79,43 @@ test('PowerShell tool commands keep automatic constants inspectable and preserve
   } finally { await rm(cwd, { recursive: true, force: true }); }
 });
 
+test('PowerShell assignments are values, and a variable resolves only from one literal assignment before its use', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'mpx-powershell-'));
+  const options = { isTrusted: () => false };
+  const evaluate = (command: string) => evaluateTool({ name: 'PowerShell', input: { command }, cwd }, options);
+  try {
+    for (const command of [
+      "$f = 'C:\\x'; Get-Item $f",
+      "$f='C:\\x'; Get-Item $f",
+      '$p = "$env:TEMP\\x"; Get-Item $p',
+      "$root = 'node_modules/.vite'; Remove-Item -Recurse -Force $root",
+      "$exe = 'C:\\tools\\tool.exe'; & $exe --version",
+      '$head = $(git rev-parse HEAD); Write-Output $head',
+      '$os = Get-CimInstance Win32_OperatingSystem',
+    ]) {
+      assert.equal((await evaluate(command)).decision, 'allow', command);
+    }
+    for (const [command, reason] of [
+      ['& $exe --version', /executable is dynamic.*literal name/],
+      ['$exe = Get-Command tool; & $exe', /executable is dynamic/],
+      ["$f = 'src'; Remove-Item -Recurse -Force $f", /forced recursive deletion/],
+      ["$f = 'node_modules'; $f = 'src'; Remove-Item -Recurse -Force $f", /forced recursive deletion/],
+      ["$f = 'node_modules'; Set-Variable f 'src'; Remove-Item -Recurse -Force $f", /forced recursive deletion/],
+      ["Remove-Item -Recurse -Force $f; $f = 'node_modules'", /forced recursive deletion/],
+      ["if ($c) { $f = 'node_modules' }; Remove-Item -Recurse -Force $f", /forced recursive deletion/],
+      ['$x = Remove-Item -Recurse -Force src', /forced recursive deletion/],
+      ['$x = $(Remove-Item -Recurse -Force src)', /forced recursive deletion/],
+      ['$d = $dir.Delete($true)', /executable is dynamic/],
+      ['Write-Output "a`tb"', /backtick.*script file/],
+    ] as const) {
+      const result = await evaluate(command);
+      assert.equal(result.decision, 'block', command);
+      assert.match(result.diagnostics.join('\n'), reason, command);
+    }
+    assert.equal((await evaluateTool({ name: 'Bash', input: { command: "$f = 'C:\\x'; ls $f" }, cwd }, options)).decision, 'block');
+  } finally { await rm(cwd, { recursive: true, force: true }); }
+});
+
 test('Claude native event transport preserves policy and nonblocking context fallbacks', async () => {
   const cwd = await mkdtemp(join(tmpdir(), 'mpx-claude-hooks-'));
   try {

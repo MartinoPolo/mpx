@@ -218,41 +218,102 @@ function leadingLiteralAssignments(tokens: readonly Token[]): Map<string, string
   return variables;
 }
 
-function hasOpaqueCommandExpansion(command: string): boolean {
+type ShellDialect = 'posix' | 'powershell';
+
+interface Substitutions {
+  /** The command with every substitution replaced by an expansion whose value is unknown. */
+  readonly outer: string;
+  readonly inner: readonly string[];
+  readonly failure?: string;
+}
+
+// `$@` can never be bound by a literal assignment, so the replaced word always stays dynamic.
+const SUBSTITUTION_PLACEHOLDER = '$@';
+
+function closingParenthesis(command: string, start: number): number {
+  let depth = 1;
   let quote: "'" | '"' | undefined;
-  let escaped = false;
-  for (let index = 0; index < command.length; index += 1) {
+  for (let index = start; index < command.length; index += 1) {
     const character = command[index] ?? '';
-    if (escaped) {
-      escaped = false;
-      continue;
-    }
-    if (character === '\\' && quote !== "'") {
-      escaped = true;
-      continue;
-    }
     if (quote === "'") {
       if (character === "'") quote = undefined;
+    } else if (character === '\\') {
+      index += 1;
+    } else if (quote === '"') {
+      if (character === '"') quote = undefined;
+    } else if (character === "'" || character === '"') {
+      quote = character;
+    } else if (character === '(') {
+      depth += 1;
+    } else if (character === ')' && --depth === 0) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function closingBacktick(command: string, start: number): number {
+  for (let index = start; index < command.length; index += 1) {
+    if (command[index] === '\\') index += 1;
+    else if (command[index] === '`') return index;
+  }
+  return -1;
+}
+
+/** Separates command and process substitutions so their inner commands are inspected on their own. */
+function extractSubstitutions(command: string, dialect: ShellDialect): Substitutions {
+  const inner: string[] = [];
+  let outer = '';
+  let quote: "'" | '"' | undefined;
+  for (let index = 0; index < command.length; index += 1) {
+    const character = command[index] ?? '';
+    const next = command[index + 1];
+    if (quote === "'") {
+      if (character === "'") quote = undefined;
+      outer += character;
+      continue;
+    }
+    if (character === '\\' && dialect === 'posix') {
+      outer += command.slice(index, index + 2);
+      index += 1;
+      continue;
+    }
+    if (character === '`') {
+      if (dialect === 'powershell') return { outer, inner, failure: 'PowerShell backtick escapes cannot be inspected; use single-quoted strings or a script file' };
+      const end = closingBacktick(command, index + 1);
+      if (end < 0) return { outer, inner, failure: 'an unterminated backtick substitution cannot be inspected; use $(...) with balanced quotes or a script file' };
+      inner.push(command.slice(index + 1, end).replace(/\\([\\`$])/gu, '$1'));
+      outer += SUBSTITUTION_PLACEHOLDER;
+      index = end;
+      continue;
+    }
+    const processSubstitution = quote === undefined && (character === '<' || character === '>');
+    if ((character === '$' || processSubstitution) && next === '(') {
+      const end = closingParenthesis(command, index + 2);
+      if (end < 0) return { outer, inner, failure: 'an unterminated command or process substitution cannot be inspected; balance its parentheses and quotes or use a script file' };
+      inner.push(command.slice(index + 2, end));
+      outer += SUBSTITUTION_PLACEHOLDER;
+      index = end;
       continue;
     }
     if (quote === '"') {
       if (character === '"') quote = undefined;
-      else if (character === '`' || (character === '$' && command[index + 1] === '(')) return true;
-      continue;
-    }
-    if (character === "'" || character === '"') {
+    } else if (character === "'" || character === '"') {
       quote = character;
-      continue;
     }
-    if (character === '`' || ((character === '$' || character === '<' || character === '>') && command[index + 1] === '(')) {
-      return true;
-    }
+    outer += character;
   }
-  return false;
+  return { outer, inner };
 }
 
-function commandSegments(tokens: readonly Token[]): Word[][] {
-  const segments: Word[][] = [];
+interface Segment {
+  readonly words: Word[];
+  /** The operator that ended the segment; `(` means a PowerShell method call follows. */
+  readonly terminator?: string;
+}
+
+function commandSegments(tokens: readonly Token[]): Segment[] {
+  const segments: Segment[] = [];
   let words: Word[] = [];
   let skipRedirectTarget = false;
   for (const token of tokens) {
@@ -262,7 +323,7 @@ function commandSegments(tokens: readonly Token[]): Word[][] {
         skipRedirectTarget = true;
         continue;
       }
-      if (words.length > 0) segments.push(words);
+      if (words.length > 0) segments.push({ words, terminator: token.operator });
       words = [];
       skipRedirectTarget = false;
       continue;
@@ -273,8 +334,78 @@ function commandSegments(tokens: readonly Token[]): Word[][] {
     }
     words.push(token);
   }
-  if (words.length > 0) segments.push(words);
+  if (words.length > 0) segments.push({ words });
   return segments;
+}
+
+interface PowerShellAssignment {
+  readonly name: string;
+  /** Words that PowerShell evaluates on the right-hand side; empty when it is a plain value. */
+  readonly command: readonly Word[];
+  readonly literal?: string;
+}
+
+// PowerShell `$name = value` is an assignment, not a call of `$name`. A bare word on the right runs a
+// command, so it is inspected; a lone variable or string is a value unless a method call follows.
+function powerShellAssignment(segment: Segment): PowerShellAssignment | undefined {
+  const [first, second, ...others] = segment.words;
+  const compact = /^\$([A-Za-z_]\w*)(=.*)?$/su.exec(first?.value ?? '');
+  if (!first?.dynamic || !compact) return undefined;
+  const words: Word[] = [];
+  const pushValue = (value: string): void => { if (value !== '') words.push({ value, dynamic: /[$`]/u.test(value) }); };
+  if (compact[2] !== undefined) {
+    pushValue(compact[2].slice(1));
+    if (second) words.push(second, ...others);
+  } else if (second && !second.dynamic && second.value.startsWith('=') && !second.value.startsWith('==')) {
+    pushValue(second.value.slice(1));
+    words.push(...others);
+  } else return undefined;
+  const name = (compact[1] as string).toLowerCase();
+  const methodCall = segment.terminator === '(';
+  const [value] = words;
+  if (!value) return { name, command: [] };
+  if (words.length === 1 && !methodCall) {
+    return value.dynamic ? { name, command: [] } : { name, command: words, literal: value.value };
+  }
+  return { name, command: words };
+}
+
+// Only a single, unconditional assignment is certain to hold where the variable is used later; any other
+// mention of the name (scope prefixes, -OutVariable, Set-Variable, loops, blocks) may rebind it.
+function resolvablePowerShellVariables(script: string, assignments: readonly PowerShellAssignment[]): Set<string> {
+  if (/[{}]|\b(?:if|switch|foreach|for|while|do|until|trap|function|filter|param|workflow)\b/iu.test(script)) return new Set();
+  const resolvable = new Set<string>();
+  for (const assignment of assignments) {
+    if (assignment.literal === undefined || assignments.filter(other => other.name === assignment.name).length !== 1) continue;
+    const escaped = assignment.name.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+    const mention = new RegExp(`(?<!\\w)${escaped}(?!\\w)`, 'giu');
+    const mentions = (script.match(mention)?.length ?? 0) - (assignment.literal.match(mention)?.length ?? 0);
+    const references = script.match(new RegExp(`(?<![\\w\\]])\\$${escaped}(?![\\w:])(?!\\s*(?:[-+*/%?]?=|\\+\\+(?!\\w)|--(?![\\w-])))`, 'giu'))?.length ?? 0;
+    // The assignment itself is the one mention followed by `=`.
+    if (mentions === references + 1) resolvable.add(assignment.name);
+  }
+  return resolvable;
+}
+
+const INLINE_SCRIPT_HAZARDS: Readonly<Record<'node' | 'python', RegExp>> = {
+  node: new RegExp([
+    String.raw`child_process|worker_threads|fs-extra|rimraf|\bcluster\b|\bvm\b`,
+    String.raw`\b(?:rm|rmdir|unlink|rmSync|rmdirSync|unlinkSync|removeSync|emptyDirSync|spawn|spawnSync|fork|kill|_load)\b`,
+    String.raw`(?<!\.)\bexec\b|\.\s*exec(?:Sync|File|FileSync)\b|\bexecSync\b|\bexecFile(?:Sync)?\b`,
+    String.raw`\beval\s*\(|\bFunction\s*\(|\bprocess\s*\.\s*(?:binding|_linkedBinding|dlopen|mainModule)\b`,
+    String.raw`\brequire\s*\(\s*(?!(['"])[^'"\x60]*\1\s*\))|\bimport\s*\(\s*(?!(['"])[^'"\x60]*\2\s*\))`,
+  ].join('|'), 'u'),
+  python: new RegExp([
+    String.raw`\b(?:subprocess|multiprocessing|pty|ctypes|importlib|__import__|__builtins__|__dict__|getattr)\b`,
+    String.raw`\b(?:rmtree|removedirs|unlink|rmdir|popen|startfile|kill|killpg|fork|forkpty|posix_spawnp?|exec[lv]p?e?|spawn[lv]p?e?)\b`,
+    String.raw`\b(?:eval|exec)\s*\(|\bos\s*\.\s*(?:remove|system|truncate)\b`,
+    String.raw`\bfrom\s+(?:os|shutil)\s+import\s+(?!path\s*(?:$|[;\n]))|\bimport\s+(?:os|shutil)\s+as\b`,
+  ].join('|'), 'mu'),
+};
+const DESTRUCTIVE_SQL = /\b(?:DROP\s+(?:TABLE|DATABASE)|TRUNCATE\s+TABLE)\b/iu;
+
+function inlineScriptHazard(family: 'node' | 'python', script: string): string | undefined {
+  return INLINE_SCRIPT_HAZARDS[family].exec(script)?.[0] ?? DESTRUCTIVE_SQL.exec(script)?.[0];
 }
 
 function hasNulRedirect(tokens: readonly Token[]): boolean {
@@ -302,6 +433,18 @@ function unwrap(words: readonly Word[]): readonly Word[] {
       while (result[index]?.value.startsWith('-')) {
         const option = result[index]?.value ?? '';
         index += 1;
+        if (operandOptions.has(option) && result[index]) index += 1;
+      }
+      result = result.slice(index);
+      continue;
+    }
+    if (name === 'uv' && result[1]?.value === 'run') {
+      let index = 2;
+      const operandOptions = new Set(['--with', '--with-editable', '--with-requirements', '--python', '-p', '--project', '--directory', '--package', '--extra', '--group', '--only-group', '--env-file', '--index', '--default-index', '--index-url', '--extra-index-url', '--find-links', '-f']);
+      while (result[index]?.value.startsWith('-')) {
+        const option = result[index]?.value ?? '';
+        index += 1;
+        if (option === '--') break;
         if (operandOptions.has(option) && result[index]) index += 1;
       }
       result = result.slice(index);
@@ -638,7 +781,7 @@ async function findDeleteIsBroad(words: readonly Word[], cwd: string): Promise<b
 
 function destructiveSql(words: readonly Word[]): boolean {
   const executable = executableName(words[0]?.value ?? '');
-  const sqlPattern = /\b(?:DROP\s+(?:TABLE|DATABASE)|TRUNCATE\s+TABLE)\b/iu;
+  const sqlPattern = DESTRUCTIVE_SQL;
   if (['mysql', 'mariadb'].includes(executable)) {
     return words.some((word, index) =>
       (index > 0 && ['-e', '--execute'].includes(words[index - 1]?.value ?? '') && sqlPattern.test(word.value)) ||
@@ -672,7 +815,7 @@ function broadChmod(words: readonly Word[], cwd: string): boolean {
   );
 }
 
-function wrapperScript(words: readonly Word[]): { kind: string; script?: Word; opaque: boolean } | undefined {
+function wrapperScript(words: readonly Word[]): { kind: string; family?: 'node' | 'python'; script?: Word; opaque: boolean } | undefined {
   const name = executableName(words[0]?.value ?? '');
   if (['bash', 'sh', 'zsh', 'dash', 'ksh'].includes(name)) {
     const index = words.findIndex((word, candidate) => candidate > 0 && /^-[A-Za-z]*c[A-Za-z]*$/u.test(word.value));
@@ -695,9 +838,20 @@ function wrapperScript(words: readonly Word[]): { kind: string; script?: Word; o
   if (name === 'eval') {
     return { kind: name, script: words[1], opaque: !words[1] || Boolean(words[1]?.dynamic) };
   }
-  if (['node', 'python', 'python3', 'py', 'ruby', 'perl'].includes(name)) {
-    const inline = words.findIndex(word => ['-e', '-c', '-p', '-pe', '--eval', '--execute', '--print'].includes(word.value));
-    if (inline >= 0) return { kind: name, script: words[inline + 1], opaque: true };
+  if (['ruby', 'perl'].includes(name) && words.some(word => ['-e', '-c', '-p', '-pe', '--eval', '--execute', '--print'].includes(word.value))) {
+    return { kind: name, opaque: true };
+  }
+  const family = name === 'node' ? 'node' : /^(?:python(?:\d+(?:\.\d+)*)?|pythonw|py)$/u.test(name) ? 'python' : undefined;
+  if (!family) return undefined;
+  for (let index = 1; index < words.length; index += 1) {
+    const value = words[index]?.value ?? '';
+    const attached = family === 'node' ? /^--(?:eval|print)=(.*)$/su.exec(value) : undefined;
+    if (attached) {
+      const word = words[index] as Word;
+      return { kind: name, family, script: { value: attached[1] as string, dynamic: word.dynamic }, opaque: word.dynamic };
+    }
+    const inline = family === 'node' ? ['-e', '-p', '-pe', '-ep', '--eval', '--print'].includes(value) : /^-[A-Za-z]*c$/u.test(value);
+    if (inline) return { kind: name, family, script: words[index + 1], opaque: !words[index + 1] || Boolean(words[index + 1]?.dynamic) };
   }
   return undefined;
 }
@@ -706,37 +860,73 @@ function block(reason: string): string {
   return `Blocked dangerous command: ${reason}.`;
 }
 
-async function inspect(command: string, cwd: string, depth: number, blocks: string[]): Promise<void> {
+const DELETION_ALTERNATIVE = 'delete only generated/cache or temp paths, or ask the user to remove it';
+
+async function inspect(command: string, cwd: string, depth: number, blocks: string[], dialect: ShellDialect = 'posix'): Promise<void> {
   if (depth > 4) {
-    blocks.push(block('nested shell wrapper exceeds the inspection depth limit'));
+    blocks.push(block('nested shell wrappers or substitutions exceed the inspection depth limit; run the inner command on its own or write a script file'));
     return;
   }
   if (command.length > MAX_COMMAND_LENGTH) {
-    blocks.push(block(`command exceeds the ${MAX_COMMAND_LENGTH}-byte inspection limit`));
+    blocks.push(block(`command exceeds the ${MAX_COMMAND_LENGTH}-byte inspection limit; write it to a script file and run that`));
     return;
   }
-  const literal = tokenize(command);
-  const parsed = literal.malformed ? literal : tokenize(command, leadingLiteralAssignments(literal.tokens));
+  const substitutions = extractSubstitutions(command, dialect);
+  if (substitutions.failure) {
+    blocks.push(block(substitutions.failure));
+    return;
+  }
+  const changesDirectory = /(?:^|[;&]\s*)\b(?:cd|pushd|popd|set-location|sl|push-location|pop-location)\b/iu.test(command);
+  // A substitution runs where the outer command has moved to, which is only known without directory changes.
+  const substitutionCwd = changesDirectory ? path.parse(cwd).root : cwd;
+  for (const inner of substitutions.inner) {
+    const arithmetic = dialect === 'posix' ? /^\((.*)\)$/su.exec(inner)?.[1] : undefined;
+    const nested = arithmetic === undefined ? undefined : extractSubstitutions(arithmetic, dialect);
+    // `$(( ))` evaluates an expression and runs only its nested substitutions; bash reparses text that
+    // reads like a command (`$((rm -rf x) )`) as a subshell, so that stays a command.
+    if (nested && !nested.failure && !/[A-Za-z_][\w./-]*\s+[-\w./'"$]/u.test(nested.outer)) {
+      for (const command of nested.inner) await inspect(command, substitutionCwd, depth + 2, blocks, dialect);
+    } else {
+      await inspect(inner, substitutionCwd, depth + 1, blocks, dialect);
+    }
+  }
+  const outer = substitutions.outer;
+  const literal = tokenize(outer);
+  const parsed = literal.malformed ? literal : tokenize(outer, leadingLiteralAssignments(literal.tokens));
   if (parsed.malformed) {
-    blocks.push(block('shell quoting is malformed and cannot be inspected'));
+    blocks.push(block('shell quoting is malformed and cannot be inspected; pass the text through a quoted heredoc (<<\'EOF\') or write a script file and run it'));
     return;
   }
-  if (hasOpaqueCommandExpansion(command)) blocks.push(block('opaque command or process substitution cannot be inspected'));
   if (hasNulRedirect(parsed.tokens)) blocks.push(block('a redirect targets Windows NUL; use /dev/null in Git Bash'));
 
   const unquoted = command.replace(/(['"])(?:\\.|(?!\1)[^\\])*\1/gu, '');
-  if (/:\s*\(\s*\)\s*\{[^}]*:\s*\|\s*:[^}]*\}/u.test(unquoted)) blocks.push(block('fork bomb'));
-  if (/SetEnvironmentVariable\s*\(\s*(['"]?)PATH\1\s*[,)]/iu.test(command)) blocks.push(block('persistent Windows PATH mutation via PowerShell'));
+  if (/:\s*\(\s*\)\s*\{[^}]*:\s*\|\s*:[^}]*\}/u.test(unquoted)) blocks.push(block('fork bomb; run a bounded command instead'));
+  if (/SetEnvironmentVariable\s*\(\s*(['"]?)PATH\1\s*[,)]/iu.test(command)) blocks.push(block('persistent Windows PATH mutation via PowerShell; change $env:PATH for the session only or ask the user'));
   if (/>\s*(?:\/dev\/(?:sd[a-z]\d*|nvme\d+n\d+(?:p\d+)?|mmcblk\d+(?:p\d+)?)|\\\\\.\\PhysicalDrive\d+)/iu.test(unquoted)) {
-    blocks.push(block('a redirect targets a raw device'));
+    blocks.push(block('a redirect targets a raw device; redirect to a file instead'));
   }
 
-  const directories = [...inspectStaticShell(command, cwd).commands];
-  for (const rawWords of commandSegments(parsed.tokens)) {
+  const directories = [...inspectStaticShell(outer, cwd).commands];
+  const segments = commandSegments(parsed.tokens);
+  const assignments = dialect === 'powershell' ? segments.map(powerShellAssignment) : [];
+  const resolvable = resolvablePowerShellVariables(outer, assignments.filter((assignment): assignment is PowerShellAssignment => assignment !== undefined));
+  const powerShellLiterals = new Map<string, string>();
+  for (const [index, segment] of segments.entries()) {
+    const assignment = assignments[index];
+    let rawWords: readonly Word[] = segment.words;
+    if (assignment) {
+      if (assignment.literal !== undefined && resolvable.has(assignment.name)) powerShellLiterals.set(assignment.name, assignment.literal);
+      rawWords = assignment.command;
+    }
+    rawWords = rawWords.map(word => {
+      const reference = word.dynamic ? /^\$([A-Za-z_]\w*)$/u.exec(word.value) : null;
+      const value = reference ? powerShellLiterals.get((reference[1] as string).toLowerCase()) : undefined;
+      return value === undefined ? word : { value, dynamic: false };
+    });
     const words = unwrap(rawWords);
     if (words.length === 0) continue;
     if (words[0]?.dynamic) {
-      blocks.push(block('the executable is dynamic and cannot be inspected'));
+      blocks.push(block('the executable is dynamic and cannot be inspected; call it by its literal name or path'));
       continue;
     }
     const name = executableName(words[0]?.value ?? '');
@@ -745,17 +935,26 @@ async function inspect(command: string, cwd: string, depth: number, blocks: stri
     const deletionCwd = effectiveCwd ?? path.parse(cwd).root;
     const wrapper = wrapperScript(words);
     if (wrapper) {
-      if (wrapper.opaque || !wrapper.script) blocks.push(block(`opaque ${wrapper.kind} interpreter command cannot be inspected; use a named script or directly inspectable command`));
-      else await inspect(wrapper.script.value, /(?:^|[;&]\s*)\b(?:cd|pushd|popd)\b/.test(command) ? (directories[0]?.cwd ?? path.parse(cwd).root) : cwd, depth + 1, blocks);
+      if (wrapper.family && wrapper.script && !wrapper.opaque) {
+        const hazard = inlineScriptHazard(wrapper.family, wrapper.script.value);
+        if (hazard) blocks.push(block(`inline ${wrapper.kind} script uses ${hazard}, which can delete data or start processes; write it to a script file and run that`));
+      } else if (wrapper.family) {
+        blocks.push(block(`inline ${wrapper.kind} script expands shell values and cannot be inspected; pass values as arguments in single quotes or write a script file`));
+      } else if (wrapper.opaque || !wrapper.script) {
+        blocks.push(block(`opaque ${wrapper.kind} interpreter command cannot be inspected; use a named script or directly inspectable command`));
+      } else {
+        const wrapperDialect = wrapper.kind === 'powershell' || wrapper.kind === 'pwsh' ? 'powershell' : 'posix';
+        await inspect(wrapper.script.value, changesDirectory ? (directories[0]?.cwd ?? path.parse(cwd).root) : cwd, depth + 1, blocks, wrapperDialect);
+      }
       continue;
     }
 
     if (name === 'rm' && unsafeForcedDeletion(rmTargets(words), deletionCwd)) {
-      blocks.push(block('forced recursive deletion is outside generated/cache or scratch/temp roots'));
+      blocks.push(block(`forced recursive deletion is outside generated/cache or scratch/temp roots; ${DELETION_ALTERNATIVE}`));
     } else if (name === 'remove-item' && unsafeForcedDeletion(removeItemTargets(words), deletionCwd)) {
-      blocks.push(block('PowerShell forced recursive deletion is outside generated/cache or scratch/temp roots'));
+      blocks.push(block(`PowerShell forced recursive deletion is outside generated/cache or scratch/temp roots; ${DELETION_ALTERNATIVE}`));
     } else if (['rmdir', 'rd', 'del', 'erase'].includes(name) && unsafeForcedDeletion(cmdDeletion(words), deletionCwd)) {
-      blocks.push(block('Windows forced recursive deletion is outside generated/cache or scratch/temp roots'));
+      blocks.push(block(`Windows forced recursive deletion is outside generated/cache or scratch/temp roots; ${DELETION_ALTERNATIVE}`));
     }
 
     if (name === 'git') {
@@ -767,11 +966,11 @@ async function inspect(command: string, cwd: string, depth: number, blocks: stri
         const push = pushDetails(git.args);
         if (push.forced) {
           if (!git.cwd || !effectiveCwd) {
-            blocks.push(block('force-push target cannot be inspected because the effective directory is unresolved'));
+            blocks.push(block('force-push target cannot be inspected because the effective directory is unresolved; run git -C <literal path> push'));
           } else {
             const explicitlyProtected = push.broad || push.branches.some((branch) => PROTECTED_BRANCHES.has(branch.toLowerCase()));
             if (explicitlyProtected) {
-              blocks.push(block('force push targets a protected branch'));
+              blocks.push(block('force push targets a protected branch; push a feature branch or ask the user'));
             } else {
               try {
                 const defaults = await detectedDefaultBranches(git.cwd, push.remote);
@@ -786,13 +985,13 @@ async function inspect(command: string, cwd: string, depth: number, blocks: stri
                     if (destination.ok && destination.stdout.startsWith(prefix)) targets = [destination.stdout.slice(prefix.length)];
                   }
                 }
-                if (targets.length === 0) blocks.push(block('force-push branch could not be determined'));
+                if (targets.length === 0) blocks.push(block('force-push branch could not be determined; name the branch explicitly'));
                 if (targets.some((branch) => defaults.has(branch) || PROTECTED_BRANCHES.has(branch.toLowerCase()))) {
-                  blocks.push(block('force push targets the detected default branch'));
+                  blocks.push(block('force push targets the detected default branch; push a feature branch or ask the user'));
                 }
               } catch (error) {
                 const detail = error instanceof Error && error.message ? ` (${error.message})` : '';
-                blocks.push(block(`force-push inspection failed${detail}`));
+                blocks.push(block(`force-push inspection failed${detail}; name the remote and branch explicitly or ask the user`));
               }
             }
           }
@@ -800,25 +999,25 @@ async function inspect(command: string, cwd: string, depth: number, blocks: stri
       }
     }
 
-    if (name === 'find' && await findDeleteIsBroad(words, cwd)) blocks.push(block('repository-wide find -delete is not allowed'));
+    if (name === 'find' && await findDeleteIsBroad(words, cwd)) blocks.push(block('repository-wide find -delete is not allowed; start find in a named subdirectory'));
     if (/^mkfs(?:\.|$)/iu.test(name) || name === 'format-volume' || (name === 'format' && words.slice(1).some((word) => /^[A-Za-z]:/u.test(word.value)))) {
-      blocks.push(block('filesystem formatting is not allowed'));
+      blocks.push(block('filesystem formatting is not allowed; ask the user to run it'));
     }
     if (name === 'dd' && words.slice(1).some((word) => /^of=(?:\/dev\/(?:sd|nvme|mmcblk)|\\\\\.\\PhysicalDrive)/iu.test(word.value))) {
-      blocks.push(block('dd output targets a raw device'));
+      blocks.push(block('dd output targets a raw device; write to a file instead'));
     }
-    if (broadChmod(words, cwd)) blocks.push(block('broad destructive permission change'));
-    if (destructiveSql(words)) blocks.push(block('destructive SQL in an executable database client command'));
+    if (broadChmod(words, cwd)) blocks.push(block('broad destructive permission change; change specific files with a narrower mode'));
+    if (destructiveSql(words)) blocks.push(block('destructive SQL in an executable database client command; ask the user to run it'));
 
     const joined = words.map((word) => word.value).join(' ');
     if (name === 'setx' && words.slice(1).some((word) => word.value.toLowerCase() === 'path')) {
-      blocks.push(block('persistent Windows PATH mutation via setx'));
+      blocks.push(block('persistent Windows PATH mutation via setx; change PATH for the session only or ask the user'));
     }
     if (joined.match(/SetEnvironmentVariable\s*\(\s*PATH(?:\s|,|\))/iu)) {
-      blocks.push(block('persistent Windows PATH mutation via PowerShell'));
+      blocks.push(block('persistent Windows PATH mutation via PowerShell; change $env:PATH for the session only or ask the user'));
     }
     if (name === 'reg' && words[1]?.value.toLowerCase() === 'add' && /(?:\\|^)Environment(?:\\|\s|$)/iu.test(joined) && /(?:\/v\s+PATH|\bPATH\b)/iu.test(joined)) {
-      blocks.push(block('persistent Windows PATH mutation via registry'));
+      blocks.push(block('persistent Windows PATH mutation via registry; change PATH for the session only or ask the user'));
     }
   }
 }
@@ -830,7 +1029,7 @@ export async function evaluateDangerousCommand(command: string, cwd: string): Pr
     await inspect(command, path.resolve(cwd), 0, blocks);
   } catch (error) {
     const detail = error instanceof Error && error.message ? `: ${error.message}` : '';
-    blocks.push(block(`dangerous-command inspection failed${detail}`));
+    blocks.push(block(`dangerous-command inspection failed${detail}; simplify the command or write a script file`));
   }
   const diagnostics = [...new Set(blocks)];
   return { decision: blocks.length > 0 ? 'block' : 'allow', diagnostics };
