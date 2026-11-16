@@ -41,28 +41,40 @@ Wording:
 
 Anything that needs the user, such as a question, open decision, credential, or manual step,
 appears only in a final `# HITL` section. The body gives context but never asks, recommends, or
-lists the same item. Omit the section when nothing needs the user; only a skill's result line may
-follow it, after a blank line.
+lists the same item. Only a skill's result line may follow the section, after a blank line.
 
-Use these subsections in this order and omit empty ones. Number items continuously across
-subsections so the user can answer by number, and leave a blank line between items.
+Questions and to-dos share one number sequence for the whole session, so the user can answer by
+number. An item takes the next unused number when first raised and keeps that number and its title
+in every later message until it is closed. A number is never reused, also after a user reply or
+compaction.
+
+The user reads only the latest message, so while any item is open every turn-ending message has the
+section and accounts for every open item. Omit the section only when nothing is open and nothing
+was closed. Use these parts in this order and omit empty ones, with a blank line between items.
 
 - `## ❓ Questions`: decisions and permission requests. The question with its context comes first,
   then a blank line and the options, then a blank line and `👉 rec:` with your pick and its
   deciding reason, never a bare "yes".
 - `## 🛠️ To do`: steps only the user can do, such as a manual setting, credential, purchase, or
   review. Put each command in inline code on its own line so it can be copied whole.
-- `## ℹ️ FYI`: one line each for what is worth knowing but needs no reply, including a tangent.
-  Point to items still open from an earlier message instead of repeating them.
+- `## ⏳ Still open`: only while background work or sub-agents are in flight, one line for each item
+  raised in an earlier message: its number, title, and kind. When the turn ends with nothing in
+  flight, the user is alerted, so write every open item in full under Questions or To do instead,
+  from its original wording.
+- `Closed:` one line naming each item closed since the previous section and what closed it: the
+  user's answer, a finished step, or a superseding decision. An item the user did not address stays
+  open.
+- `## ℹ️ FYI`: unnumbered bullets, one line each, for what is worth knowing but needs no reply,
+  including a tangent.
 
-List blockers first in their subsection and mark them 🛑 after the number.
+List blockers first in their part and mark them 🛑 after the number.
 
 ```markdown
 # HITL
 
 ## ❓ Questions
 
-1. 🛑 **Short title:** the question, concise but complete.
+6. 🛑 **Short title:** the question, concise but complete.
 
    - **A.** first option and its consequence.
    - **B.** second option and its consequence.
@@ -71,11 +83,18 @@ List blockers first in their subsection and mark them 🛑 after the number.
 
 ## 🛠️ To do
 
-2. **Short title:** what to do and why.
+7. **Short title:** what to do and why.
 
    `the-command --to-copy`
 
+## ⏳ Still open
+
+2. 🛑 **Short title** (question)
+4. **Short title** (to do)
+
+Closed: 1 (A), 3 (B), 5 (done)
+
 ## ℹ️ FYI
 
-3. **Short title:** one line.
+- **Short title:** one line.
 ```

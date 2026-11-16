@@ -61,9 +61,9 @@ worst case included, and state how many they stand for; never produce one captur
 ## 4. Present
 
 Open with 2 to 10 bullets summarizing what the session has done so far, so the user can recall it
-before answering. Then follow the active output style's `# HITL` section; restate every open item
-in this one message, never "still open from earlier". Number all items afresh in one sequence,
-even when earlier rounds reused numbers. Each item:
+before answering. Then follow the active output style's `# HITL` section; write every open item in
+full under Questions or To do, never under Still open. Each item keeps its session number; where
+earlier rounds reused a number, the later item takes the next unused one. Each item:
 
 ```markdown
 1. 🛑 **Short title:** the question in at most two lines, readable without the thread.
@@ -82,7 +82,7 @@ even when earlier rounds reused numbers. Each item:
 - Media icons mark only evidence links: 🖼️ image, 🎬 video, 📄 document; one evidence line per item,
   no other new icons.
 - Decisions the agent already made go in To do as "check", with the evidence.
-- End with one FYI line listing items dropped as resolved and the answer that closed each.
+- Name items dropped as resolved in the `Closed:` line with the answer that closed each.
 
 Done means every candidate is presented or listed as dropped with evidence, every option is written
 out, and every referenced file exists. If the transcript or a file cannot be read,
