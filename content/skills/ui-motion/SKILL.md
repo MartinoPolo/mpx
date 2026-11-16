@@ -37,7 +37,7 @@ its own tokens and decisions; follow the project.
 | `--ease-in-out`     | cubic-bezier(0.77, 0, 0.175, 1)   | an element moving between two on-screen spots |
 | `--ease-drawer`     | cubic-bezier(0.32, 0.72, 0, 1)    | sheets and drawers                            |
 | `--ease-spring`     | cubic-bezier(0.34, 1.56, 0.64, 1) | decorative, playful lift only; never overlays |
-| `--press-scale`     | 0.97                              | every pressable surface                       |
+| `--press-scale`     | 0.98                              | every pressable surface                       |
 | `--enter-scale`     | 0.95                              | overlay and pop-in start                      |
 | `--reveal-step`     | 30 ms                             | stagger step (20-50 ms range)                 |
 
