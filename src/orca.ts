@@ -12,6 +12,7 @@ const PI_FILES = [
   'orca-titlebar-spinner.ts',
 ] as const;
 const PI_MARKER = Buffer.from('@orca-managed-pi-extension');
+const CLAUDE_NATIVE_HOOK = 'agent-hooks/orca-agent-hook.exe claude ';
 const JSON_LIMIT = 1024 * 1024;
 const EXTENSION_LIMIT = 4 * 1024 * 1024;
 
@@ -65,8 +66,10 @@ function managedCommandMatcher(command: string | undefined): boolean {
     }
   }
   const normalized = (decoded ? `${command}\n${decoded}` : command).replaceAll('\\', '/');
+  // Mirrors Orca's createManagedCommandMatcher: Windows installs call the native executable with the provider as argv[1].
   return ['cmd', 'ps1', 'sh'].some(extension =>
-    normalized.includes(`agent-hooks/claude-hook.${extension}`));
+    normalized.includes(`agent-hooks/claude-hook.${extension}`)) ||
+    normalized.split('\n').some(line => `${line} `.includes(CLAUDE_NATIVE_HOOK));
 }
 
 function managedNestedHook(value: JsonObject): boolean {

@@ -185,6 +185,19 @@ test('matcher keeps native case and path-needle semantics and ignores direct com
   assert.deepEqual(merged.hooks.Stop[1]!.hooks, [{ type: 'command', command: '/x/agent-hooks/claude-hook.ps1' }]);
 });
 
+test('matcher recognizes the Windows native Claude hook executable and replaces stale script hooks', () => {
+  const nativeHook = { type: 'command', command: 'C:\\Users\\me\\.orca\\agent-hooks\\orca-agent-hook.exe claude', timeout: 10 };
+  const target = { hooks: { Stop: [{ hooks: [
+    { type: 'command', command: 'C:/Users/me/.orca/agent-hooks/claude-hook.cmd' },
+  ] }] } };
+  const merged = mergeClaudeHookSettings({ hooks: { Stop: [{ hooks: [
+    nativeHook,
+    { type: 'command', command: 'C:/x/agent-hooks/orca-agent-hook.exe codex' },
+    { type: 'command', command: 'C:/x/agent-hooks/orca-agent-hook.exe claudette' },
+  ] }] } }, target) as typeof target;
+  assert.deepEqual(merged.hooks.Stop, [{ hooks: [nativeHook] }]);
+});
+
 test('marked Pi files update, identical files stay put, and user-owned targets conflict', async () => {
   const { root, config } = await fixture();
   try {
