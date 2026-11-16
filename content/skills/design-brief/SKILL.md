@@ -73,8 +73,8 @@ Be specific: "use `Button variant='ghost'` size='icon'", not "add a button".
 
 ## Step 4: Research missing primitives
 
-For a needed pattern the inventory lacks, spawn `mpx-context7-docs-fetcher` against the project's
-component library. List the result under _Components to Adopt_ with the reason nothing existing
+For a needed pattern the inventory lacks, research the project's component library: a matching clone
+under `MPX_CLONED` first, then its public documentation. List the result under _Components to Adopt_ with the reason nothing existing
 suffices. Installation is deferred to `{{MPX_SKILL_PREFIX}}design-refine`.
 
 ## Step 5: Draft the brief

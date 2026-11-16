@@ -10,7 +10,6 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const content = path.join(root, 'content');
 const specialistMetadata = {
   'visual-verifier': ['reviewer', 'medium', ['read', 'search', 'shell', 'browser'], { claude: 'high' }],
-  'context7-docs-fetcher': ['mechanical', 'xhigh', ['read', 'context']],
   executor: ['advanced', 'high', ['read', 'search', 'shell', 'write']],
   'issue-finder': ['mechanical', 'high', ['read', 'search', 'shell']],
   shipper: ['mechanical', 'high', ['shell'], { claude: 'medium' }],
@@ -179,7 +178,6 @@ test('agent model and effort defaults project consistently across harnesses', as
     shipper: ['mechanical', 'high', 'medium'],
     checker: ['mechanical', 'high', 'high'],
     explorer: ['exploration', 'xhigh', 'xhigh'],
-    'context7-docs-fetcher': ['mechanical', 'xhigh', 'xhigh'],
     'issue-finder': ['mechanical', 'high', 'high'],
     'reviewer-test-quality': ['reviewer', 'high', 'high'],
     'visual-verifier': ['reviewer', 'medium', 'high'],

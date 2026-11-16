@@ -34,6 +34,8 @@ conventions belong in `AGENTS.md`; rollout evidence and recovery belong in `migr
 - **Keep discovery mechanics with the explorer.** Global agent guidance states only delegation
   essentials; native harnesses supply resource resolution and delegation mechanics. Model and effort
   defaults belong in structured agent metadata and runtime mappings, not repeated policy tables.
+- **Ground external APIs in cloned source, then public docs.** No documentation MCP: Context7 went
+  unused and was removed, so agents read a matching clone under `MPX_CLONED` first.
 - **Use packs for relevance, not security.** Repository selection adds MPX resources through native
   discovery without suppressing native account, package, or project resources or mutating account-wide
   links. An empty selection disables only MPX global packs.

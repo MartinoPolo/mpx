@@ -69,8 +69,8 @@ this thread.
 
 **Topic research.** The brief is built from gathered sources, so gather them first:
 
-- Library or framework topic → spawn `context7-docs-fetcher` with the library name and the specific
-  APIs to document.
+- Library or framework topic → spawn `Explore` against a matching clone under `MPX_CLONED` for the
+  specific APIs to document; without a clone, treat it as a general topic.
 - General topic → resolve the canonical `standard` class through the active runtime profile, then
   spawn `general-purpose` using the resulting concrete value in the runtime's real `model` field.
   Have it web-search and fetch authoritative primary sources (spec, MDN, official docs, the

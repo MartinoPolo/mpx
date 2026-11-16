@@ -3,7 +3,7 @@ export type Account = 'personal' | 'work';
 export type Exposure = 'normal' | 'name-only' | 'explicit-only';
 export type ModelClass = 'mechanical' | 'exploration' | 'standard' | 'reviewer' | 'advanced' | 'frontier';
 export type Thinking = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
-export type Capability = 'read' | 'search' | 'shell' | 'write' | 'browser' | 'context' | 'web';
+export type Capability = 'read' | 'search' | 'shell' | 'write' | 'browser' | 'web';
 
 /** Canonical metadata lives in frontmatter metadata.mpx, never in generated files. */
 export interface SkillMetadata {

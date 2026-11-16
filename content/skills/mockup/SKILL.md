@@ -48,8 +48,9 @@ folder under `designs/` that has a brief and no `variants/variant-*.html`.
 
 Locate component directories through framework/library configuration and aliases, then source
 searches. Distinguish vendored primitives from project compositions and read real props and variants
-from source, variants files, or stories. For a pattern nothing covers, spawn `mpx-context7-docs-fetcher` against the
-project's component library — note it and defer installation to `{{MPX_SKILL_PREFIX}}design-refine`.
+from source, variants files, or stories. For a pattern nothing covers, research the project's
+component library (a matching clone under `MPX_CLONED` first, then its public documentation) — note
+it and defer installation to `{{MPX_SKILL_PREFIX}}design-refine`.
 
 ## Step 4: Generate
 

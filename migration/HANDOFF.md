@@ -50,7 +50,7 @@ substitute transcript paths. Naming recovery and source-version rollback must be
   account/harness launch previews, physical skill sources, and scoped synchronization convergence.
 - Native fresh/resume marker probes verify selected account/project/model continuity and catalogs,
   not unrestricted tools or saved Claude effort. Machine-local summaries record their tested revision.
-- Fresh-process subagent waits, steering, resume, Context7, web search, and browser page listing have
+- Fresh-process subagent waits, steering, resume, web search, and browser page listing have
   bounded acceptance evidence. Recheck after runtime changes; do not infer every provider or browser
   workflow from those probes.
 - Close/reopen, cancellation, desktop attention, and reboot/resurrection require live acceptance.

@@ -25,11 +25,10 @@ model classes, and lifecycle mechanics.
 
 ## Workflow
 
-1. **Fetch current mechanics.** For runtime or library documentation available through Context7,
-   spawn the existing `mpx-context7-docs-fetcher` and ask for the active runtime's current
-   custom-agent frontmatter, packaging, delegation, tool, model, permission, and reload mechanics
-   with runtime-source citations. For installed-runtime mechanics that Context7 does not cover,
-   return a bounded handoff asking the parent to read the installed runtime documentation and
+1. **Fetch current mechanics.** Read the active runtime's current custom-agent frontmatter,
+   packaging, delegation, tool, model, permission, and reload mechanics from a matching clone under
+   `MPX_CLONED`, then its public documentation, with source citations. For installed-runtime
+   mechanics neither covers, return a bounded handoff asking the parent to read the installed runtime documentation and
    provide the cited findings. Treat only cited runtime facts as platform mechanics, and keep
    writing guidance separate from platform mechanics.
 
