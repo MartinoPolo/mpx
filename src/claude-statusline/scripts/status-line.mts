@@ -384,7 +384,21 @@ export function timeUntil(value: string, now: number = nowSeconds()): string {
     if (diff <= 0) {
         return "";
     }
-    return humanAge(diff);
+    return twoUnitDuration(diff);
+}
+
+/** Countdown like "1d 23h", "4h 12m", "59m"; one unit hides up to a day of the weekly reset. */
+function twoUnitDuration(seconds: number): string {
+    const days = Math.trunc(seconds / 86400);
+    const hours = Math.trunc((seconds % 86400) / 3600);
+    const minutes = Math.trunc((seconds % 3600) / 60);
+    if (days > 0) {
+        return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+    }
+    if (hours > 0) {
+        return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+    }
+    return minutes > 0 ? `${minutes}m` : `${seconds}s`;
 }
 
 /** Compact age like "2d", "2h", "7m", "45s". */

@@ -44,13 +44,13 @@ test('main entrypoint renders the three compact rows without real account or net
       session_name: 'Carryover', session_id: '1234567890', cwd: fixture.repository, transcript_path: fixture.transcript,
       model: { display_name: 'Opus 5 (1M context)' }, effort: { level: 'high' },
       context_window: { context_window_size: 1_000_000, total_input_tokens: 123_000, used_percentage: 12 }, cost: { total_cost_usd: 1.25 },
-      rate_limits: { five_hour: { used_percentage: 20, resets_at: now + 7_300 }, seven_day: { used_percentage: 30, resets_at: now + 3 * 86_400 + 60 } },
+      rate_limits: { five_hour: { used_percentage: 20, resets_at: now + 7_300 }, seven_day: { used_percentage: 30, resets_at: now + 86_400 + 23 * 3_600 + 120 } },
     }, fixture.env);
     const rows = output.trimEnd().split('\n');
     assert.equal(rows.length, 3, output);
     assert.equal(rows[0], 'P · Carryover · #12345678 · fixture-repo');
     assert.match(rows[1]!, /^Opus 5 \(1M\) · ◆◆◆◇◇ · 123k [█░]{6} · \u{F0615} 2$/u);
-    assert.match(rows[2]!, /^5h [█░]{4} 20% 2h · 7d [█░]{4} 30% 3d$/);
+    assert.match(rows[2]!, /^5h [█░]{4} 20% 2h 1m · 7d [█░]{4} 30% 1d 23h$/);
     assert.doesNotMatch(output, /\$|Kč|%\)|Σ|⟳/);
     assert.deepEqual((await readdir(fixture.cache)).filter(name => !name.startsWith('claude-usage-') && !name.startsWith('claude-compact-')), []);
   } finally { await rm(fixture.root, { recursive: true, force: true }); }

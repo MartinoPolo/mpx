@@ -15,7 +15,7 @@ Opus 5 (1M) · ◆◆◆◇◇ · 84k ████░░ · 󰘕 3
   linked with a native `file:///` URL: `project/worktree` in a linked worktree, else the folder name.
 - Row 2: model, effort gauge, context tokens with a bar measured against the auto-compaction limit
   (color escalates as it fills), and the compaction count once the session has compacted.
-- Row 3: 5-hour and weekly quota with reset countdowns, linked to the usage page.
+- Row 3: 5-hour and weekly quota with two-unit reset countdowns (`1d 23h`), linked to the usage page.
 
 `scripts/subagent-status-line.mts` collapses the tasks panel into one row while sub-agents run
 (`● 2 running · 1×Opus 1×Sonnet · 210k tokens · 4m`) and hides the per-agent rows. It keeps no state.
