@@ -57,8 +57,8 @@ implementations remain Orca-owned.
 
 The [maintained subagent patch](../extensions/README.md#quiet-subagents) excludes parent-only Orca
 extensions before their factories execute: removing handlers after loading cannot undo factory
-side effects. [Installed-package isolation tests](../test/subagent-isolation.test.ts) cover this
-boundary, not installed Orca HTTP callbacks or Windows toasts.
+side effects. This boundary is not covered by automated tests, nor are installed Orca HTTP callbacks
+or Windows toasts.
 
 The native Pi cancellation event disarms quiet-result recovery without adding model messages or
 notifications. This integration does not deploy the aggregate-aware Orca candidates below; live
