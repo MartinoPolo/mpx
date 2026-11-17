@@ -4,7 +4,7 @@ description: Ship intended work through commit, push, native PR, CI, and authori
 argument-hint: '[base-branch] [--no-auto-merge]'
 metadata:
   author: MartinoPolo
-  version: '0.8'
+  version: '0.9'
   category: git-workflow
   mpx:
     schemaVersion: 1
@@ -47,7 +47,8 @@ repair before invoking the shipper again. The shipper never repairs.
 For CI repairs, supply the validated repository, PR, branch, commit, and failing run/job identities.
 
 In a personal project without `--no-auto-merge`, completion requires provider-confirmed merge.
-Otherwise, completion is green CI with the explicit PR still open.
+Otherwise, completion is green CI with the explicit PR still open. After the merge, delete the
+merged work's project vault task as the shared *Vault project notes* rule specifies.
 
 Report actual results after delivery, including completed stage, commit/branch/repository/PR/run
 identities, CI and merge state, excluded artifacts, attempts,

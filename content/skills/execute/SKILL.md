@@ -4,7 +4,7 @@ description: Execute one Issue or inline work with implementation, testing, revi
 argument-hint: "[issue|inline/checklist] [--no-tdd|--full-review|--no-auto-merge]"
 metadata:
   author: MartinoPolo
-  version: "2.11"
+  version: "2.12"
   category: project-management
   mpx:
     schemaVersion: 1
@@ -56,6 +56,8 @@ Establish the delivery endpoint before implementation:
 
 Invocation authorizes that endpoint. Resolve personal or work from the project path
 (`MPX_PROJECTS` or `MPX_WORK`), not the account or Git host; ask if unclear.
+
+When work starts, mark its project vault task as the shared *Vault project notes* rule specifies.
 
 ## 2. Analyze
 
@@ -134,6 +136,9 @@ Evaluate failures, delegate accepted repairs to a fresh executor, and verify aga
 commit, and failing run/job identities. A confirmed CI-only infrastructure failure may retry that
 job within the shipping budget without repeating unchanged local checks. Other input changes
 invalidate the local gate.
+
+After the provider-confirmed merge, delete the work's project vault task as the shared *Vault
+project notes* rule specifies.
 
 ## 7. Report
 

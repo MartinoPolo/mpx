@@ -85,6 +85,15 @@ others. `MPX_AI_RETAINED` only for retained non-project work.
 
 Prefer grouping a task's files in one folder named `<project>.<task-or-worktree>`, or just `<task>`.
 
+## Vault project notes
+
+A project's note in the Obsidian vault (`MPX_OBSIDIAN_VAULT`) holds ideas and starting points;
+history lives in GitHub and GitLab. Find the note by project name in the vault's projects folder
+(`_Projekty/<project>/<project>.md`). When an Issue is created from one of its tasks, or work on one
+starts, change that task's checkbox to `[/]` and add the Issue or PR link to its line. When that
+work is merged, delete the task's line. Without a note or a matching task, do nothing. Never delete
+a task whose work is not merged, and never rewrite other lines.
+
 ## Project instructions and skills
 
 Follow applicable project instructions, including nested instructions for files changed. Private

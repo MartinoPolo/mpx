@@ -4,7 +4,7 @@ description: Execute a selected batch of small Issues on one shared branch and p
 argument-hint: '<range|list|label:<x>|board> [size:S|M|L] [--parallel] [--no-tdd] [--full-review|--no-review] [--no-auto-merge]'
 metadata:
   author: MartinoPolo
-  version: '0.13'
+  version: '0.14'
   category: project-management
   mpx:
     schemaVersion: 1
@@ -46,7 +46,7 @@ unless that exact label was explicitly selected. Parse the Blocking relationship
 links and drop Issues with open blockers. Apply size last while preserving provider order.
 
 In board-direct mode, select the project note's eligible Inbox items, with their images, as Project
-Inbox specifies. Issue mode never reads or edits the project note. Create a visible progress entry for every selected and skipped item using
+Inbox specifies. Issue mode edits the project note only as Vault writeback states. Create a visible progress entry for every selected and skipped item using
 the runtime task facility when available; mark each selected item in progress before its worker
 starts and completed only after its commit is confirmed, while skipped items retain their recorded
 reason.
@@ -128,10 +128,12 @@ findings to `mpx-unresolved-issue-tracker`; blockers stop publication. Re-dispat
 checks/reviewers, rerun affected visual states after local or CI repairs, regenerate stale
 screenshots, and require a fresh complete local verification before publication.
 
-## Inbox writeback
+## Vault writeback
 
-In board-direct mode, remove each item whose commit is confirmed from the Inbox as Project Inbox
-specifies, matching its exact original text; leave failed and skipped items in place.
+Follow the shared *Vault project notes* rule. In board-direct mode, mark each selected item in
+progress before its worker starts, as Project Inbox specifies, and add the PR link once the PR
+exists. After the provider-confirmed merge, delete the tasks of the merged items in either mode.
+Leave failed, skipped, and unmerged items unchanged.
 
 ## Publish
 
@@ -152,6 +154,6 @@ After publication, attach those screenshots in a comment on each Issue they veri
 provider guide. Never commit them.
 
 Report Issue→commit mappings, skips and gate decisions, exact checks, review fixes/findings, visual
-`PASS`/`FAIL`/`BLOCKED` per requirement and state, Inbox removals, PR ID/URL, CI, merge state, and
+`PASS`/`FAIL`/`BLOCKED` per requirement and state, vault task updates, PR ID/URL, CI, merge state, and
 blockers. When visual acceptance ran, include a small representative gallery of openable links to
 final screenshots.
