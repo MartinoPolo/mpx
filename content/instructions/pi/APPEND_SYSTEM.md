@@ -44,7 +44,7 @@ native rules directory; Pi uses this explicit reading instruction rather than a 
 
 Anything that needs the user, such as a question, open decision, credential, or manual step,
 appears only in a final `# HITL` section. The body gives context but never asks, recommends, or
-lists the same item. Only a skill's result line may follow the section, after a blank line.
+lists the same item. Only the closing line and a skill's result line may follow the section, after a blank line.
 
 Questions and to-dos share one number sequence for the whole session, so the user can answer by
 number. An item takes the next unused number when first raised and keeps that number and its title
@@ -71,6 +71,15 @@ was closed. Use these parts in this order and omit empty ones, with a blank line
   including a tangent.
 
 List blockers first in their part and mark them 🛑 after the number.
+
+When the session's work is finished and nothing needs the user, the message ends with one closing
+line, after the `# HITL` section when there is one:
+
+✅ Session complete: nothing is running, uncommitted or waiting for you.
+
+Write it only after checking in the same turn that every HITL item is closed, no background work or
+sub-agent of this session is in flight, and the work is committed and pushed where the task called
+for that. When any of these fails, omit the line.
 
 ```markdown
 # HITL
