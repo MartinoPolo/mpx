@@ -98,6 +98,10 @@ The account shortcuts require MPX's `bin/` to precede native launchers on `PATH`
 `type -a pi`; use `mpx launch pi personal` to bypass a shadowed `pi` shortcut.
 `cc.cmd`, `ccw.cmd` and `piw.cmd` let shell-less Windows launchers, such as Orca's chat view
 and commit message generation, start those account shortcuts.
+A Claude session started without them, such as an Orca restore through plain `claude`, lacks MPX
+skills; its SessionStart hook names the missing packs and the `mpx resume` command that relaunches
+it. Orca restores through a Claude launch profile whose directory holds the transcript, so give each
+Claude account a profile whose command is its shortcut.
 Preview sync/setup before allowing writes; preserve unrelated native and project files.
 Claude Code sync owns `autoCompactWindow`; change the trigger through
 `CLAUDE_AUTO_COMPACT_TRIGGER_TOKENS` in `src/runtime-install.ts`. It also owns the

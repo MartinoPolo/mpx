@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { lstat, readFile, realpath, stat } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
@@ -160,6 +161,16 @@ export async function comparablePath(value: string): Promise<string> {
 function normalizeForComparison(value: string): string {
   const normalized = path.normalize(value);
   return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
+/** `$APPDATA/mpx/config.json`, or undefined when APPDATA is unset. */
+export function userConfigFile(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  return env.APPDATA ? path.join(env.APPDATA, 'mpx', 'config.json') : undefined;
+}
+
+/** Mirrors Node's `os.homedir()` resolution as a process with this environment will see it. */
+export function homeDirectory(env: NodeJS.ProcessEnv): string {
+  return (process.platform === 'win32' ? env.USERPROFILE : env.HOME) || homedir();
 }
 
 export async function readUserConfig(

@@ -48,8 +48,9 @@ conventions belong in `AGENTS.md`; rollout evidence and recovery belong in `migr
   workflow vocabulary; discovery and named-skill preloading must preserve that selection.
 - **Deliver each instruction once, scoped natively.** Claude imports shared `AGENTS.md` through the
   account `CLAUDE.md`, which also reaches subagents; the SessionStart hook adds only machine roots,
-  plus a restart instruction after compaction. Compaction guidance goes to the summarizer itself
-  (Claude PreCompact stdout, Pi custom instructions), after the user's own `/compact` text.
+  a restart instruction after compaction, and a warning when the project's packs are not loaded.
+  Compaction guidance goes to the summarizer itself (Claude PreCompact stdout, Pi custom
+  instructions), after the user's own `/compact` text.
   Guided compaction replaces the archived handoff skill, whose manual `HANDOFF.md` went stale and
   lost workflow state.
   File-specific rules declare Claude `paths` alongside `applyTo`.
