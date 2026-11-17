@@ -1,12 +1,12 @@
 import { fileURLToPath } from 'node:url';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { lstat } from 'node:fs/promises';
 import { planAgentLinks, inspectAgentLinks, syncAgentLinks } from './install.js';
 import { mirrorOrcaHooks } from './orca.js';
 import { scanStagedSecrets } from './safeguards/staged-secrets.js';
 import { evaluatePackageManager } from './safeguards/package-manager.js';
 import { build, checkOutput } from './compiler.js';
-import { readUserConfig, resolveProject, selectPacks } from './config.js';
+import { readUserConfig, resolveProject, selectPacks, userConfigFile } from './config.js';
 import { createLaunchSpec, confirmLaunch, formatLaunchWarning, runLaunch } from './launch.js';
 import { sortLaunchWarnings, type Account, type Harness } from './contracts.js';
 import { resumeCommand } from './resume-cli.js';
@@ -26,12 +26,13 @@ if (callerArgumentConversionExclusion !== undefined) {
 }
 const syncSyntax = 'sync [--agents-only|--orca-hooks-only [--harness pi|claude]|--runtime-only [--account personal|work --harness pi|claude]] [--preview]';
 function userConfigPath(): string {
-  if (!process.env.APPDATA) throw new Error('APPDATA is unset; cannot resolve mpx/config.json.');
-  return join(process.env.APPDATA, 'mpx', 'config.json');
+  const file = userConfigFile();
+  if (!file) throw new Error('APPDATA is unset; cannot resolve mpx/config.json.');
+  return file;
 }
 async function optionalUserConfig() {
-  if (!process.env.APPDATA) return undefined;
-  const file = userConfigPath();
+  const file = userConfigFile();
+  if (!file) return undefined;
   try { await lstat(file); } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
     throw error;

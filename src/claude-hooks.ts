@@ -7,6 +7,7 @@ import { repositoryRoot } from './safeguards/fallow.js';
 import { formatEditedFile } from './safeguards/format.js';
 import { checkClaudeStop, claudeLedgerContext, HITL_LEDGER_DIRECTORY, type ClaudeRunEvent } from './hitl-ledger.js';
 import { CLAUDE_UNFINISHED_PROMPT, saveUnfinished } from './unfinished-command.js';
+import { missingClaudePackWarning } from './claude-pack-presence.js';
 
 export interface ClaudeHookInput extends ClaudeRunEvent { hook_event_name: string; source?: string; cwd?: string; transcript_path?: string; tool_name?: string; tool_input?: Record<string, unknown> }
 export interface ClaudeHookResult { code: number; stdout: string; stderr: string }
@@ -41,7 +42,11 @@ export async function handleClaudeHook(event: ClaudeHookInput, contentRoot = roo
     } catch { result.stderr = 'MPX compaction guidance unavailable; continuing with native compaction.\n'; }
   } else if (event.hook_event_name === 'SessionStart') {
     const restart = event.source === 'compact' ? POST_COMPACTION_RESTART : undefined;
-    result.stdout = [restart, machineRootContext(env)].filter(Boolean).join('\n\n');
+    const packWarning = await missingClaudePackWarning({ root: contentRoot, cwd, env, transcriptPath: event.transcript_path })
+      .catch(() => { result.stderr = 'MPX pack check failed; MPX skills may be missing from this session.\n'; return undefined; });
+    const context = [packWarning, restart, machineRootContext(env)].filter(Boolean).join('\n\n');
+    // Plain stdout reaches only the model; systemMessage also shows the warning to the user.
+    result.stdout = packWarning ? JSON.stringify({ systemMessage: packWarning, hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: context } }) : context;
   } else if (event.hook_event_name === 'PreToolUse') {
     const policy = await evaluateTool({ name: event.tool_name ?? '', input: event.tool_input ?? {}, cwd }, { isTrusted });
     if (policy.decision === 'block') {

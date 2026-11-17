@@ -44,6 +44,7 @@ test('additive arguments and selected native roots preserve all caller argument 
     const prompted = await createLaunchSpec({ root: f.root, cwd: f.root, harness: 'claude', account: 'personal', config: f.config, project: registered, selection: packs, args: ['do the task'] });
     assert.deepEqual(prompted.args, [`--add-dir=${packs.paths[0]}`, 'do the task']);
     assert.equal(cc.env.CLAUDE_CONFIG_DIR, f.config.accounts.personal.claude);
+    assert.equal(cc.env.MPX_PACK_PATHS, packs.paths[0], 'hooks compare the injected pack directories against the project selection');
     assert.equal(cc.label, 'MPX · PERSONAL · Claude');
     assert.equal(cc.env.SHELL, '/usr/bin/bash');
     assert.equal(cc.env.MSYSTEM, 'MINGW64');
@@ -192,6 +193,7 @@ test('missing account/executable blocks only launch; xpi adds no packs or MPX ru
     assert.deepEqual(native.args, ['--no-extensions', '-e', '/explicit.ts']);
     assert.equal(native.env.MPX_ACCOUNT, undefined);
     assert.equal(native.env.MPX_ACTIVE_CONTENT_ROOT, undefined);
+    assert.equal(native.env.MPX_PACK_PATHS, undefined);
     assert.equal(native.env.MPX_WORK, '/kept');
     assert.match(native.label, /discovery-disabled/);
     assert.equal(native.warnings.some(warning => warning.code === 'native-only'), false);
