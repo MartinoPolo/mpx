@@ -2,10 +2,10 @@
 name: board-to-issues
 description:
   'Converts unchecked notes from the Obsidian project note Inbox into provider-native Issues,
-  deduping against open Issues and removing converted notes...'
+  deduping against open Issues and marking converted notes in progress...'
 metadata:
   author: MartinoPolo
-  version: '0.8'
+  version: '0.9'
   category: project-management
   mpx:
     schemaVersion: 1
@@ -76,10 +76,11 @@ when supported. Capture its provider-native identifier and URL, and verify its i
 a capability is unsupported or authentication is unavailable, continue independent drafting and
 return exact manual steps—do not fall back to another provider or CLI.
 
-## Step 6: Remove converted notes
+## Step 6: Mark converted notes
 
-Once every Issue a bullet maps to exists with its images, remove that bullet from the Inbox as
-Project Inbox specifies. Leave skipped duplicates and bullets whose Issue creation failed in place.
+Once every Issue a bullet maps to exists with its images, mark that bullet in progress with its
+Issue links as Project Inbox specifies; it is deleted when the work merges. Leave skipped duplicates
+and bullets whose Issue creation failed unchanged.
 
 ## Step 7: Offer to resolve HITL
 
@@ -90,5 +91,5 @@ questions → flip `HITL`→`AFK`), which makes them batch-executable.
 
 List: resolved Issue provider and configured board when applicable; project note path; created
 Issues (identifier, URL, title, labels/tags, size); merged bullets; skipped duplicates (identifier
-and URL); Inbox removal verification and bullets left in place; HITL Issues awaiting resolution;
+and URL); Inbox marking verification and bullets left unchanged; HITL Issues awaiting resolution;
 unsupported provider capabilities; and authentication facts/gaps without exposing secret values.

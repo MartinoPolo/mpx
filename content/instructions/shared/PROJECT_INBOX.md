@@ -18,9 +18,11 @@ continuation lines and every `![[...]]` image wikilink. Resolve a wikilink by fi
 vault, usually `Files/`, and ignore an optional display width such as `|639`. Read each image so its
 visual context informs the work. Stop on a missing or ambiguous filename.
 
-## Remove items
+## Update items
 
-Remove an item only when the calling workflow says its outcome is recorded. Delete exactly that
-complete original block from `## Inbox`; never reconstruct, reorder, or edit any other item, and
-leave image files in place. Re-read the note first and stop if the block changed. Afterwards verify
-that each removed block is gone and that every untouched item remains exactly once.
+Mark or delete an item only when the calling workflow says to, following the shared *Vault project
+notes* rule. Marking changes only the checkbox on the item's first line to `[/]` and adds the link
+there; find a marked item later by that link. Deleting removes exactly that complete original block.
+Never reconstruct, reorder, or edit any other item, and leave image files in place. Re-read the note
+first and stop if the block changed. Afterwards verify the edited block and that every untouched
+item remains exactly once.
