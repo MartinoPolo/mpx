@@ -119,7 +119,7 @@ The runtime activity adapter consumes this signal without posting to Orca. Resta
 the native dependency patch; reloading extensions alone does not replace the running core.
 
 ```bash
-pnpm exec tsx --test test/native-cancellation.test.ts test/subagent-coordinator.test.ts test/pi-ui.test.ts
+pnpm exec tsx --test test/native-cancellation.test.ts test/pi-ui.test.ts
 ```
 
 ## Quiet subagents
@@ -169,7 +169,7 @@ Update the patches only for demonstrated upstream compatibility gaps. Verify the
 ```bash
 pnpm install --frozen-lockfile
 node migration/upstream-probe.mjs
-pnpm exec tsx --test test/native-cancellation.test.ts test/subagent-coordinator.test.ts test/subagent-isolation.test.ts test/subagent-policy.test.ts test/subagent-packs.test.ts
+pnpm exec tsx --test test/native-cancellation.test.ts
 ```
 
 ## Ownership
