@@ -83,9 +83,20 @@ function packNames(value: unknown, label: string): string[] {
   return result;
 }
 
+function skillNames(value: unknown, label: string): string[] {
+  if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
+  const result = value.map((entry, index) => {
+    const name = nonemptyString(entry, `${label}[${index}]`);
+    if (/\s/.test(name)) throw new Error(`${label}[${index}] must be a skill name without whitespace`);
+    return name;
+  });
+  if (new Set(result).size !== result.length) throw new Error(`${label} must not contain duplicate skills`);
+  return result;
+}
+
 export function parseRepositoryConfig(value: unknown): RepositoryConfig {
   const source = object(value, 'repository config');
-  allowedKeys(source, ['projectId', 'repository', 'issues', 'packageManager', 'packs', 'fast_checks', 'full_checks', 'connectors'], 'repository config');
+  allowedKeys(source, ['projectId', 'repository', 'issues', 'packageManager', 'packs', 'fast_checks', 'full_checks', 'connectors', 'disabledSkills'], 'repository config');
   const projectId = nonemptyString(source.projectId, 'projectId');
 
   let repository: RepositoryConfig['repository'];
@@ -134,6 +145,7 @@ export function parseRepositoryConfig(value: unknown): RepositoryConfig {
     if (typeof source.connectors !== 'boolean') throw new Error('connectors must be a boolean');
     result.connectors = source.connectors;
   }
+  if (source.disabledSkills !== undefined) result.disabledSkills = skillNames(source.disabledSkills, 'disabledSkills');
   return result;
 }
 

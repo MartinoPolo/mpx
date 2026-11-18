@@ -43,6 +43,8 @@ export interface RepositoryConfig {
   full_checks?: CheckCommand[];
   /** Claude launches in this project load claude.ai connectors without `--connectors`. */
   connectors?: boolean;
+  /** Skill names that Claude launches in this project do not load; Pi launches ignore it. */
+  disabledSkills?: string[];
 }
 export const WARNING_SEVERITY = { red: 'red', orange: 'orange', yellow: 'yellow' } as const;
 export type WarningSeverity = (typeof WARNING_SEVERITY)[keyof typeof WARNING_SEVERITY];

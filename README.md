@@ -177,6 +177,10 @@ Add `mpxconfig.json` to the repository root (linked worktrees share the main che
   root. Full verification runs both; put only deferred checks in `full_checks`.
 - `"connectors": true` makes every Claude launch in the project load claude.ai connectors, for
   places where `--connectors` cannot be passed, such as Orca automations.
+- `"disabledSkills": ["mpx-execute", "mpx-grill"]` keeps those skills out of every Claude launch and
+  resume in the project, as `skillOverrides` set to `off` merged into any `--settings` you pass. Pi
+  launches ignore it. The Claude launch banner names the disabled skills and whether claude.ai
+  connectors are on.
 
 ### Orca worktree setup
 

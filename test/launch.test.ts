@@ -295,6 +295,50 @@ test('Claude launches load claude.ai connectors only with --connectors or an exp
   } finally { await f.cleanup(); }
 });
 
+test('project connectors and disabledSkills apply to Claude only', async () => {
+  const f = await fixture();
+  try {
+    const selection = { packs: ['development'], paths: [join(f.root, 'pack')], warnings: [] };
+    const project = { ...registered, config: { ...registered.config, connectors: true } };
+    const launch = (harness: 'pi' | 'claude', config = project.config) => createLaunchSpec({ root: f.root, cwd: f.root, harness, account: 'work', config: f.config, project: { ...project, config }, selection, args: ['--verbose'], env: {} });
+    const claude = await launch('claude');
+    assert.equal(claude.env.ENABLE_CLAUDEAI_MCP_SERVERS, 'true');
+    assert.equal(claude.label, 'MPX · WORK · Claude · claude.ai connectors on');
+    for (const config of [project.config, { ...project.config, disabledSkills: ['mpx-execute'] }]) {
+      const pi = await launch('pi', config);
+      assert.equal(pi.env.ENABLE_CLAUDEAI_MCP_SERVERS, undefined);
+      assert.deepEqual(pi.args, ['--skill', selection.paths[0], '--verbose']);
+      assert.equal(pi.label, 'MPX · WORK · Pi');
+    }
+  } finally { await f.cleanup(); }
+});
+
+test('Claude launches turn project-disabled skills off in one merged --settings flag', async () => {
+  const f = await fixture();
+  try {
+    const project = { ...registered, config: { ...registered.config, disabledSkills: ['mpx-execute', 'mpx-grill'] } };
+    const selection = { packs: ['development'], paths: [join(f.root, 'pack')], warnings: [] };
+    const launch = (args: string[]) => createLaunchSpec({ root: f.root, cwd: f.root, harness: 'claude', account: 'work', config: f.config, project, selection, args, env: {} });
+    const plain = await launch(['-p', 'hi']);
+    assert.deepEqual(plain.args, [`--add-dir=${selection.paths[0]}`, '--settings', '{"skillOverrides":{"mpx-execute":"off","mpx-grill":"off"}}', '-p', 'hi']);
+    assert.equal(plain.label, 'MPX · WORK · Claude · skills off: mpx-execute, mpx-grill · claude.ai connectors off');
+
+    await writeFile(join(f.root, 'own-settings.json'), JSON.stringify({ model: 'from-file', skillOverrides: { 'mpx-grill': 'on', 'other': 'off' } }));
+    const merged = await launch(['--settings', '{"model":"ignored-by-claude"}', '-p', 'hi', '--settings=own-settings.json', '--', '--settings', 'positional']);
+    assert.deepEqual(merged.args, [
+      `--add-dir=${selection.paths[0]}`,
+      '--settings', '{"model":"from-file","skillOverrides":{"mpx-execute":"off","mpx-grill":"on","other":"off"}}',
+      '-p', 'hi', '--', '--settings', 'positional',
+    ], 'Claude keeps only the last --settings, so its content is merged and the caller keeps explicit overrides');
+    await assert.rejects(launch(['--settings', 'missing.json']), /Cannot merge --settings missing.json/);
+    await assert.rejects(launch(['--settings', '{oops}']), /Cannot merge --settings/);
+
+    const unchanged = await createLaunchSpec({ root: f.root, cwd: f.root, harness: 'claude', account: 'work', config: f.config, project: { ...registered, config: { ...registered.config, disabledSkills: [] } }, selection, args: ['-p', 'hi'], env: {} });
+    assert.deepEqual(unchanged.args, [`--add-dir=${selection.paths[0]}`, '-p', 'hi']);
+    assert.equal(unchanged.label, 'MPX · WORK · Claude');
+  } finally { await f.cleanup(); }
+});
+
 test('mixed-case Windows environment cannot restore stale model/session or account selectors', async () => {
   const f = await fixture();
   try {

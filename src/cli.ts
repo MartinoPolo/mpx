@@ -102,8 +102,7 @@ async function main(): Promise<number> {
       const account = accountName as Account;
       const config = await readUserConfig(userConfigPath());
       const project = await resolveProject(process.cwd(), config);
-      // Orca automations cannot pass `--connectors`, so a project such as the assistant home turns them on in its config.
-      const connectors = launchArgs.includes('--connectors') || (harness === 'claude' && project.config?.connectors === true);
+      const connectors = launchArgs.includes('--connectors');
       const selection = await selectPacks(root, harness, account, project, config);
       const spec = await createLaunchSpec({ root, cwd: process.cwd(), harness, account, config, project, selection, args: callerArgs, native: harnessName === 'xpi', connectors });
       console.error(spec.label);

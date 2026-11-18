@@ -77,6 +77,14 @@ test('parseRepositoryConfig accepts only a boolean connectors flag', () => {
   assert.throws(() => parseRepositoryConfig({ projectId: 'assistant', connectors: 'yes' }), /connectors must be a boolean/);
 });
 
+test('parseRepositoryConfig accepts disabledSkills as a list of distinct skill names', () => {
+  assert.deepEqual(parseRepositoryConfig({ projectId: 'quiet', disabledSkills: ['mpx-execute', 'mpx-grill'] }), { projectId: 'quiet', disabledSkills: ['mpx-execute', 'mpx-grill'] });
+  assert.deepEqual(parseRepositoryConfig({ projectId: 'quiet', disabledSkills: [] }), { projectId: 'quiet', disabledSkills: [] });
+  for (const disabledSkills of ['mpx-execute', [''], [3], ['mpx execute'], ['mpx-execute', 'mpx-execute']]) {
+    assert.throws(() => parseRepositoryConfig({ projectId: 'quiet', disabledSkills }), /disabledSkills/);
+  }
+});
+
 test('parseRepositoryConfig accepts repository and issue roles independently', () => {
   assert.deepEqual(parseRepositoryConfig({
     projectId: 'repository-only', repository: repositoryConfig.repository,

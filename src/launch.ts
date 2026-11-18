@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import { createInterface, type Interface, type Key } from 'node:readline';
 import { comparablePath, homeDirectory } from './config.js';
 import { PACK_PATHS_ENV } from './claude-pack-presence.js';
+import { claudeArgumentsWithoutSkills } from './skill-switch.js';
 import type { Account, Harness, LaunchSpec, LaunchWarning, PackSelection, ProjectSelection, UserConfig } from './contracts.js';
 import { LAUNCH_WARNING_CODE, launchWarningsRequireConfirmation, sortLaunchWarnings, WARNING_SEVERITY } from './contracts.js';
 
@@ -98,7 +99,8 @@ export async function createLaunchSpec(options: {
   // Claude Code roots its session scratchpad and task output at CLAUDE_CODE_TMPDIR.
   if (harness === 'claude' && env.MPX_TEMP && !env.CLAUDE_CODE_TMPDIR) env.CLAUDE_CODE_TMPDIR = env.MPX_TEMP;
   // claude.ai connectors cost context in every session, so only `--connectors` launches and opted-in projects load them.
-  if (connectors) env.ENABLE_CLAUDEAI_MCP_SERVERS = 'true';
+  // Orca automations cannot pass `--connectors`, so a project such as the assistant home turns them on in its config.
+  if (connectors || (harness === 'claude' && project.config?.connectors === true)) env.ENABLE_CLAUDEAI_MCP_SERVERS = 'true';
   else if (harness === 'claude' && env.ENABLE_CLAUDEAI_MCP_SERVERS === undefined) env.ENABLE_CLAUDEAI_MCP_SERVERS = 'false';
   if (!native) {
     env.MPX_ACCOUNT = account;
@@ -109,9 +111,17 @@ export async function createLaunchSpec(options: {
   if (native) injected.push('--no-extensions');
   // Claude's --add-dir is variadic; only the `=` form stops it from swallowing a positional prompt.
   else for (const path of selection.paths) injected.push(...(harness === 'pi' ? ['--skill', path] : [`--add-dir=${path}`]));
+  // Pi has no per-skill switch, so a project's disabledSkills apply to Claude only.
+  const disabledSkills = harness === 'claude' ? project.config?.disabledSkills ?? [] : [];
+  const callerArgs = disabledSkills.length === 0 ? args : await claudeArgumentsWithoutSkills(args, disabledSkills, cwd);
+  const projectNotice = harness === 'claude' && (disabledSkills.length > 0 || project.config?.connectors !== undefined) ? [
+    ...(disabledSkills.length === 0 ? [] : [`skills off: ${disabledSkills.join(', ')}`]),
+    `claude.ai connectors ${env.ENABLE_CLAUDEAI_MCP_SERVERS === 'true' ? 'on' : 'off'}`,
+  ] : [];
   return {
-    executable, args: [...injected, ...args], cwd, env,
-    label: native ? 'Native Pi · extension discovery-disabled · explicit extensions may load; see native startup list' : `MPX · ${account.toUpperCase()} · ${harness === 'pi' ? 'Pi' : 'Claude'}`,
+    executable, args: [...injected, ...callerArgs], cwd, env,
+    label: native ? 'Native Pi · extension discovery-disabled · explicit extensions may load; see native startup list'
+      : [`MPX · ${account.toUpperCase()} · ${harness === 'pi' ? 'Pi' : 'Claude'}`, ...projectNotice].join(' · '),
     warnings: normalizedWarnings,
     requiresConfirmation: launchWarningsRequireConfirmation(normalizedWarnings),
   };

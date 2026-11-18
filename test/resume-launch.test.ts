@@ -128,6 +128,30 @@ test('Claude preparation uses explicit native ID/model/effort but reports startu
   } finally { await f.cleanup(); }
 });
 
+test('resume applies the project skill switch and connectors exactly as launch does', async () => {
+  const f = await fixture();
+  try {
+    const config: UserConfig = { ...f.config, projectOverrides: [{ path: f.cwd, config: { projectId: 'quiet', connectors: true, disabledSkills: ['mpx-execute'] } }] };
+    const id = 'claude-session';
+    const file = path.join(f.accounts.work.claude, 'projects', '--project--', `${id}.jsonl`);
+    await writeFile(file, [
+      { type: 'user', uuid: 'u1', parentUuid: null, sessionId: id, cwd: f.cwd, timestamp: iso(1), message: { role: 'user', content: 'resume' } },
+      { type: 'assistant', uuid: 'a2', parentUuid: 'u1', sessionId: id, cwd: f.cwd, timestamp: iso(2), message: { role: 'assistant', model: 'claude-exact', content: [] } },
+    ].map(value => JSON.stringify(value)).join('\n'));
+    const claude = await prepareResumeLaunch({ root: f.root, session: (await readClaudeSession(file, 'work', f.accounts.work.claude)).session, config, overrides: { thinking: 'low' }, env: {} });
+    assert.equal(claude.spec.env.ENABLE_CLAUDEAI_MCP_SERVERS, 'true');
+    assert.deepEqual(claude.spec.args, ['--settings', '{"skillOverrides":{"mpx-execute":"off"}}', '--resume', id, '--model', 'claude-exact', '--effort', 'low']);
+    assert.equal(claude.spec.label, 'MPX · WORK · Claude · skills off: mpx-execute · claude.ai connectors on');
+
+    const pi = await prepareResumeLaunch({
+      root: f.root, session: (await readPiSession(f.piFile, 'personal', f.accounts.personal.pi)).session, config,
+      env: { ...process.env, PREFLIGHT_FIXTURE: f.rpc, PREFLIGHT_SESSION_FILE: f.piFile },
+    });
+    assert.deepEqual(pi.spec.args, ['--session', f.piFile]);
+    assert.equal(pi.spec.label, 'MPX · PERSONAL · Pi');
+  } finally { await f.cleanup(); }
+});
+
 test('selected installed Pi runtime accepts an exact disposable session/model/effort when available', { timeout: 40_000 }, async (t) => {
   const selected = process.env.MPX_PI_EXECUTABLE;
   if (!selected || !path.isAbsolute(selected)) { t.skip('MPX_PI_EXECUTABLE is unavailable'); return; }
