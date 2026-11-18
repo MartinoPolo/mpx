@@ -52,7 +52,7 @@ export interface RepositoryConfig {
 /** Claude's `allowedMcpServers` entry forms: `serverUrl` accepts `*` wildcards, `serverName` only this pattern. */
 export const CONNECTOR_URL_PATTERN = /^https?:\/\/\S+$/;
 export const MCP_SERVER_NAME = /^[a-zA-Z0-9_-]+$/;
-export const WARNING_SEVERITY ={ red: 'red', orange: 'orange', yellow: 'yellow' } as const;
+export const WARNING_SEVERITY = { red: 'red', orange: 'orange', yellow: 'yellow' } as const;
 export type WarningSeverity = (typeof WARNING_SEVERITY)[keyof typeof WARNING_SEVERITY];
 export const LAUNCH_WARNING_CODE = {
   projectConfigInvalid: 'project-config-invalid',
