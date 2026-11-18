@@ -9,7 +9,7 @@ import { checkClaudeStop, claudeLedgerContext, HITL_LEDGER_DIRECTORY, type Claud
 import { CLAUDE_UNFINISHED_PROMPT, saveUnfinished } from './unfinished-command.js';
 import { missingClaudePackWarning } from './claude-pack-presence.js';
 
-export interface ClaudeHookInput extends ClaudeRunEvent { hook_event_name: string; source?: string; cwd?: string; transcript_path?: string; tool_name?: string; tool_input?: Record<string, unknown> }
+export interface ClaudeHookInput extends ClaudeRunEvent { hook_event_name: string; source?: string; cwd?: string; tool_name?: string; tool_input?: Record<string, unknown> }
 export interface ClaudeHookResult { code: number; stdout: string; stderr: string }
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // Counters the native post-summary footer that says to continue without asking, which would skip open questions.
@@ -18,8 +18,9 @@ export const POST_COMPACTION_RESTART = 'Context was just compacted. Before conti
 export async function handleClaudeHook(event: ClaudeHookInput, contentRoot = root, env = process.env, ledgerDirectory = HITL_LEDGER_DIRECTORY): Promise<ClaudeHookResult> {
   const result: ClaudeHookResult = { code: 0, stdout: '', stderr: '' };
   if (event.hook_event_name === 'Stop') {
-    const reason = await checkClaudeStop(event, ledgerDirectory);
+    const { reason, notice } = await checkClaudeStop(event, ledgerDirectory);
     if (reason) result.stdout = JSON.stringify({ decision: 'block', reason });
+    else if (notice) result.stdout = JSON.stringify({ systemMessage: notice });
     return result;
   }
   const cwd = event.cwd ?? process.cwd();

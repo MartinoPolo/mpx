@@ -48,19 +48,20 @@ number. An item takes the next unused number when first raised and keeps that nu
 in every later message until it is closed. A number is never reused, also after a user reply or
 compaction.
 
-The user reads only the latest message, so while any item is open every turn-ending message has the
-section and accounts for every open item. Omit the section only when nothing is open and nothing
-was closed. Use these parts in this order and omit empty ones, with a blank line between items.
+Write an item in full once, in the message that raises it, and again only when its wording or
+evidence changes: a hook shows the user every open item in full below the message that ends a run
+and keeps them in a file linked from the status line. While background work or sub-agents are in
+flight, write the section only to raise or close an item. When the turn ends with nothing in
+flight, the section accounts for every open item. Use these parts in this order and omit empty
+ones, with a blank line between items.
 
 - `## ❓ Questions`: decisions and permission requests. The question with its context comes first,
   then a blank line and the options, then a blank line and `👉 rec:` with your pick and its
   deciding reason, never a bare "yes".
 - `## 🛠️ To do`: steps only the user can do, such as a manual setting, credential, purchase, or
   review. Put each command in inline code on its own line so it can be copied whole.
-- `## ⏳ Still open`: only while background work or sub-agents are in flight, one line for each item
-  raised in an earlier message: its number, title, and kind. When the turn ends with nothing in
-  flight, the user is alerted, so write every open item in full under Questions or To do instead,
-  from its original wording.
+- `## ⏳ Still open`: one line for each open item raised in an earlier message and unchanged since:
+  its number, title, and kind.
 - `Closed:` one line naming each item closed since the previous section and what closed it: the
   user's answer, a finished step, or a superseding decision. An item the user did not address stays
   open.
