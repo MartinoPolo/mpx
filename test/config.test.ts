@@ -72,9 +72,23 @@ test('parseRepositoryConfig rejects malformed or escaping check commands', () =>
   ]) assert.throws(() => parseRepositoryConfig(value), /checks|command|cwd|unsupported/i);
 });
 
-test('parseRepositoryConfig accepts only a boolean connectors flag', () => {
+test('parseRepositoryConfig accepts a boolean connectors flag or a list of connector URL patterns and server names', () => {
   assert.deepEqual(parseRepositoryConfig({ projectId: 'assistant', connectors: true }), { projectId: 'assistant', connectors: true });
+  assert.deepEqual(parseRepositoryConfig({ projectId: 'assistant', connectors: false }), { projectId: 'assistant', connectors: false });
+  const connectors = ['https://mcp.slack.com/*', 'http://localhost:*/mcp', 'own_server-2'];
+  assert.deepEqual(parseRepositoryConfig({ projectId: 'assistant', connectors }), { projectId: 'assistant', connectors });
   assert.throws(() => parseRepositoryConfig({ projectId: 'assistant', connectors: 'yes' }), /connectors must be a boolean/);
+  for (const invalid of [[], ['claude.ai Slack'], ['ftp://example.com'], ['https://'], [''], [3], ['https://mcp.slack.com/*', 'https://mcp.slack.com/*']]) {
+    assert.throws(() => parseRepositoryConfig({ projectId: 'assistant', connectors: invalid }), /connectors/);
+  }
+});
+
+test('parseRepositoryConfig accepts disabledSkills as a list of distinct skill names', () => {
+  assert.deepEqual(parseRepositoryConfig({ projectId: 'quiet', disabledSkills: ['mpx-execute', 'mpx-grill'] }), { projectId: 'quiet', disabledSkills: ['mpx-execute', 'mpx-grill'] });
+  assert.deepEqual(parseRepositoryConfig({ projectId: 'quiet', disabledSkills: [] }), { projectId: 'quiet', disabledSkills: [] });
+  for (const disabledSkills of ['mpx-execute', [''], [3], ['mpx execute'], ['mpx-execute', 'mpx-execute']]) {
+    assert.throws(() => parseRepositoryConfig({ projectId: 'quiet', disabledSkills }), /disabledSkills/);
+  }
 });
 
 test('parseRepositoryConfig accepts repository and issue roles independently', () => {

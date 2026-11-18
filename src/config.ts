@@ -15,7 +15,7 @@ import type {
   RepositoryConfig,
   UserConfig,
 } from './contracts.js';
-import { LAUNCH_WARNING_CODE, sortLaunchWarnings, WARNING_SEVERITY } from './contracts.js';
+import { CONNECTOR_URL_PATTERN, LAUNCH_WARNING_CODE, MCP_SERVER_NAME, sortLaunchWarnings, WARNING_SEVERITY } from './contracts.js';
 
 const execFileAsync = promisify(execFile);
 const PACK_NAME = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
@@ -83,9 +83,36 @@ function packNames(value: unknown, label: string): string[] {
   return result;
 }
 
+function skillNames(value: unknown, label: string): string[] {
+  if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
+  const result = value.map((entry, index) => {
+    const name = nonemptyString(entry, `${label}[${index}]`);
+    if (/\s/.test(name)) throw new Error(`${label}[${index}] must be a skill name without whitespace`);
+    return name;
+  });
+  if (new Set(result).size !== result.length) throw new Error(`${label} must not contain duplicate skills`);
+  return result;
+}
+
+/** Claude enforces an invalid `allowedMcpServers` list as empty, so every entry must be valid before launch. */
+function connectorSelection(value: unknown): boolean | string[] {
+  if (typeof value === 'boolean') return value;
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error('connectors must be a boolean or a non-empty array of connector URL patterns and MCP server names');
+  }
+  const result = value.map((entry, index) => {
+    if (typeof entry !== 'string' || !(CONNECTOR_URL_PATTERN.test(entry) || MCP_SERVER_NAME.test(entry))) {
+      throw new Error(`connectors[${index}] must be an http(s) URL pattern such as https://mcp.slack.com/* or an MCP server name matching ${MCP_SERVER_NAME.source}`);
+    }
+    return entry;
+  });
+  if (new Set(result).size !== result.length) throw new Error('connectors must not contain duplicate entries');
+  return result;
+}
+
 export function parseRepositoryConfig(value: unknown): RepositoryConfig {
   const source = object(value, 'repository config');
-  allowedKeys(source, ['projectId', 'repository', 'issues', 'packageManager', 'packs', 'fast_checks', 'full_checks', 'connectors'], 'repository config');
+  allowedKeys(source, ['projectId', 'repository', 'issues', 'packageManager', 'packs', 'fast_checks', 'full_checks', 'connectors', 'disabledSkills'], 'repository config');
   const projectId = nonemptyString(source.projectId, 'projectId');
 
   let repository: RepositoryConfig['repository'];
@@ -130,10 +157,8 @@ export function parseRepositoryConfig(value: unknown): RepositoryConfig {
   if (source.packs !== undefined) result.packs = packNames(source.packs, 'packs');
   if (source.fast_checks !== undefined) result.fast_checks = checkCommands(source.fast_checks, 'fast_checks');
   if (source.full_checks !== undefined) result.full_checks = checkCommands(source.full_checks, 'full_checks');
-  if (source.connectors !== undefined) {
-    if (typeof source.connectors !== 'boolean') throw new Error('connectors must be a boolean');
-    result.connectors = source.connectors;
-  }
+  if (source.connectors !== undefined) result.connectors = connectorSelection(source.connectors);
+  if (source.disabledSkills !== undefined) result.disabledSkills = skillNames(source.disabledSkills, 'disabledSkills');
   return result;
 }
 

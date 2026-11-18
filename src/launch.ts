@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import { createInterface, type Interface, type Key } from 'node:readline';
 import { comparablePath, homeDirectory } from './config.js';
 import { PACK_PATHS_ENV } from './claude-pack-presence.js';
+import { claudeArgumentsWithSettings, projectClaudeSettings } from './claude-settings.js';
 import type { Account, Harness, LaunchSpec, LaunchWarning, PackSelection, ProjectSelection, UserConfig } from './contracts.js';
 import { LAUNCH_WARNING_CODE, launchWarningsRequireConfirmation, sortLaunchWarnings, WARNING_SEVERITY } from './contracts.js';
 
@@ -98,7 +99,10 @@ export async function createLaunchSpec(options: {
   // Claude Code roots its session scratchpad and task output at CLAUDE_CODE_TMPDIR.
   if (harness === 'claude' && env.MPX_TEMP && !env.CLAUDE_CODE_TMPDIR) env.CLAUDE_CODE_TMPDIR = env.MPX_TEMP;
   // claude.ai connectors cost context in every session, so only `--connectors` launches and opted-in projects load them.
-  if (connectors) env.ENABLE_CLAUDEAI_MCP_SERVERS = 'true';
+  // Orca automations cannot pass `--connectors`, so a project such as the assistant home turns them on in its config.
+  // Project settings are Claude-only; Pi launches ignore them.
+  const projectConnectors = harness === 'claude' ? project.config?.connectors : undefined;
+  if (connectors || projectConnectors === true || Array.isArray(projectConnectors)) env.ENABLE_CLAUDEAI_MCP_SERVERS = 'true';
   else if (harness === 'claude' && env.ENABLE_CLAUDEAI_MCP_SERVERS === undefined) env.ENABLE_CLAUDEAI_MCP_SERVERS = 'false';
   if (!native) {
     env.MPX_ACCOUNT = account;
@@ -109,9 +113,21 @@ export async function createLaunchSpec(options: {
   if (native) injected.push('--no-extensions');
   // Claude's --add-dir is variadic; only the `=` form stops it from swallowing a positional prompt.
   else for (const path of selection.paths) injected.push(...(harness === 'pi' ? ['--skill', path] : [`--add-dir=${path}`]));
+  const disabledSkills = harness === 'claude' ? project.config?.disabledSkills ?? [] : [];
+  // `.mcp.json` is read where mpxconfig.json is, so a linked worktree allows what its main checkout allows.
+  const projectSettings = harness === 'claude'
+    ? await projectClaudeSettings({ root, projectRoot: project.mainCheckout ?? cwd, disabledSkills, connectors: projectConnectors }) : {};
+  const callerArgs = await claudeArgumentsWithSettings(args, projectSettings, cwd);
+  const connectorsNotice = Array.isArray(projectConnectors) ? `claude.ai connectors: ${projectConnectors.length} allowed`
+    : `claude.ai connectors ${env.ENABLE_CLAUDEAI_MCP_SERVERS === 'true' ? 'on' : 'off'}`;
+  const projectNotice = harness === 'claude' && (disabledSkills.length > 0 || projectConnectors !== undefined) ? [
+    ...(disabledSkills.length === 0 ? [] : [`skills off: ${disabledSkills.join(', ')}`]),
+    connectorsNotice,
+  ] : [];
   return {
-    executable, args: [...injected, ...args], cwd, env,
-    label: native ? 'Native Pi · extension discovery-disabled · explicit extensions may load; see native startup list' : `MPX · ${account.toUpperCase()} · ${harness === 'pi' ? 'Pi' : 'Claude'}`,
+    executable, args: [...injected, ...callerArgs], cwd, env,
+    label: native ? 'Native Pi · extension discovery-disabled · explicit extensions may load; see native startup list'
+      : [`MPX · ${account.toUpperCase()} · ${harness === 'pi' ? 'Pi' : 'Claude'}`, ...projectNotice].join(' · '),
     warnings: normalizedWarnings,
     requiresConfirmation: launchWarningsRequireConfirmation(normalizedWarnings),
   };
