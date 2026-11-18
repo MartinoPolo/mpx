@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
@@ -27,7 +27,9 @@ async function calendarDaysAfter(lastSuccess: Date | undefined): Promise<string[
       await writeFile(join(retainedRoot, 'morning-brief', 'state.json'), JSON.stringify({ lastSuccess: lastSuccess.toISOString() }));
     }
     const { stdout } = await exec(process.execPath, [startScript], { env: { ...process.env, MPX_AI_RETAINED: retainedRoot }, timeout: 20_000 });
-    return JSON.parse(stdout).calendarDays;
+    const run = JSON.parse(stdout);
+    assert.deepEqual(JSON.parse(await readFile(join(run.dayDirectory, 'start.json'), 'utf8')), run, 'later steps read the run from start.json');
+    return run.calendarDays;
   } finally {
     await rm(retainedRoot, { recursive: true, force: true });
   }

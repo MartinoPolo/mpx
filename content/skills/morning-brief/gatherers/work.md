@@ -11,34 +11,42 @@ Window: %SINCE% to %UNTIL%. Today is %TODAY%.
    - Interesting: up to five threads from `#d-ai`, `#general`, `#devel`, `#devel-news` and other
      channels I am in, chosen for decisions, releases, incidents, outages, useful AI or tooling
      tips. Skip bots, joins, routine stand-up and alert traffic; count what you skipped.
-   - Permalinks come from the tools; never build one yourself.
+   - Permalinks come from the tools; never build one yourself. Only search results carry them: for
+     a message found by reading a channel or thread, search for its words in that channel and take
+     the permalink of the matching result.
+   - `repliers` names the people who replied in the thread; `reactions` lists each emoji with who
+     reacted.
 2. Work mail. Search inbox threads received in the window and classify them:
    - `act`: a person asks something of me, a review request, a deadline.
    - `alert`: a Sentry issue, a failed pipeline or job, or a monitoring alert. Group repeats of the
      same issue or pipeline; note its project or repository and whether a later mail shows it fixed.
-   - `notification`: everything else automated; count it by sender, do not list it.
-3. Work calendar, only if a Google Calendar connector exists: my primary work calendar's events for
-   each day of the window, today and all of tomorrow, with titles. Skip declined events. `attendees`
-   counts the invited people other than me.
+   - `notification`: everything else automated; count it by sender and list it in `quiet`.
+3. Work calendar, only if a Google Calendar connector exists: my primary work calendar's events,
+   with titles, for each of these days, past ones included: %CALENDAR_DAYS%. Skip declined events.
+   `attendees` counts the invited people other than me; `place` is the event's location or room.
 
 Answer with one JSON object and nothing else:
 
 ```json
 {
+  "account": "my work mail address",
   "me": { "slackUserId": "", "displayName": "" },
   "slack": {
-    "directed": [{ "id": "", "channel": "#name or DM", "author": "", "when": "ISO", "text": "short quote",
-      "summary": "what is asked", "answered": false, "replies": 0, "url": "permalink" }],
-    "interesting": [{ "id": "", "channel": "", "author": "", "when": "ISO", "text": "short quote",
-      "summary": "why it matters", "replies": 0, "url": "permalink" }],
+    "directed": [{ "id": "", "channel": "#name or Direct message", "author": "", "when": "ISO with offset",
+      "text": "short quote", "summary": "what is asked", "answered": false, "replies": 0, "repliers": [],
+      "reactions": [{ "emoji": "", "users": [] }], "url": "permalink" }],
+    "interesting": [{ "id": "", "channel": "", "author": "", "when": "ISO with offset", "text": "short quote",
+      "summary": "why it matters", "replies": 0, "repliers": [], "reactions": [], "url": "permalink" }],
     "skipped": 0,
     "summary": "one sentence on the whole Slack window"
   },
-  "mail": [{ "id": "", "class": "act", "from": "", "subject": "", "summary": "", "received": "ISO",
+  "mail": [{ "id": "thread id", "class": "act", "from": "", "subject": "", "snippet": "Gmail's snippet",
+    "summary": "", "received": "ISO with offset",
     "url": "https://mail.google.com/mail/u/<my address>/#all/<threadId>" }],
-  "alerts": [{ "kind": "sentry|pipeline|monitoring", "project": "", "title": "", "count": 1, "first": "ISO",
-    "last": "ISO", "resolved": false, "url": "" }],
+  "alerts": [{ "kind": "sentry|pipeline|monitoring", "project": "", "title": "", "count": 1,
+    "first": "ISO with offset", "last": "ISO with offset", "resolved": false, "url": "" }],
   "notifications": [{ "sender": "", "count": 0 }],
+  "quiet": [{ "from": "", "subject": "", "received": "ISO with offset" }],
   "calendars": [{ "id": "", "name": "", "access": "owner", "primary": true, "color": "#hex" }],
   "events": [{ "id": "", "calendarId": "", "day": "YYYY-MM-DD", "start": "HH:MM", "end": "HH:MM",
     "allDay": false, "title": "", "place": "", "url": "", "attendees": 0, "notes": [] }],
@@ -47,4 +55,5 @@ Answer with one JSON object and nothing else:
 }
 ```
 
-Use empty arrays for nothing found. Quotes stay short; never invent links.
+Use empty arrays for nothing found. `quiet` holds the newest notification threads, at most 30.
+Quotes stay short; never invent links.

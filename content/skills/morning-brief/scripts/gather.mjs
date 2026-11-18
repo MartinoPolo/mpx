@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Runs one headless, connector-enabled Claude session per account and stores each JSON answer in
-// <day>/sources/. Usage: gather.mjs <day-directory> --since <iso> --until <iso> [--only personal|work]
+// <day>/sources/. Calendars cover the calendarDays of <day>/start.json.
+// Usage: gather.mjs <day-directory> --since <iso> --until <iso> [--only personal|work]
 import { spawn, spawnSync } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join } from 'node:path';
@@ -42,6 +43,13 @@ if (selected.some((name) => !(name in GATHERERS))) {
 
 const promptDirectory = join(dirname(fileURLToPath(import.meta.url)), '..', 'gatherers');
 const today = dayDirectory.split(/[\\/]/).at(-1);
+let calendarDays;
+try {
+  calendarDays = JSON.parse(await readFile(join(dayDirectory, 'start.json'), 'utf8')).calendarDays.join(', ');
+} catch {
+  console.error(`${dayDirectory} has no start.json with calendarDays; run start.mjs first.`);
+  process.exit(1);
+}
 
 function stopTree(child) {
   if (process.platform === 'win32') spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
@@ -60,7 +68,8 @@ async function runGatherer(name) {
   const prompt = (await readFile(join(promptDirectory, `${name}.md`), 'utf8'))
     .replaceAll('%SINCE%', values.since)
     .replaceAll('%UNTIL%', values.until)
-    .replaceAll('%TODAY%', today);
+    .replaceAll('%TODAY%', today)
+    .replaceAll('%CALENDAR_DAYS%', calendarDays);
   const args = [join(root, 'bin', gatherer.launcher), '--connectors', '-p', '--output-format', 'json', '--model', GATHERER_MODEL,
     '--permission-mode', 'dontAsk', '--allowedTools', ['ToolSearch', ...gatherer.tools].join(',')];
   // Orca closes an automation run's tab on the first `done` hook from its pane, so gatherers must not
