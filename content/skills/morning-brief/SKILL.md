@@ -198,7 +198,7 @@ brief itself.
 The document the Alfred control center serves. Its contract, validator and sample belong to the app:
 `packages/core/src/brief/` in `$MPX_PROJECTS/alfred-control-center`. `daily-brief.mjs` writes
 everything that comes from data: the calendar days and events from the gatherers, one mailbox per
-connector account, Slack items with their permalinks, Code from the merge request cards that are
+connector account (each mail with the `messageId` a saved draft replies to), Slack items with their permalinks, Code from the merge request cards that are
 ready, in review or failing (merged ones as `merged`), Agents from the overnight runs, the triage
 captures whose line still stands in its note, the sources, and every item id, a hash of the item's
 source reference (`brief-id.mjs`). It drops what the app's latest outcome marks seen or kept, brings
@@ -215,7 +215,9 @@ boards, AI retro, instructions and AI news stay on the page only.
   headless run cannot unlock them.
 - `options`: item id to its options in suggested order, as the contract types them: reply drafts
   (`subject` for mail, `where` for Slack), events, tasks, `snooze`, `seen`, and actions on Code and
-  Agents. Without, a mail ask is snoozed, other messages and runs are seen, and a card offers Merge,
+  Agents. A mail reply's `to` names its recipients, or is left out for the sender;
+  `daily-brief.mjs` writes each as `Name <address>` from the gathered message and reports a name
+  it cannot address, which the app refuses until I add one. Without, a mail ask is snoozed, other messages and runs are seen, and a card offers Merge,
   Rerun or Review today by its state.
 - `notes`: capture item id to its suggestion; without, a resolved capture is done and the rest kept.
 - `bookmarks`: every `capture.json` bookmark id to its `kind`, `suggestion` and `csfd`;
@@ -286,6 +288,20 @@ With `--apply <date>`, in the day folder, one apply session at a time:
 4. Record each processed point (`id`, `decision`, parameters fingerprint, time, outcome) and each
    processed note in `processed.json` as it finishes, so a second Process now repeats nothing.
 5. Report applied, skipped and failed points, then feedback outcomes with what changed where.
+
+## Connector run
+
+The Alfred control center's Process sends mail, saves drafts, creates events and posts to Slack
+through `node "<skill-dir>/scripts/apply.mjs" <run directory>`, never through this skill's session.
+`run.json` there holds `day`, an optional `model` (default the gatherers' cheap model) and
+`operations`: `id`, `account` (`personal` or `work`), `kind` (`gmail-send`, `gmail-draft`,
+`calendar-event`, `slack-send`, `slack-draft`) and `arguments`, exactly the tool's input. One
+headless session per account runs from `$MPX_AI_RETAINED/morning-brief/<day>`, allowed only the
+tools its operations need. [apply-hook.mjs](scripts/apply-hook.mjs) denies every call whose input
+differs from an approved one in a single character, or repeats one, and records each answer in
+`answers/<id>.json` as it arrives. `result.json` gives each operation `done` with its link, `failed`
+with a reason, or `unknown` when a call started and its answer never came. Exit code 2 unless every
+operation is done.
 
 ## Deliver
 

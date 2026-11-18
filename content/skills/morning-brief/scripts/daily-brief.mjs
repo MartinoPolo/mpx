@@ -16,6 +16,7 @@ import { localIso } from './local-time.mjs';
 const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const INSTANT_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/;
+const MAIL_ADDRESS_PATTERN = /^[^\s@<>,]+@[^\s@<>,]+$/;
 const END_OF_DAY = '24:00';
 const SHORT_LENGTH = 60;
 const VALIDATOR_TIMEOUT_MILLISECONDS = 120_000;
@@ -65,6 +66,7 @@ const capture = await readJson(join(dayDirectory, '..', '..', 'bookmarks', 'capt
 const judgement = (await readJson(join(dayDirectory, 'daily-brief.judgement.json'))) ?? {};
 const vaultDirectory = process.env.MPX_OBSIDIAN_VAULT;
 const noteLineCache = new Map();
+const mailPeopleByItemId = new Map();
 const capturedBookmarkIds = new Set((capture?.bookmarks ?? []).map((bookmark) => String(bookmark.id)));
 
 const text = (value) => (typeof value === 'string' ? value.trim() : '');
@@ -173,7 +175,44 @@ function mailMessage(mail, { options, ...message }) {
     problems.push(`Mail "${message.subject}" has no thread id or no received time with a zone; left out.`);
     return undefined;
   }
-  return { id: briefItemId('mail', threadId), short: shorten(`${message.from}: ${message.subject}`), link: link(mail.url), options, threadId, ...message };
+  const messageId = text(mail.messageId) || null;
+  return { id: briefItemId('mail', threadId), short: shorten(`${message.from}: ${message.subject}`), link: link(mail.url), options, threadId, messageId, ...message };
+}
+
+// A gathered `Name <address>` or bare address.
+function mailPerson(entry) {
+  const value = text(entry);
+  const named = value.match(/^(.*?)\s*<([^<>]+)>$/);
+  const address = (named ? named[2] : value).trim();
+  return MAIL_ADDRESS_PATTERN.test(address) ? { name: named ? named[1].trim() : '', address } : undefined;
+}
+
+const recipientLine = ({ name, address }) => (name ? `${name} <${address}>` : address);
+
+// The sender of the message a reply answers, then its other recipients, as the gatherer read them.
+function mailPeople(mail) {
+  const fromAddress = text(mail.fromAddress);
+  const sender = MAIL_ADDRESS_PATTERN.test(fromAddress) ? { name: text(mail.from), address: fromAddress } : undefined;
+  return { sender, everyone: [sender, ...texts(mail.otherRecipients).map(mailPerson)].filter(Boolean) };
+}
+
+// The judgement names a reply's recipients; the app sends only to addresses, so each is written Name <address>.
+function addressedReply(option, item, people) {
+  if (option.kind !== 'reply') return option;
+  const entries = text(option.to).split(',').map((entry) => entry.trim()).filter(Boolean);
+  if (entries.length === 0) {
+    if (people.sender) return { ...option, to: recipientLine(people.sender) };
+    problems.push(`A reply to "${item.short}" names no recipient, and the mail has no sender address.`);
+    return option;
+  }
+  const to = entries.map((entry) => {
+    if (mailPerson(entry)) return entry;
+    const person = people.everyone.find((candidate) => candidate.name.toLowerCase() === entry.toLowerCase());
+    if (person) return recipientLine(person);
+    problems.push(`A reply to "${item.short}" names "${entry}" without an address; the app refuses it until To has one.`);
+    return entry;
+  });
+  return { ...option, to: to.join(', ') };
 }
 
 function quietMail({ from, received, subject }) {
@@ -194,7 +233,9 @@ function connectorMailbox(id, label, result) {
     const from = text(mail.from) || 'Unknown sender';
     const subject = text(mail.subject) || '(no subject)';
     const snippet = text(mail.snippet) || text(mail.summary) || subject;
-    items.push(mailMessage(mail, { from, receivedAt: text(mail.received), subject, snippet, options: [SNOOZE] }));
+    const item = mailMessage(mail, { from, receivedAt: text(mail.received), subject, snippet, options: [SNOOZE] });
+    if (item) mailPeopleByItemId.set(item.id, mailPeople(mail));
+    items.push(item);
   }
   for (const alert of data.alerts ?? []) {
     const from = ALERT_SENDERS[alert.kind] ?? 'Alert';
@@ -482,7 +523,7 @@ async function applyOutcome(document, { outcomeDay, outcome }) {
     }
   }
   return `Outcome of ${outcomeDay}: ${droppedCount} seen or kept items dropped, ${returnedCount} snoozed or undecided items returned.`
-    + (outcome.feedback ? `\nChapter feedback to respect: ${JSON.stringify(outcome.feedback)}` : '');
+    + (Object.keys(outcome.feedback ?? {}).length > 0 ? `\nChapter feedback to respect: ${JSON.stringify(outcome.feedback)}` : '');
 }
 
 function applyJudgement(document) {
@@ -490,7 +531,8 @@ function applyJudgement(document) {
   for (const [, items] of itemLists(document)) {
     for (const item of items) {
       knownIds.add(item.id);
-      if (judgement.options?.[item.id]) item.options = judgement.options[item.id];
+      const people = mailPeopleByItemId.get(item.id);
+      if (judgement.options?.[item.id]) item.options = judgement.options[item.id].map((option) => (people ? addressedReply(option, item, people) : option));
       if (judgement.notes?.[item.id]) item.suggestion = judgement.notes[item.id];
     }
   }

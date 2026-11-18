@@ -21,6 +21,9 @@ Window: %SINCE% to %UNTIL%. Today is %TODAY%.
    - `alert`: a Sentry issue, a failed pipeline or job, or a monitoring alert. Group repeats of the
      same issue or pipeline; note its project or repository and whether a later mail shows it fixed.
    - `notification`: everything else automated; count it by sender and list it in `quiet`.
+   Read every `act` thread: from its newest message not sent by me take `messageId`, the sender's
+   `fromAddress`, and `otherRecipients`, the message's other To and Cc recipients except me as
+   `Name <address>`.
 3. Work calendar, only if a Google Calendar connector exists: my primary work calendar's events,
    with titles, for each of these days, past ones included: %CALENDAR_DAYS%. Skip declined events.
    `attendees` counts the invited people other than me; `place` is the event's location or room.
@@ -40,7 +43,8 @@ Answer with one JSON object and nothing else:
     "skipped": 0,
     "summary": "one sentence on the whole Slack window"
   },
-  "mail": [{ "id": "thread id", "class": "act", "from": "", "subject": "", "snippet": "Gmail's snippet",
+  "mail": [{ "id": "thread id", "messageId": "", "class": "act", "from": "sender's name",
+    "fromAddress": "sender's address", "otherRecipients": ["Name <address>"], "subject": "", "snippet": "Gmail's snippet",
     "summary": "", "received": "ISO with offset",
     "url": "https://mail.google.com/mail/u/<my address>/#all/<threadId>" }],
   "alerts": [{ "kind": "sentry|pipeline|monitoring", "project": "", "title": "", "count": 1,
