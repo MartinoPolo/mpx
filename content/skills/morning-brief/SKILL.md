@@ -4,7 +4,7 @@ description:
   'Builds the daily morning brief: an interactive narrated page covering calendar, overnight runs,
   merge requests, issues, Slack, mail, Obsidian triage, AI retro, instruction changes and AI
   news since the last brief, ending in proposed actions I accept or skip and send to a fresh
-  processing session'
+  processing session, plus the daily brief document the Alfred control center reads'
 argument-hint: '[--no-state] [--rebuild] [--apply <date>]'
 triggers:
   morning brief; morning summary; daily brief
@@ -26,8 +26,8 @@ edit notes. The page proposes those actions, I decide each one, and a fresh sess
 send ([Process](#process)).
 
 `--no-state` builds without recording the brief as the last one (test runs). `--rebuild` only
-re-renders an existing `brief.json`. `--apply <date>` processes the decisions sent from that day's
-page.
+re-renders an existing `brief.json` and rewrites the document (step 7). `--apply <date>` processes
+the decisions sent from that day's page.
 
 ## Requirements
 
@@ -37,12 +37,13 @@ Launched through `ccw` (or `cc`) so `MPX_ACTIVE_CONTENT_ROOT` is set; `MPX_AI_RE
 
 ## Run
 
-Keep the turn open until the page is built: an Orca automation run closes its terminal, and every
-process in it, as soon as the agent stops. Wait for background commands with a bounded foreground
-wait, never by ending the turn.
+Keep the turn open until the document is validated: an Orca automation run closes its terminal, and
+every process in it, as soon as the agent stops. Wait for background commands with a bounded
+foreground wait, never by ending the turn.
 
 1. `node "<skill-dir>/scripts/start.mjs"` prints `date`, `dayDirectory`, `since`, `until` and
-   `calendarDays`. All files of this run go into `dayDirectory`; source files go into its `sources/`.
+   `calendarDays`, and keeps them in `<dayDirectory>/start.json` for the later scripts. All files of
+   this run go into `dayDirectory`; source files go into its `sources/`.
 2. Start these together, the first in the background:
    - `node "<skill-dir>/scripts/gather.mjs" <dayDirectory> --since <since> --until <until>` runs
      one headless connector session per account ([personal](gatherers/personal.md): Gmail and
@@ -76,6 +77,12 @@ wait, never by ending the turn.
    `--no-state`) validates the brief, writes a `process.token` into it when missing, writes
    `process.json`, and renders `index.html`. Open the page in a browser and step through every beat
    before delivering: nothing overlaps, every highlight lands on what is said.
+7. Only after the page, so it never delays or breaks it, write the [document](#daily-briefjson):
+   `node "<skill-dir>/scripts/daily-brief.mjs" <dayDirectory>` writes `daily-brief.json` and lists
+   its items with their ids, the bookmarks still to judge and its problems. Write
+   `<dayDirectory>/daily-brief.judgement.json`, then run the script again; it ends with the app's
+   validator. Fix what you can and rerun; exit code 2 means a chapter is still invalid or the
+   validator could not run.
 
 ## Areas
 
@@ -100,12 +107,16 @@ wait, never by ending the turn.
   runs that did work in that gap; read their final reports for results. Each run has a `project`, an
   `outcome` (`ok`, `fail`, `partial`, `check`), a `result` of one to three words that says the state
   (merged, render failed, session limit), a terse `title` without the project name, `detail`, start
-  time, duration and a link to the result. Routines are not reported: skipped or scheduled runs that
-  did nothing, and the brief's own runs.
+  time, duration and a link to the result. For the document each run also has `session` (its
+  transcript `file` from `sessions.json`, or the automation run's id), `startedAt` and `endedAt`
+  (ISO with offset; no end while it runs) and `logTail`, the last lines of its log or report.
+  Routines are not reported: skipped or scheduled runs that did nothing, and the brief's own runs.
 - **Obsidian triage**: daily notes in `$MPX_OBSIDIAN_VAULT/Daily/` from the window and today, and
   changes to `Ideas.md`. Unchecked dump bullets and tasks not yet under a capture heading become
   items with a proposed destination (a `## Inbox`, `## Ideas` or `## Tasks` section of
   `_Projekty/<project>/<project>.md`, or a daily capture heading) and priority. Link each to its note with `obsidian://open?vault=<vault>&file=<path>`.
+  A group's `note` is its vault path without `.md`; each item keeps `line`, its text exactly as it
+  stands in the note without list marker or checkbox, however `text` rewords it.
   Before proposing a capture, check the vault for it: one already filed, done or superseded gets
   `resolved: true` and a `resolution` of a few words with the evidence. Resolved captures stay
   listed, shown as done; they count neither in `count` nor toward `needs`. I can mark any capture
@@ -182,6 +193,40 @@ actions chapter lists every point grouped by project with the same state; its be
 steps first, then the agent work. A feedback box at its foot asks what I liked or disliked about the
 brief itself.
 
+## daily-brief.json
+
+The document the Alfred control center serves. Its contract, validator and sample belong to the app:
+`packages/core/src/brief/` in `$MPX_PROJECTS/alfred-control-center`. `daily-brief.mjs` writes
+everything that comes from data: the calendar days and events from the gatherers, one mailbox per
+connector account, Slack items with their permalinks, Code from the merge request cards that are
+ready, in review or failing (merged ones as `merged`), Agents from the overnight runs, the triage
+captures whose line still stands in its note, the sources, and every item id, a hash of the item's
+source reference (`brief-id.mjs`). It drops what the app's latest outcome marks seen or kept, brings
+back what it marks snoozed or undecided, and prints its chapter feedback for you to follow. Issue
+boards, AI retro, instructions and AI news stay on the page only.
+
+`daily-brief.judgement.json` adds the judgement; every key is optional:
+
+- `calendars`: gatherer calendar id to `work`, `personal`, `wife` or `skip`; by default the work
+  account's and free/busy calendars are work, my own personal and the rest skipped.
+  `calendarNames` names a target, for example `{ "wife": "<her name>" }`.
+- `mailboxes`: every mailbox without a connector that the home's instructions name (`id` as its mail
+  server names the account, `label`, `provider`, `account`). They are written as not read: the
+  headless run cannot unlock them.
+- `options`: item id to its options in suggested order, as the contract types them: reply drafts
+  (`subject` for mail, `where` for Slack), events, tasks, `snooze`, `seen`, and actions on Code and
+  Agents. Without, a mail ask is snoozed, other messages and runs are seen, and a card offers Merge,
+  Rerun or Review today by its state.
+- `notes`: capture item id to its suggestion; without, a resolved capture is done and the rest kept.
+- `bookmarks`: every `capture.json` bookmark id to its `kind`, `suggestion` and `csfd`;
+  `wishlists` lists the wishlists a shop find can move to.
+- `quietRuns`: automations that ran fine and sessions closed in the window.
+- `reminders`: Plan reminders, the home's additions such as deadlines and the monthly invoice.
+- `hints`: health hints, only once the vault has a health note.
+- `narration`: chapter name to its sentences (`text`, `targets`), spoken like the page's beats.
+  Targets are item ids, mailbox ids or calendar days, project names on `projects`, and `[]` for a
+  sentence about nothing shown.
+
 ## Narration
 
 Each beat is one spoken sentence (`say`), a sidebar `note` label of at most four words, and
@@ -245,6 +290,7 @@ With `--apply <date>`, in the day folder, one apply session at a time:
 ## Deliver
 
 Report the `file:///` link to `index.html` first, then sources that were unavailable and why, the
-gatherer cost, narrated characters, and action point count. The page is local. Publish it as an artifact only when asked,
-from the work account; before sharing beyond me, ask whether personal mail and calendar items stay.
+gatherer cost, narrated characters, and action point count. Then the document's result: each chapter
+the validator calls invalid with its reason, and the problems `daily-brief.mjs` printed. The page is
+local. Publish it as an artifact only when asked, from the work account; before sharing beyond me, ask whether personal mail and calendar items stay.
 End with the [result line]({{MPX_SHARED_INSTRUCTIONS}}/RESULT_LINE.md) linking the page.

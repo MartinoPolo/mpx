@@ -1,7 +1,9 @@
 #!/usr/bin/env node
-// Prints the brief's day folder, covered window and calendar days as JSON, creating the folder.
-import { mkdir, readFile } from 'node:fs/promises';
+// Prints the brief's day folder, covered window and calendar days as JSON, creating the folder and
+// keeping the same JSON in its start.json.
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
+import { localDate, localIso } from './local-time.mjs';
 
 const MAXIMUM_WINDOW_DAYS = 7;
 const MAXIMUM_CATCH_UP_DAYS = 2;
@@ -35,18 +37,10 @@ for (let offset = -2; offset >= -1 - MAXIMUM_CATCH_UP_DAYS; offset--) {
   calendarOffsets.unshift(offset);
 }
 
-const pad = (value) => String(value).padStart(2, '0');
-const localDate = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-const localIso = (date) => {
-  const offset = -date.getTimezoneOffset();
-  const sign = offset >= 0 ? '+' : '-';
-  return `${localDate(date)}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}${sign}${pad(Math.floor(Math.abs(offset) / 60))}:${pad(Math.abs(offset) % 60)}`;
-};
-
 const date = localDate(now);
 const dayDirectory = join(home, date);
 await mkdir(join(dayDirectory, 'sources'), { recursive: true });
-console.log(JSON.stringify({
+const run = `${JSON.stringify({
   date,
   dayDirectory,
   since: localIso(since),
@@ -54,4 +48,7 @@ console.log(JSON.stringify({
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   lastSuccess: lastSuccess ? localIso(lastSuccess) : null,
   calendarDays: calendarOffsets.map((offset) => localDate(startOfDay(offset))),
-}, null, 2));
+}, null, 2)}\n`;
+// Later steps read the run from here: building the page moves state.json on, so it cannot be recomputed.
+await writeFile(join(dayDirectory, 'start.json'), run);
+process.stdout.write(run);
