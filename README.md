@@ -177,6 +177,11 @@ Add `mpxconfig.json` to the repository root (linked worktrees share the main che
   root. Full verification runs both; put only deferred checks in `full_checks`.
 - `"connectors": true` makes every Claude launch in the project load claude.ai connectors, for
   places where `--connectors` cannot be passed, such as Orca automations.
+- `"connectors": ["https://mcp.slack.com/*", "my_server"]` loads only the listed connectors, through
+  Claude's `allowedMcpServers`. Entries are URL patterns (`claude mcp list` shows each connector's URL)
+  or names of your own MCP servers. The project's `.mcp.json` servers and MPX agent servers are allowed
+  automatically; plugin-provided MCP servers are unavailable. `--connectors` keeps the list, and a
+  project-local Claude settings file can widen it.
 - `"disabledSkills": ["mpx-execute", "mpx-grill"]` keeps those skills out of every Claude launch and
   resume in the project, as `skillOverrides` set to `off` merged into any `--settings` you pass. Pi
   launches ignore it. The Claude launch banner names the disabled skills and whether claude.ai
@@ -232,7 +237,7 @@ as above; shared domains do not suppress project configuration warnings. Inspect
 `mpx project config <directory>`.
 
 Claude loads claude.ai connectors only when launched with `--connectors`, or in a project whose
-configuration sets `"connectors": true`.
+configuration sets `"connectors"` to `true` or a list.
 
 ### Generated outputs
 

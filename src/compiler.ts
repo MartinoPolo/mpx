@@ -619,6 +619,12 @@ function nativeAgent(data: Mapping, metadata: AgentMetadata, profiles: RuntimePr
   return native;
 }
 
+/** Names of the MCP servers that compiled Claude agents declare in their frontmatter. */
+export async function agentMcpServerNames(root: string): Promise<string[]> {
+  const profiles = runtimeProfiles(await readFile(path.resolve(root, 'content', 'runtime-profiles.json')), 'content/runtime-profiles.json');
+  return [...new Set(Object.values(profiles.mcpServers ?? {}).flatMap((servers) => Object.keys(servers ?? {})))];
+}
+
 export async function projectContent(root: string): Promise<Projection[]> {
   const contentRoot = path.resolve(root, 'content');
   const collectedSources = await collectSource(contentRoot);

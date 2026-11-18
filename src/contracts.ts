@@ -41,12 +41,18 @@ export interface RepositoryConfig {
   packs?: string[];
   fast_checks?: CheckCommand[];
   full_checks?: CheckCommand[];
-  /** Claude launches in this project load claude.ai connectors without `--connectors`. */
-  connectors?: boolean;
+  /**
+   * Claude launches in this project load claude.ai connectors without `--connectors`. A list also restricts
+   * every MCP server to its URL patterns and server names.
+   */
+  connectors?: boolean | string[];
   /** Skill names that Claude launches in this project do not load; Pi launches ignore it. */
   disabledSkills?: string[];
 }
-export const WARNING_SEVERITY = { red: 'red', orange: 'orange', yellow: 'yellow' } as const;
+/** Claude's `allowedMcpServers` entry forms: `serverUrl` accepts `*` wildcards, `serverName` only this pattern. */
+export const CONNECTOR_URL_PATTERN = /^https?:\/\/\S+$/;
+export const MCP_SERVER_NAME = /^[a-zA-Z0-9_-]+$/;
+export const WARNING_SEVERITY ={ red: 'red', orange: 'orange', yellow: 'yellow' } as const;
 export type WarningSeverity = (typeof WARNING_SEVERITY)[keyof typeof WARNING_SEVERITY];
 export const LAUNCH_WARNING_CODE = {
   projectConfigInvalid: 'project-config-invalid',

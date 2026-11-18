@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { createLaunchSpec, runLaunch, confirmLaunch, formatLaunchWarning } from '../src/launch.js';
-import { LAUNCH_WARNING_CODE, WARNING_SEVERITY, type UserConfig } from '../src/contracts.js';
+import { LAUNCH_WARNING_CODE, WARNING_SEVERITY, type RepositoryConfig, type UserConfig } from '../src/contracts.js';
 
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'mpx-launch-'));
@@ -300,11 +300,16 @@ test('project connectors and disabledSkills apply to Claude only', async () => {
   try {
     const selection = { packs: ['development'], paths: [join(f.root, 'pack')], warnings: [] };
     const project = { ...registered, config: { ...registered.config, connectors: true } };
-    const launch = (harness: 'pi' | 'claude', config = project.config) => createLaunchSpec({ root: f.root, cwd: f.root, harness, account: 'work', config: f.config, project: { ...project, config }, selection, args: ['--verbose'], env: {} });
+    const launch = (harness: 'pi' | 'claude', config: RepositoryConfig = project.config) => createLaunchSpec({ root: f.root, cwd: f.root, harness, account: 'work', config: f.config, project: { ...project, config }, selection, args: ['--verbose'], env: {} });
     const claude = await launch('claude');
     assert.equal(claude.env.ENABLE_CLAUDEAI_MCP_SERVERS, 'true');
     assert.equal(claude.label, 'MPX · WORK · Claude · claude.ai connectors on');
-    for (const config of [project.config, { ...project.config, disabledSkills: ['mpx-execute'] }]) {
+    assert.deepEqual(claude.args, [`--add-dir=${selection.paths[0]}`, '--verbose']);
+    const switchedOff = await launch('claude', { ...project.config, connectors: false });
+    assert.equal(switchedOff.env.ENABLE_CLAUDEAI_MCP_SERVERS, 'false');
+    assert.deepEqual(switchedOff.args, [`--add-dir=${selection.paths[0]}`, '--verbose']);
+    assert.equal(switchedOff.label, 'MPX · WORK · Claude · claude.ai connectors off');
+    for (const config of [project.config, { ...project.config, disabledSkills: ['mpx-execute'] }, { ...project.config, connectors: ['https://mcp.slack.com/*'] }]) {
       const pi = await launch('pi', config);
       assert.equal(pi.env.ENABLE_CLAUDEAI_MCP_SERVERS, undefined);
       assert.deepEqual(pi.args, ['--skill', selection.paths[0], '--verbose']);
@@ -336,6 +341,30 @@ test('Claude launches turn project-disabled skills off in one merged --settings 
     const unchanged = await createLaunchSpec({ root: f.root, cwd: f.root, harness: 'claude', account: 'work', config: f.config, project: { ...registered, config: { ...registered.config, disabledSkills: [] } }, selection, args: ['-p', 'hi'], env: {} });
     assert.deepEqual(unchanged.args, [`--add-dir=${selection.paths[0]}`, '-p', 'hi']);
     assert.equal(unchanged.label, 'MPX · WORK · Claude');
+  } finally { await f.cleanup(); }
+});
+
+test('a project connector list allows only its connectors, the project .mcp.json servers and the agent servers MPX compiles', async () => {
+  const f = await fixture();
+  try {
+    const repositoryRoot = fileURLToPath(new URL('..', import.meta.url));
+    const mainCheckout = join(f.root, 'main');
+    await mkdir(mainCheckout);
+    await writeFile(join(mainCheckout, '.mcp.json'), JSON.stringify({ mcpServers: { 'project-server': {}, 'own_server': {}, 'has space': {} } }));
+    const config = { ...registered.config, connectors: ['https://mcp.slack.com/*', 'own_server'], disabledSkills: ['mpx-execute'] };
+    const launch = (args: string[], connectors = false) => createLaunchSpec({ root: repositoryRoot, cwd: join(f.root, 'linked'), harness: 'claude', account: 'work', config: f.config,
+      project: { ...registered, mainCheckout, config }, selection: { packs: [], paths: [], warnings: [] }, args, env: { ENABLE_CLAUDEAI_MCP_SERVERS: 'false' }, connectors });
+    const allowedMcpServers = [{ serverUrl: 'https://mcp.slack.com/*' }, { serverName: 'own_server' }, { serverName: 'project-server' }, { serverName: 'chrome-devtools' }];
+
+    const listed = await launch(['-p', 'hi']);
+    assert.equal(listed.env.ENABLE_CLAUDEAI_MCP_SERVERS, 'true');
+    assert.deepEqual(listed.args, ['--settings', JSON.stringify({ skillOverrides: { 'mpx-execute': 'off' }, allowedMcpServers }), '-p', 'hi']);
+    assert.equal(listed.label, 'MPX · WORK · Claude · skills off: mpx-execute · claude.ai connectors: 2 allowed');
+    assert.deepEqual((await launch(['-p', 'hi'], true)).args, listed.args, '--connectors keeps the project list');
+
+    const callerList = [{ serverUrl: 'https://mcp.figma.com/*' }];
+    const merged = await launch(['--settings', JSON.stringify({ allowedMcpServers: callerList, skillOverrides: { other: 'off' } }), '-p', 'hi']);
+    assert.deepEqual(merged.args, ['--settings', JSON.stringify({ allowedMcpServers: callerList, skillOverrides: { 'mpx-execute': 'off', other: 'off' } }), '-p', 'hi'], 'a caller allowlist replaces the project one');
   } finally { await f.cleanup(); }
 });
 

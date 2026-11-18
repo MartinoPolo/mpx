@@ -138,10 +138,20 @@ test('resume applies the project skill switch and connectors exactly as launch d
       { type: 'user', uuid: 'u1', parentUuid: null, sessionId: id, cwd: f.cwd, timestamp: iso(1), message: { role: 'user', content: 'resume' } },
       { type: 'assistant', uuid: 'a2', parentUuid: 'u1', sessionId: id, cwd: f.cwd, timestamp: iso(2), message: { role: 'assistant', model: 'claude-exact', content: [] } },
     ].map(value => JSON.stringify(value)).join('\n'));
-    const claude = await prepareResumeLaunch({ root: f.root, session: (await readClaudeSession(file, 'work', f.accounts.work.claude)).session, config, overrides: { thinking: 'low' }, env: {} });
-    assert.equal(claude.spec.env.ENABLE_CLAUDEAI_MCP_SERVERS, 'true');
-    assert.deepEqual(claude.spec.args, ['--settings', '{"skillOverrides":{"mpx-execute":"off"}}', '--resume', id, '--model', 'claude-exact', '--effort', 'low']);
-    assert.equal(claude.spec.label, 'MPX · WORK · Claude · skills off: mpx-execute · claude.ai connectors on');
+    const resumeClaude = async (resumeConfig: UserConfig) => (await prepareResumeLaunch({ root: f.root, session: (await readClaudeSession(file, 'work', f.accounts.work.claude)).session, config: resumeConfig, overrides: { thinking: 'low' }, env: {} })).spec;
+    const resumeArgs = ['--resume', id, '--model', 'claude-exact', '--effort', 'low'];
+    const claude = await resumeClaude(config);
+    assert.equal(claude.env.ENABLE_CLAUDEAI_MCP_SERVERS, 'true');
+    assert.deepEqual(claude.args, ['--settings', '{"skillOverrides":{"mpx-execute":"off"}}', ...resumeArgs]);
+    assert.equal(claude.label, 'MPX · WORK · Claude · skills off: mpx-execute · claude.ai connectors on');
+
+    await mkdir(path.join(f.root, 'content'));
+    await writeFile(path.join(f.root, 'content', 'runtime-profiles.json'), await readFile(new URL('../content/runtime-profiles.json', import.meta.url)));
+    await writeFile(path.join(f.cwd, '.mcp.json'), JSON.stringify({ mcpServers: { 'project-server': {} } }));
+    const listed = await resumeClaude({ ...f.config, projectOverrides: [{ path: f.cwd, config: { projectId: 'quiet', connectors: ['https://mcp.slack.com/*'] } }] });
+    assert.equal(listed.env.ENABLE_CLAUDEAI_MCP_SERVERS, 'true');
+    assert.deepEqual(listed.args, ['--settings', JSON.stringify({ allowedMcpServers: [{ serverUrl: 'https://mcp.slack.com/*' }, { serverName: 'project-server' }, { serverName: 'chrome-devtools' }] }), ...resumeArgs]);
+    assert.equal(listed.label, 'MPX · WORK · Claude · claude.ai connectors: 1 allowed');
 
     const pi = await prepareResumeLaunch({
       root: f.root, session: (await readPiSession(f.piFile, 'personal', f.accounts.personal.pi)).session, config,
