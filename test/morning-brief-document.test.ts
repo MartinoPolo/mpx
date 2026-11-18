@@ -319,6 +319,15 @@ test('the latest outcome drops seen and kept items and brings back snoozed and u
   });
 });
 
+test('an outcome without chapter feedback prints no feedback line', async () => {
+  await withFixture(async (fixture) => {
+    await writeJson(join(fixture.data, 'brief', '2026-11-17', 'outcome.json'), { snoozed: [], undecided: [], kept: [], seen: [], feedback: {} });
+    const { stdout } = await runDocument(fixture);
+    assert.match(stdout, /Outcome of 2026-11-17:/);
+    assert.doesNotMatch(stdout, /Chapter feedback/);
+  });
+});
+
 const appSkip = !existsSync(join(APP_DIRECTORY, 'package.json')) && 'the alfred-control-center repository is not checked out';
 
 test('a judged document passes the app validator', { skip: appSkip }, async () => {

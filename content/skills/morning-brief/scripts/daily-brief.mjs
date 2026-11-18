@@ -482,7 +482,7 @@ async function applyOutcome(document, { outcomeDay, outcome }) {
     }
   }
   return `Outcome of ${outcomeDay}: ${droppedCount} seen or kept items dropped, ${returnedCount} snoozed or undecided items returned.`
-    + (outcome.feedback ? `\nChapter feedback to respect: ${JSON.stringify(outcome.feedback)}` : '');
+    + (Object.keys(outcome.feedback ?? {}).length > 0 ? `\nChapter feedback to respect: ${JSON.stringify(outcome.feedback)}` : '');
 }
 
 function applyJudgement(document) {
