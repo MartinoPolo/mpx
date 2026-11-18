@@ -14,7 +14,9 @@ Window: %SINCE% to %UNTIL%. Today is %TODAY%; use the calendar's own time zone f
      step from me.
    - `fyi`: worth one line (an order shipped, a reply in a conversation I started).
    - `notification`: automated mail that needs nothing; count it by sender and list it in `quiet`.
-   Read a thread only when its subject and snippet do not decide the class.
+   Read a thread only when its subject and snippet do not decide the class, and read every `act`
+   thread: from its newest message not sent by me take `messageId`, the sender's `fromAddress`,
+   and `otherRecipients`, the message's other To and Cc recipients except me as `Name <address>`.
 
 Answer with one JSON object and nothing else:
 
@@ -25,7 +27,8 @@ Answer with one JSON object and nothing else:
   "events": [{ "id": "", "calendarId": "", "day": "YYYY-MM-DD", "start": "HH:MM", "end": "HH:MM",
     "allDay": false, "title": "", "place": "", "url": "", "attendees": 0, "busyOnly": false,
     "notes": ["prep hints: no agenda, overlaps X, travel time"] }],
-  "mail": [{ "id": "thread id", "class": "act|fyi", "from": "", "subject": "", "snippet": "Gmail's snippet",
+  "mail": [{ "id": "thread id", "messageId": "", "class": "act|fyi", "from": "sender's name",
+    "fromAddress": "sender's address", "otherRecipients": ["Name <address>"], "subject": "", "snippet": "Gmail's snippet",
     "summary": "one line, what I must do", "received": "ISO with offset",
     "url": "https://mail.google.com/mail/u/<my address>/#all/<threadId>", "due": "" }],
   "notifications": [{ "sender": "", "count": 0 }],

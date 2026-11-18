@@ -43,7 +43,7 @@ function personalSource() {
         { id: 'later', calendarId: 'me@example.com', day: '2026-11-25', start: '10:00', end: '11:00', title: 'Outside the calendar days' },
       ],
       mail: [
-        { id: 'thread-vat', class: 'act', from: 'Accountant', subject: 'VAT draft', snippet: 'Please approve by Friday', received: '2026-11-17T20:12:00+01:00', url: 'https://mail.google.com/mail/u/me@example.com/#all/thread-vat' },
+        { id: 'thread-vat', messageId: 'message-vat-2', class: 'act', from: 'Accountant', fromAddress: 'accountant@example.com', otherRecipients: ['Partner Name <partner@example.com>'], subject: 'VAT draft', snippet: 'Please approve by Friday', received: '2026-11-17T20:12:00+01:00', url: 'https://mail.google.com/mail/u/me@example.com/#all/thread-vat' },
         { id: 'thread-parcel', class: 'fyi', from: 'Shop', subject: 'Your parcel shipped', received: '2026-11-17T10:00:00+01:00' },
       ],
       quiet: [{ from: 'Strava', subject: 'Weekly summary', received: '2026-11-17T19:00:00+01:00' }],
@@ -204,11 +204,11 @@ test('the document maps gathered data to the contract before any judgement', asy
     const personal = mailbox(document, 'personal');
     assert.equal(personal.account, 'me@example.com');
     assert.equal(personal.transport, 'connector');
-    assert.deepEqual(personal.items.map((item: { id: string; threadId: string; snippet: string; options: unknown }) => [item.id, item.threadId, item.snippet, item.options]),
-      [[await idOf('mail', 'thread-vat'), 'thread-vat', 'Please approve by Friday', [{ kind: 'snooze' }]]]);
+    assert.deepEqual(personal.items.map((item: { id: string; threadId: string; messageId: string | null; snippet: string; options: unknown }) => [item.id, item.threadId, item.messageId, item.snippet, item.options]),
+      [[await idOf('mail', 'thread-vat'), 'thread-vat', 'message-vat-2', 'Please approve by Friday', [{ kind: 'snooze' }]]]);
     assert.deepEqual(personal.quiet.map((message: { from: string }) => message.from), ['Shop', 'Strava']);
     const [alert] = mailbox(document, 'work').items;
-    assert.deepEqual([alert.id, alert.from, alert.subject, alert.receivedAt, alert.options], [await idOf('mail', 'alert-1'), 'Sentry', 'TypeError in checkout', '2026-11-18T03:11:08+01:00', [{ kind: 'seen' }]]);
+    assert.deepEqual([alert.id, alert.from, alert.subject, alert.receivedAt, alert.messageId, alert.options], [await idOf('mail', 'alert-1'), 'Sentry', 'TypeError in checkout', '2026-11-18T03:11:08+01:00', null, [{ kind: 'seen' }]]);
 
     const slack = document.chapters.slack;
     assert.equal(slack.items.length, 1);
@@ -258,7 +258,8 @@ test('the judgement adds options, suggestions, bookmarks, mailboxes without a co
 
     assert.deepEqual(document.chapters.calendar.calendars.at(-1), { id: 'wife', name: 'Kája' });
     assert.deepEqual(document.chapters.calendar.days[2].allDay, [{ title: 'Name day', calendar: 'wife', link: null }]);
-    assert.deepEqual(mailbox(document, 'personal').items[0].options, sessionJudgement.options[vatId]);
+    const [vatReply, vatSnooze] = sessionJudgement.options[vatId] ?? [];
+    assert.deepEqual(mailbox(document, 'personal').items[0].options, [{ ...vatReply, to: 'Accountant <accountant@example.com>' }, vatSnooze]);
     assert.deepEqual(mailbox(document, 'centrum'), {
       id: 'centrum', label: 'Centrum', provider: 'centrum', account: 'me@centrum.example', transport: 'imap', canSend: false,
       status: 'not-read', reason: 'The headless morning run cannot unlock IMAP passwords; Unlock reads this mailbox at the desk.', items: [], quiet: [],
@@ -274,6 +275,27 @@ test('the judgement adds options, suggestions, bookmarks, mailboxes without a co
 
     const itemIds = (run: BriefDocument) => ['slack', 'code', 'agents'].flatMap((name) => run.chapters[name].items.map((item: { id: string }) => item.id));
     assert.deepEqual(itemIds(document), itemIds(before.document), 'a rebuilt document keeps its ids');
+  });
+});
+
+test('a judged mail reply goes to the sender and the named recipients, each with their address', async () => {
+  await withFixture(async (fixture) => {
+    const vatId = await idOf('mail', 'thread-vat');
+    const reply = { kind: 'reply', gist: 'Approve it', subject: 'Re: VAT draft', body: 'Looks right.', attachments: [] };
+    await writeJson(join(fixture.dayDirectory, 'daily-brief.judgement.json'), {
+      options: { [vatId]: [
+        { ...reply, to: 'accountant, Partner Name' },
+        reply,
+        { ...reply, to: 'Someone Unknown, Office <office@example.com>' },
+      ] },
+    });
+    const { stdout, document } = await runDocument(fixture);
+    assert.deepEqual(mailbox(document, 'personal').items[0].options.map((option: { to: string }) => option.to), [
+      'Accountant <accountant@example.com>, Partner Name <partner@example.com>',
+      'Accountant <accountant@example.com>',
+      'Someone Unknown, Office <office@example.com>',
+    ]);
+    assert.match(stdout, /A reply to "Accountant: VAT draft" names "Someone Unknown" without an address/);
   });
 });
 
