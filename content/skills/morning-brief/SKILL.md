@@ -287,6 +287,20 @@ With `--apply <date>`, in the day folder, one apply session at a time:
    processed note in `processed.json` as it finishes, so a second Process now repeats nothing.
 5. Report applied, skipped and failed points, then feedback outcomes with what changed where.
 
+## Connector run
+
+The Alfred control center's Process sends mail, saves drafts, creates events and posts to Slack
+through `node "<skill-dir>/scripts/apply.mjs" <run directory>`, never through this skill's session.
+`run.json` there holds `day`, an optional `model` (default the gatherers' cheap model) and
+`operations`: `id`, `account` (`personal` or `work`), `kind` (`gmail-send`, `gmail-draft`,
+`calendar-event`, `slack-send`, `slack-draft`) and `arguments`, exactly the tool's input. One
+headless session per account runs from `$MPX_AI_RETAINED/morning-brief/<day>`, allowed only the
+tools its operations need. [apply-hook.mjs](scripts/apply-hook.mjs) denies every call whose input
+differs from an approved one in a single character, or repeats one, and records each answer in
+`answers/<id>.json` as it arrives. `result.json` gives each operation `done` with its link, `failed`
+with a reason, or `unknown` when a call started and its answer never came. Exit code 2 unless every
+operation is done.
+
 ## Deliver
 
 Report the `file:///` link to `index.html` first, then sources that were unavailable and why, the
