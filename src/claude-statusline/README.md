@@ -13,6 +13,8 @@ Opus 5 (1M) · ◆◆◆◇◇ · 84k ████░░ · 󰘕 3
 
 - Row 1: account badge, session name, short session id linked to the transcript, and a folder label
   linked with a native `file:///` URL: `project/worktree` in a linked worktree, else the folder name.
+  While questions or to-dos wait for the user, `N waiting` follows, linked to the session's
+  `questions.md` (written by the Stop hook, `src/hitl-ledger.ts`).
 - Row 2: model, effort gauge, context tokens with a bar measured against the auto-compaction limit
   (color escalates as it fills), and the compaction count once the session has compacted.
 - Row 3: 5-hour and weekly quota with two-unit reset countdowns (`1d 23h`), linked to the usage page.

@@ -27,6 +27,7 @@ import {
 } from "./lib/statusline-ansi.mts";
 import { loadPalette } from "./lib/terminal-theme.mts";
 import { autoCompactLimit, readCompactionHistory } from "./lib/compaction.mts";
+import { countWaitingItems, questionsFilePath } from "./lib/questions-file.mts";
 
 // --- Theme -------------------------------------------------------------------
 
@@ -39,7 +40,7 @@ const ACCENT = PALETTE.accent;
 const BAR_EMPTY = PALETTE.barEmpty;
 /** Brightest foreground, spent only on the folder that answers "where am I". */
 const WHITE = PALETTE.white;
-/** A state the user has to act on: quota data too old to trust. */
+/** A state the user has to act on: quota data too old to trust, items waiting for an answer. */
 const WARN = PALETTE.warn;
 const CONTEXT_YELLOW = PALETTE.contextYellow;
 const CONTEXT_ORANGE = PALETTE.contextOrange;
@@ -603,14 +604,19 @@ export interface SessionLineInput {
     /** `file:` URL of the transcript `.jsonl`; "" leaves the id unlinked. */
     transcriptUrl: string;
     locationLabel: string;
+    /** Open questions and to-dos of the session; 0 omits the segment. */
+    waitingCount: number;
+    /** `file:` URL of the session's questions file. */
+    questionsUrl: string;
 }
 
-/** Account · title · id · where: identity of the session in one row. */
+/** Account · title · id · where · waiting: identity of the session in one row. */
 export function buildSessionLine(input: SessionLineInput): string {
     const body = joinSegments([
         input.sessionName === "" ? "" : `${SESSION}${input.sessionName}${RESET}`,
         input.shortId === "" ? "" : `${GRAY}${maybeLink(input.transcriptUrl, `#${input.shortId}`)}${RESET}`,
-        input.locationLabel
+        input.locationLabel,
+        input.waitingCount === 0 ? "" : `${WARN}${maybeLink(input.questionsUrl, `${input.waitingCount} waiting`)}${RESET}`
     ]);
     if (body === "" || input.accountMarker === "") {
         return body;
@@ -785,13 +791,17 @@ function render(): string {
                   path.join(CACHE_DIR, `claude-compact-${cacheKey(fields.transcriptPath)}.tsv`)
               ).length;
 
+    const waitingCount = fields.transcriptPath === "" ? 0 : countWaitingItems(fields.transcriptPath);
+
     return [
         buildSessionLine({
             accountMarker,
             sessionName: fields.sessionName,
             shortId: fields.sessionId.slice(0, 8),
             transcriptUrl: fields.transcriptPath === "" ? "" : toFileUrl(fields.transcriptPath),
-            locationLabel: buildLocationLabel(location)
+            locationLabel: buildLocationLabel(location),
+            waitingCount,
+            questionsUrl: waitingCount === 0 ? "" : toFileUrl(questionsFilePath(fields.transcriptPath))
         }),
         buildModelLine({
             model: fields.model,

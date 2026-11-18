@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import { test } from 'node:test';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
-import { buildModelLine, buildQuotaLine, resolveAccountLabel, resolveProjectLocation, buildLocationLabel } from '../src/claude-statusline/scripts/status-line.mts';
+import { buildModelLine, buildQuotaLine, buildSessionLine, resolveAccountLabel, resolveProjectLocation, buildLocationLabel } from '../src/claude-statusline/scripts/status-line.mts';
 import { readCompactionHistory } from '../src/claude-statusline/scripts/lib/compaction.mts';
 
 const renderer = resolve('src/claude-statusline/scripts/status-line.mts');
@@ -53,6 +53,19 @@ test('main entrypoint renders the three compact rows without real account or net
     assert.match(rows[2]!, /^5h [█░]{4} 20% 2h 1m · 7d [█░]{4} 30% 1d 23h$/);
     assert.doesNotMatch(output, /\$|Kč|%\)|Σ|⟳/);
     assert.deepEqual((await readdir(fixture.cache)).filter(name => !name.startsWith('claude-usage-') && !name.startsWith('claude-compact-')), []);
+  } finally { await rm(fixture.root, { recursive: true, force: true }); }
+});
+
+test('session row links the count of items waiting for the user to the questions file', async () => {
+  const fixture = await isolatedFixture();
+  try {
+    const sessionFolder = fixture.transcript.replace(/\.jsonl$/, '');
+    await mkdir(sessionFolder);
+    await writeFile(join(sessionFolder, 'questions.md'), '# Waiting for you\n\n## ❓ Questions\n\n2. 🛑 **Name:** which one?\n\n   1. a nested step.\n\n## 🛠️ To do\n\n3. **Sign in:** open the page.\n');
+    const output = invoke(renderer, { session_name: 'Carryover', session_id: '1234567890', cwd: fixture.repository, transcript_path: fixture.transcript }, fixture.env);
+    assert.equal(output.split('\n')[0], 'P · Carryover · #12345678 · fixture-repo · 2 waiting');
+    const linked = buildSessionLine({ accountMarker: 'P', sessionName: '', shortId: '', transcriptUrl: '', locationLabel: 'mpx', waitingCount: 1, questionsUrl: 'file:///C:/session/questions.md' });
+    assert.match(linked, /\x1b\]8;;file:\/\/\/C:\/session\/questions\.md\x071 waiting/);
   } finally { await rm(fixture.root, { recursive: true, force: true }); }
 });
 
