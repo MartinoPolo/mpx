@@ -162,7 +162,7 @@ function gatherNews(fixture: Fixture): Promise<ScriptRun> {
 }
 
 function digestNews(fixture: Fixture, scenario: string): Promise<ScriptRun> {
-  return runScript('news-digest.mjs', [fixture.dayDirectory, '--model', 'haiku'], {
+  return runScript('news-digest.mjs', [fixture.dayDirectory], {
     MPX_ACTIVE_CONTENT_ROOT: fixture.contentRoot, FAKE_MODEL_SCENARIO: scenario, FAKE_MODEL_LOG: fixture.modelLog,
   });
 }

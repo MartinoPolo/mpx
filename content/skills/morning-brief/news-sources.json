@@ -67,7 +67,7 @@
       "kind": "reddit",
       "format": "reddit",
       "subreddit": "ClaudeAI",
-      "waitingFor": "Reddit refuses automated requests; official API access is requested."
+      "waitingFor": "Reddit refuses automated requests; reading it needs official API access."
     },
     {
       "name": "r/codex",
@@ -75,7 +75,7 @@
       "kind": "reddit",
       "format": "reddit",
       "subreddit": "codex",
-      "waitingFor": "Reddit refuses automated requests; official API access is requested."
+      "waitingFor": "Reddit refuses automated requests; reading it needs official API access."
     }
   ]
 }

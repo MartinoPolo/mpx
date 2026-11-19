@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Digests <day>/sources/news.json in one headless cheap-model session without tools, following the news taste in
+// Digests <day>/sources/news.json in one headless session of the cheapest tier without tools, following the news taste in
 // <day>/../taste.md: the lead, the new model releases, a summary of each and at most one narration sentence, every
 // pick one of the candidates by its link. A refused answer is asked for once more. Writes
 // <day>/sources/news-digest.json, `ok` with the picks or `failed` with the reason, and the session in news-digest.log.
@@ -9,8 +9,10 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { NEWS_DIGEST_FILE, NEWS_FILE } from './document-narration.mjs';
-import { ACCOUNT_LAUNCHERS, HEADLESS_MODEL, contentRoot, extractJson, readEnvelope, runHeadless, sessionLog } from './headless.mjs';
+import { ACCOUNT_LAUNCHERS, contentRoot, extractJson, readEnvelope, runHeadless, sessionLog } from './headless.mjs';
 
+// Picking from a short list needs little reasoning, so the cheapest tier does it.
+const DIGEST_MODEL = 'haiku';
 const TIMEOUT_MILLISECONDS = 3 * 60 * 1000;
 const MAXIMUM_RELEASES = 5;
 const MAXIMUM_SUMMARY_CHARACTERS = 280;
@@ -26,7 +28,7 @@ const SYSTEM_PROMPT = `You pick the AI news for one reader's morning brief from 
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,
-  options: { model: { type: 'string', default: HEADLESS_MODEL }, account: { type: 'string', default: 'personal' } },
+  options: { model: { type: 'string', default: DIGEST_MODEL }, account: { type: 'string', default: 'personal' } },
 });
 const [dayDirectory] = positionals;
 if (!dayDirectory || !isAbsolute(dayDirectory) || !(values.account in ACCOUNT_LAUNCHERS)) {
