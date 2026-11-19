@@ -1,0 +1,43 @@
+{
+  "projects": [
+    { "id": "ui-components", "name": "ui-components" },
+    { "id": "videolab", "name": "videoLab" }
+  ],
+  "chapters": [
+    {
+      "type": "work",
+      "data": {
+        "projects": [
+          {
+            "id": "ui-components", "name": "ui-components", "app": "gitlab",
+            "cards": [
+              { "ref": "!318", "title": "Payment forms opt out of Enter submit", "state": "ready", "url": "https://gitlab.example.com/ui/-/merge_requests/318", "pipeline": { "status": "success" } },
+              { "ref": "!321", "title": "Date picker keyboard support", "state": "review", "author": "Alex", "url": "https://gitlab.example.com/ui/-/merge_requests/321", "pipeline": { "status": "success" } },
+              { "ref": "!320", "title": "Toast stacking", "state": "failing", "url": "https://gitlab.example.com/ui/-/merge_requests/320", "pipeline": { "status": "failed", "job": "lint" } },
+              { "ref": "!316", "title": "Select clears on reset", "state": "merged", "url": "https://gitlab.example.com/ui/-/merge_requests/316" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "overnight",
+      "data": {
+        "runs": [
+          { "project": "videolab", "outcome": "fail", "title": "4K render", "session": "C:/Users/me/.claude/projects/C---videoLab/render.jsonl", "url": "file:///C:/videoLab/render.log", "startedAt": "2026-11-17T23:10:00+01:00", "endedAt": "2026-11-18T02:14:00+01:00", "logTail": ["scene 7: render timed out after 3 h"] }
+        ]
+      }
+    },
+    {
+      "type": "triage",
+      "data": {
+        "groups": [
+          { "note": "Daily/2026-11-18", "items": [
+            { "line": "buy present sam 🔼" },
+            { "line": "Book the car service", "resolved": true, "resolution": "Booked for 22 Nov in the personal calendar" }
+          ] }
+        ]
+      }
+    }
+  ]
+}

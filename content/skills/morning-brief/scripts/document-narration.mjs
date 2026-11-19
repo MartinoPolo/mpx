@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { briefItemId } from './brief-id.mjs';
 
 export const JUDGEMENT_FILE = 'daily-brief.judgement.json';
-// narrate.mjs --document keeps here each sentence's clip by its exact text, so a rerun of daily-brief.mjs or a rewritten
+// narrate.mjs keeps here each sentence's clip by its exact text, so a rerun of daily-brief.mjs or a rewritten
 // judgement keeps the clips of unchanged sentences.
 export const DOCUMENT_CLIPS_FILE = 'daily-brief.clips.json';
 export const NEWS_FILE = join('sources', 'news.json');

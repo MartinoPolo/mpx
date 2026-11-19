@@ -1,20 +1,22 @@
 #!/usr/bin/env node
 // Writes <day>/daily-brief.json, the document the Alfred control center serves, and checks it with the app's
 // validator. Calendar, mail and Slack come from the gatherers' sources, Code, Agents and the capture lines from the
-// page's brief.json, bookmarks from the bookmarks bridge, AI news from sources/news.json with the picks and summaries of
-// sources/news-digest.json; <day>/daily-brief.judgement.json adds the session's
-// judgement and <day>/daily-brief.clips.json the narration's clips. The latest outcome the app wrote leaves out
-// dismissed items and kept lines and brings back snoozed and undecided ones. Prints the items with their ids, every
-// item and bookmark still without judgement with its default, the move destinations, the open health episode notes by
-// path (never their contents), and a summary line counting what is unjudged and the narration sentences without a clip
-// and naming the chapters without narration, and keeps the same report in <day>/daily-brief.log. Exit code 2 when the document is invalid or could
-// not be validated.
-// Usage: daily-brief.mjs <day-directory>
+// session's brief.json, bookmarks from the bookmarks bridge, AI news from sources/news.json with the picks and
+// summaries of sources/news-digest.json; <day>/daily-brief.judgement.json adds the session's judgement and
+// <day>/daily-brief.clips.json the narration's clips. The latest outcome the app wrote leaves out dismissed items and
+// kept lines and brings back snoozed and undecided ones. Prints the items with their ids, every item and bookmark still
+// without judgement with its default, the move destinations, the open health episode notes by path (never their
+// contents), and a summary line counting what is unjudged and the narration sentences without a clip and naming the
+// chapters without narration, and keeps the same report in <day>/daily-brief.log. Unless --no-state, records the brief
+// in <home>/state.json as the last one, so start.mjs begins the next window where this one ended. Exit code 2 when the
+// document is invalid or could not be validated.
+// Usage: daily-brief.mjs <day-directory> [--no-state]
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, isAbsolute, join } from 'node:path';
+import { parseArgs } from 'node:util';
 import { briefItemId } from './brief-id.mjs';
 import { DOCUMENT_CLIPS_FILE, documentSentences, JUDGEMENT_FILE, NARRATION_SENTENCE_LIMIT, NEWS_DIGEST_FILE, NEWS_FILE } from './document-narration.mjs';
 import { localIso } from './local-time.mjs';
@@ -45,7 +47,7 @@ const REMOVING_ACTIONS = ['move', 'delete'];
 const CHECKBOX_ACTIONS = ['done', 'progress'];
 const SEEN = { kind: 'seen' };
 const SNOOZE = { kind: 'snooze' };
-// A state the page shows that needs a decision, with the options suggested until the session judges the item. The app
+// A card state that needs a decision, with the options suggested until the session judges the item. The app
 // always offers Snooze and Dismiss, so a list with a real suggestion does not repeat them.
 const CODE_STATE_OPTIONS = {
   ready: [{ kind: 'action', label: 'Merge', icon: 'git-merge', execution: { kind: 'merge' } }],
@@ -57,9 +59,10 @@ const ACCEPT_DEFAULT = 'default';
 const OPTION_LABELS = { snooze: 'Snooze', seen: 'Dismiss', reply: 'Reply', event: 'Event', task: 'Task' };
 const KEEP_LINE = { action: 'keep', destination: null, wording: null, priority: null, because: null, link: null };
 
-const [dayDirectory] = process.argv.slice(2);
+const { positionals, values } = parseArgs({ allowPositionals: true, options: { 'no-state': { type: 'boolean' } } });
+const [dayDirectory] = positionals;
 if (!dayDirectory || !isAbsolute(dayDirectory)) {
-  console.error('Usage: daily-brief.mjs <absolute day directory>');
+  console.error('Usage: daily-brief.mjs <absolute day directory> [--no-state]');
   process.exit(1);
 }
 const day = basename(dayDirectory);
@@ -111,7 +114,7 @@ function briefChapter(type) {
 }
 
 function briefChapterSource(name, type) {
-  if (!brief) return { name, status: 'not-read', reason: 'The page data brief.json was not written.' };
+  if (!brief) return { name, status: 'not-read', reason: 'The session wrote no brief.json.' };
   const chapter = briefChapter(type);
   if (!chapter) return { name, status: 'not-read', reason: `brief.json has no ${type} chapter.` };
   if (chapter.status === 'unavailable') return { name, status: 'not-read', reason: text(chapter.detail) || 'The area was unavailable.' };
@@ -480,38 +483,19 @@ function codeChapter() {
   return { narration: narrationOf('code'), items, merged };
 }
 
-// A run the page lists by its clock time started on the brief's day, or the day before when that time is still ahead.
-function startOfRun(run) {
-  if (isInstant(run.startedAt)) return run.startedAt;
-  const clock = text(run.when).match(/^(\d{1,2}):(\d{2})$/);
-  if (!clock) return undefined;
-  const [year, month, dayOfMonth] = day.split('-').map(Number);
-  const started = new Date(year, month - 1, dayOfMonth, Number(clock[1]), Number(clock[2]));
-  if (started > new Date(start.until)) started.setDate(started.getDate() - 1);
-  return localIso(started);
-}
-
-function endOfRun(run, startedAt) {
-  if (isInstant(run.endedAt)) return run.endedAt;
-  const hours = text(run.duration).match(/(\d+)\s*h/)?.[1];
-  const minutes = text(run.duration).match(/(\d+)\s*min/)?.[1];
-  if (!hours && !minutes) return null;
-  return localIso(new Date(Date.parse(startedAt) + (Number(hours ?? 0) * 60 + Number(minutes ?? 0)) * 60_000));
-}
-
 function agentsChapter() {
   const projectNames = new Map((brief?.projects ?? []).map((project) => [project.id, project.name]));
   const items = [];
   for (const run of briefChapter('overnight')?.data?.runs ?? []) {
     const projectName = text(projectNames.get(run.project)) || text(run.project) || 'unknown';
-    const title = text(run.title) || text(run.result) || 'Run';
+    const title = text(run.title) || 'Run';
     const outcome = run.outcome === 'partial' && isInstant(run.endedAt) ? ENDED_PARTIAL_OUTCOME : AGENT_OUTCOMES[run.outcome];
-    const startedAt = startOfRun(run);
+    const startedAt = isInstant(run.startedAt) ? run.startedAt : undefined;
     if (!outcome || !startedAt) {
-      problems.push(`Overnight run "${title}" has no known outcome or start time; left out.`);
+      problems.push(`Overnight run "${title}" has no known outcome or no startedAt instant; left out.`);
       continue;
     }
-    const logTail = Array.isArray(run.logTail) ? run.logTail.filter((line) => typeof line === 'string') : texts([run.detail]);
+    const logTail = Array.isArray(run.logTail) ? run.logTail.filter((line) => typeof line === 'string') : [];
     const sourceReference = text(run.session) || text(run.url) || `${projectName} ${new Date(startedAt).toISOString()} ${title}`;
     items.push({
       id: briefItemId('agent', sourceReference),
@@ -522,7 +506,7 @@ function agentsChapter() {
       title,
       outcome,
       startedAt,
-      endedAt: outcome === 'running' ? null : endOfRun(run, startedAt),
+      endedAt: outcome !== 'running' && isInstant(run.endedAt) ? run.endedAt : null,
       logTail,
     });
   }
@@ -536,7 +520,7 @@ async function captureChapter() {
     if (!note) continue;
     const notePath = note.endsWith('.md') ? note : `${note}.md`;
     for (const item of group.items ?? []) {
-      const lineText = text(item.line) || text(item.text);
+      const lineText = text(item.line);
       if (!lineText) continue;
       if (!(await isNoteLineOpen(notePath, lineText))) {
         problems.push((await noteLines(notePath)).started.has(lineText)
@@ -821,6 +805,15 @@ const documentPath = join(dayDirectory, 'daily-brief.json');
 // The app may read the document at any moment; it never sees half of one.
 await writeFile(`${documentPath}.partial`, `${JSON.stringify(document, null, 2)}\n`);
 await rename(`${documentPath}.partial`, documentPath);
+if (!values['no-state']) await recordLastBrief();
+
+// The next window starts where this brief's ended; a rebuild of an earlier day never moves it back.
+async function recordLastBrief() {
+  const statePath = join(dayDirectory, '..', 'state.json');
+  const recorded = Date.parse((await readJson(statePath))?.lastSuccess);
+  if (recorded > Date.parse(start.until)) return;
+  await writeFile(statePath, `${JSON.stringify({ lastSuccess: start.until, lastBrief: dayDirectory }, null, 2)}\n`);
+}
 
 function itemLabel(item) {
   if (!item.lineText) return item.short ?? item.bookmarkId;

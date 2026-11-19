@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// Voices every beat of <day>/brief.json with VoiceStudio into <day>/audio/ and records each clip's path and length on
-// its beat. With --document it voices instead the sentences the daily brief document keeps of the judgement's
-// narration and the news digest's sentence, and records each clip's file name and length by sentence text in <day>/daily-brief.clips.json, which
-// daily-brief.mjs writes on the sentences. Clips are keyed by voice, language and text, so a rerun only renders changed
-// sentences; the document's run keeps its result line in <day>/narrate-document.log. When the backend is not running, it is started from the VoiceStudio checkout for this run and stopped
-// afterwards, so nothing stays resident between briefs. Exit code 2 when the backend cannot start or a clip fails.
-// Usage: narrate.mjs <day-directory> [--document] [--voice <profile id or name>] [--language <ISO 639-1>]
+// Voices the sentences the daily brief document keeps of the judgement's narration and the news digest's sentence
+// with VoiceStudio into <day>/audio/, and records each clip's file name and length by sentence text in
+// <day>/daily-brief.clips.json, which daily-brief.mjs writes on the sentences. Clips are keyed by voice, language and
+// text, so a rerun only renders changed sentences. Keeps its result line in <day>/narrate.log. When the backend is not
+// running, it is started from the VoiceStudio checkout for this run and stopped afterwards, so nothing stays resident
+// between briefs. Exit code 2 when the backend cannot start or a clip fails.
+// Usage: narrate.mjs <day-directory> [--voice <profile id or name>] [--language <ISO 639-1>]
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { openSync } from 'node:fs';
@@ -24,15 +24,15 @@ const STARTUP_POLL_MILLISECONDS = 2000;
 // The first request loads the model onto the GPU.
 const REQUEST_TIMEOUT_MILLISECONDS = 300000;
 const RETRY_ATTEMPTS = 5;
-const DOCUMENT_NARRATION_LOG = 'narrate-document.log';
+const NARRATION_LOG = 'narrate.log';
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,
-  options: { document: { type: 'boolean' }, voice: { type: 'string' }, language: { type: 'string' } },
+  options: { voice: { type: 'string' }, language: { type: 'string' } },
 });
 const [dayDirectory] = positionals;
 if (!dayDirectory || !isAbsolute(dayDirectory)) {
-  console.error('Usage: narrate.mjs <absolute day directory> [--document] [--voice <profile id or name>] [--language <code>]');
+  console.error('Usage: narrate.mjs <absolute day directory> [--voice <profile id or name>] [--language <code>]');
   process.exit(1);
 }
 const backend = (process.env.VOICESTUDIO_URL ?? DEFAULT_BACKEND).replace(/\/$/, '');
@@ -40,21 +40,14 @@ const voiceStudioDirectory = process.env.VOICESTUDIO_DIR ?? (process.env.MPX_CLO
 const voice = values.voice ?? process.env.MORNING_BRIEF_VOICE ?? DEFAULT_VOICE;
 const language = values.language ?? process.env.MORNING_BRIEF_LANGUAGE ?? DEFAULT_LANGUAGE;
 const readJson = async (path) => JSON.parse((await readFile(path, 'utf8')).replace(/^﻿/, ''));
-const briefPath = join(dayDirectory, 'brief.json');
-const brief = values.document ? undefined : await readJson(briefPath);
-const judgement = values.document ? await readJson(join(dayDirectory, JUDGEMENT_FILE)) : undefined;
-const newsDigest = values.document ? await readJson(join(dayDirectory, NEWS_DIGEST_FILE)).catch(() => undefined) : undefined;
+const judgement = await readJson(join(dayDirectory, JUDGEMENT_FILE));
+const newsDigest = await readJson(join(dayDirectory, NEWS_DIGEST_FILE)).catch(() => undefined);
 await mkdir(join(dayDirectory, 'audio'), { recursive: true });
 
 const exists = (path) => access(path).then(() => true, () => false);
-const beats = brief ? brief.chapters.flatMap((chapter) => (chapter.beats ?? []).filter((beat) => beat.say && !beat.hold)) : [];
-const sentenceTexts = judgement
-  ? [...new Set([...Object.keys(judgement.narration ?? {}), 'news'])]
-    .flatMap((chapterName) => documentSentences(judgement, newsDigest, chapterName).slice(0, NARRATION_SENTENCE_LIMIT))
-    .map((sentence) => sentence?.text).filter((text) => typeof text === 'string' && text.trim())
-  : [];
-const texts = [...new Set(brief ? beats.map((beat) => beat.say) : sentenceTexts)];
-const spokenUnit = brief ? 'beats' : 'narration sentences';
+const texts = [...new Set([...Object.keys(judgement.narration ?? {}), 'news']
+  .flatMap((chapterName) => documentSentences(judgement, newsDigest, chapterName).slice(0, NARRATION_SENTENCE_LIMIT))
+  .map((sentence) => sentence?.text).filter((text) => typeof text === 'string' && text.trim()))];
 const clipName = (text) => `${createHash('sha256').update(`voicestudio\n${voice}\n${language}\n${text}`).digest('hex').slice(0, 16)}.wav`;
 const clipPathOf = (text) => join(dayDirectory, 'audio', clipName(text));
 
@@ -163,23 +156,13 @@ try {
   if (startedBackend) stopTree(startedBackend);
 }
 
-if (brief) {
-  for (const beat of beats) {
-    const clip = clips.get(beat.say);
-    if (clip) Object.assign(beat, { audio: `audio/${clip.file}`, audioSeconds: clip.seconds });
-    else { delete beat.audio; delete beat.audioSeconds; }
-  }
-  brief.narration = { provider: 'voicestudio', voice, language };
-  await writeFile(briefPath, `${JSON.stringify(brief, null, 2)}\n`);
-} else {
-  const clipsByText = Object.fromEntries([...clips].map(([text, clip]) => [text, { audio: clip.file, audioSeconds: clip.seconds }]));
-  await writeFile(join(dayDirectory, DOCUMENT_CLIPS_FILE), `${JSON.stringify(clipsByText, null, 2)}\n`);
-}
+const clipsByText = Object.fromEntries([...clips].map(([text, clip]) => [text, { audio: clip.file, audioSeconds: clip.seconds }]));
+await writeFile(join(dayDirectory, DOCUMENT_CLIPS_FILE), `${JSON.stringify(clipsByText, null, 2)}\n`);
 const totalSeconds = [...clips.values()].reduce((total, clip) => total + clip.seconds, 0);
 const rendered = missing.filter((text) => clips.has(text)).length;
 const started = startedBackend ? ', backend started and stopped for this run' : '';
-const resultLine = `voiced ${clips.size} of ${texts.length} ${spokenUnit}, ${rendered} rendered${started}, ${Math.round(totalSeconds)} s, ${texts.reduce((total, text) => total + text.length, 0)} characters`;
+const resultLine = `voiced ${clips.size} of ${texts.length} narration sentences, ${rendered} rendered${started}, ${Math.round(totalSeconds)} s, ${texts.reduce((total, text) => total + text.length, 0)} characters`;
 console.log(resultLine);
 if (failures.length) console.error(failures.join('\n'));
-if (!brief) await writeFile(join(dayDirectory, DOCUMENT_NARRATION_LOG), `${[resultLine, ...failures].join('\n')}\n`);
+await writeFile(join(dayDirectory, NARRATION_LOG), `${[resultLine, ...failures].join('\n')}\n`);
 if (failures.length) process.exit(2);
