@@ -1,0 +1,81 @@
+{
+  "timeoutSeconds": 20,
+  "candidatesPerSource": 6,
+  "excerptCharacters": 300,
+  "aiKeywords": [
+    "AI", "AGI", "LLM", "LLMs", "GPT", "ChatGPT", "OpenAI", "Anthropic", "Claude", "Codex", "Gemini", "DeepMind",
+    "Copilot", "Cursor", "Mistral", "Llama", "Qwen", "DeepSeek", "Grok", "Hugging Face", "MCP", "agent", "agents",
+    "agentic", "model", "models", "prompt", "prompts", "inference", "transformer", "neural", "machine learning",
+    "vibe coding"
+  ],
+  "sources": [
+    {
+      "name": "Claude Code",
+      "app": "claude",
+      "kind": "release",
+      "format": "feed",
+      "url": "https://github.com/anthropics/claude-code/releases.atom"
+    },
+    {
+      "name": "OpenAI",
+      "app": "openai",
+      "kind": "news",
+      "format": "feed",
+      "url": "https://openai.com/news/rss.xml"
+    },
+    {
+      "name": "Codex",
+      "app": "openai",
+      "kind": "release",
+      "format": "feed",
+      "url": "https://github.com/openai/codex/releases.atom",
+      "excludeTitles": "alpha|beta|-rc"
+    },
+    {
+      "name": "Google DeepMind",
+      "app": "googlegemini",
+      "kind": "news",
+      "format": "feed",
+      "url": "https://deepmind.google/blog/rss.xml"
+    },
+    {
+      "name": "Google",
+      "app": "googlegemini",
+      "kind": "news",
+      "format": "feed",
+      "url": "https://blog.google/innovation-and-ai/technology/ai/rss/"
+    },
+    {
+      "name": "Gemini CLI",
+      "app": "googlegemini",
+      "kind": "release",
+      "format": "feed",
+      "url": "https://github.com/google-gemini/gemini-cli/releases.atom",
+      "excludeTitles": "preview|nightly"
+    },
+    {
+      "name": "Hacker News",
+      "app": "ycombinator",
+      "kind": "discussion",
+      "format": "hacker-news",
+      "url": "https://hn.algolia.com/api/v1/search?tags=front_page&hitsPerPage=50",
+      "aiTitlesOnly": true
+    },
+    {
+      "name": "r/ClaudeAI",
+      "app": "reddit",
+      "kind": "reddit",
+      "format": "reddit",
+      "subreddit": "ClaudeAI",
+      "waitingFor": "Reddit refuses automated requests; official API access is requested."
+    },
+    {
+      "name": "r/codex",
+      "app": "reddit",
+      "kind": "reddit",
+      "format": "reddit",
+      "subreddit": "codex",
+      "waitingFor": "Reddit refuses automated requests; official API access is requested."
+    }
+  ]
+}
