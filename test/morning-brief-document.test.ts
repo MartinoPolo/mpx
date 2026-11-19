@@ -93,6 +93,8 @@ function pageBrief() {
           { id: 't1', text: 'Buy a birthday present for Sam', line: 'buy present sam 🔼' },
           { id: 't2', text: 'Book the winter tyres', line: 'Book the winter tyres', resolved: true, resolution: 'Booked for Saturday' },
           { id: 't3', text: 'A line no longer in the note', line: 'Removed line' },
+          { id: 't4', text: 'What a weekly brief needs', line: 'what would a weekly brief need?' },
+          { id: 't5', text: 'A task already started', line: 'Started already' },
         ] },
       ] } },
     ],
@@ -120,7 +122,9 @@ async function withFixture<Result>(use: (fixture: Fixture) => Promise<Result>): 
       ],
     });
     await mkdir(join(fixture.vault, 'Daily'), { recursive: true });
-    await writeFile(join(fixture.vault, 'Daily', '2026-11-18.md'), '# Dump\n\n- [ ] buy present sam 🔼\n- [x] Book the winter tyres\n');
+    await writeFile(join(fixture.vault, 'Daily', '2026-11-18.md'), '# Dump\n\n- [ ] buy present sam 🔼\n- [x] Book the winter tyres\n- what would a weekly brief need?\n- [/] Started already\n- call the plumber\n');
+    await mkdir(join(fixture.vault, '_Projekty', 'alfred'), { recursive: true });
+    await writeFile(join(fixture.vault, '_Projekty', 'alfred', 'alfred.md'), '# alfred\n\n## Ideas\n\n## Tasks\n- [ ] an existing task\n');
     await mkdir(fixture.data);
     return await use(fixture);
   } finally {
@@ -155,15 +159,20 @@ function mailbox(document: BriefDocument, id: string) {
 async function judgement() {
   const vatId = await idOf('mail', 'thread-vat');
   const presentId = await idOf('note', 'Daily/2026-11-18.md', 'buy present sam 🔼');
+  const weeklyId = await idOf('note', 'Daily/2026-11-18.md', 'what would a weekly brief need?');
   return {
     vatId,
     presentId,
+    weeklyId,
     judgement: {
       calendars: { 'partner@example.com': 'wife' },
       calendarNames: { wife: 'Kája' },
       mailboxes: [{ id: 'centrum', label: 'Centrum', provider: 'centrum', account: 'me@centrum.example' }],
       options: { [vatId]: [{ kind: 'reply', gist: 'Approve it', to: 'Accountant', subject: 'Re: VAT draft', body: 'Looks right, please file it.', attachments: [] }, { kind: 'snooze' }] },
-      notes: { [presentId]: { action: 'move', destination: { notePath: '_Projekty/alfred/alfred.md', heading: 'Tasks' }, wording: 'Buy a birthday present for Sam', priority: 4 } },
+      notes: {
+        [presentId]: { action: 'move', destination: { notePath: '_Projekty/alfred/alfred.md', heading: 'Tasks' }, wording: 'Buy a birthday present for Sam', priority: 4 },
+        [weeklyId]: { action: 'research', wording: 'What should a weekly brief show that the daily one does not?', because: 'Reads as brainstorming' },
+      },
       bookmarks: { 1001: { kind: 'shop', suggestion: { action: 'move', destination: 'mine', because: 'Looked at it twice' } } },
       wishlists: [{ id: 'mine', label: 'My wishlist' }],
       reminders: [{ title: 'November invoice', reason: 'Monthly', due: '2026-11-25' }],
@@ -220,7 +229,7 @@ test('the document maps gathered data to the contract before any judgement', asy
     assert.match(stdout, /Slack message from Hermes in #devel has no permalink/);
 
     const code = document.chapters.code;
-    assert.deepEqual(code.items.map((item: { id: string; reference: { label: string } }) => [item.id, item.reference.label]), [[await idOf('code', 'https://github.com/owner/mpx/pull/218'), '#218']]);
+    assert.deepEqual(code.items.map((item: { id: string; reference: { label: string } }) => [item.id, item.reference.label]), [[await idOf('code', 'https://github.com/owner/mpx/pull/218', 'ready'), '#218']]);
     assert.equal(code.items[0].options[0].execution.kind, 'merge');
     assert.deepEqual(code.items[0].chips, [{ label: 'approved', tone: 'good' }, { label: 'checks', tone: 'good' }]);
     assert.deepEqual(code.merged.map((change: { reference: { label: string } }) => change.reference.label), ['#216']);
@@ -238,10 +247,16 @@ test('the document maps gathered data to the contract before any judgement', asy
     assert.deepEqual(capture.notes.map((note: { id: string; lineText: string; suggestion: { action: string; because: string | null } }) => [note.id, note.lineText, note.suggestion.action, note.suggestion.because]), [
       [await idOf('note', 'Daily/2026-11-18.md', 'buy present sam 🔼'), 'buy present sam 🔼', 'keep', null],
       [await idOf('note', 'Daily/2026-11-18.md', 'Book the winter tyres'), 'Book the winter tyres', 'done', 'Booked for Saturday'],
+      [await idOf('note', 'Daily/2026-11-18.md', 'what would a weekly brief need?'), 'what would a weekly brief need?', 'keep', null],
     ]);
     assert.match(stdout, /"Removed line" is not a list line of Daily\/2026-11-18\.md/);
+    assert.match(stdout, /"Started already" is started \(\[\/\]\) in Daily\/2026-11-18\.md; left out/);
+    assert.match(stdout, /Mail "Sentry: TypeError in checkout" has no messageId/);
     assert.deepEqual(capture.bookmarks, []);
     assert.match(stdout, /Bookmarks without judgement:\n {2}1001 {2}Headlamp/);
+    assert.match(stdout, new RegExp(`Items without judgement[^\\n]*:\\n {2}mail personal:\\n {4}${await idOf('mail', 'thread-vat')} {2}Accountant: VAT draft\\n {2}mail work:\\n`));
+    assert.match(stdout, /\n {2}capture notes:\n {4}note-[0-9a-f]{12} {2}buy present sam 🔼\n/);
+    assert.match(stdout, /Summary: 9 items and 2 bookmarks without judgement; 9 chapters without narration \(calendar, mail, slack, code, agents, capture, projects, plan, health\); the document is not valid\.\n?$/);
     assert.ok(document.sources.every((source) => source.status === 'read'));
   });
 });
@@ -249,12 +264,28 @@ test('the document maps gathered data to the contract before any judgement', asy
 test('the judgement adds options, suggestions, bookmarks, mailboxes without a connector and narration', async () => {
   await withFixture(async (fixture) => {
     const before = await runDocument(fixture);
-    const { vatId, presentId, judgement: sessionJudgement } = await judgement();
+    const { vatId, presentId, weeklyId, judgement: sessionJudgement } = await judgement();
+    const calendarNarration = [
+      ...sessionJudgement.narration.calendar,
+      { text: 'Tomorrow is empty.', targets: ['2026-11-19'] },
+      { text: 'Yesterday ended on the night train.', targets: ['2026-11-17'] },
+    ];
     await writeJson(join(fixture.dayDirectory, 'daily-brief.judgement.json'), {
       ...sessionJudgement,
-      narration: { ...sessionJudgement.narration, slack: [{ text: 'Nothing waits.', targets: ['slack-unknown'] }] },
+      narration: {
+        ...sessionJudgement.narration,
+        calendar: calendarNarration,
+        slack: [{ text: 'Nothing waits.', targets: ['slack-unknown'] }],
+        triage: [{ text: 'Three captures.', targets: [] }],
+      },
     });
     const { stdout, document } = await runDocument(fixture);
+
+    assert.deepEqual(document.chapters.calendar.narration, calendarNarration.slice(0, 2), 'a chapter keeps its first two sentences');
+    assert.match(stdout, /calendar narration has 3 sentences; kept the first two, cut "Yesterday ended on the night train\."/);
+    assert.match(stdout, /The judgement narrates chapters the document does not have: triage\./);
+    assert.deepEqual(document.chapters.capture.notes.find((note: { id: string }) => note.id === weeklyId).suggestion.action, 'research');
+    assert.match(stdout, /Summary: 6 items and 1 bookmark without judgement; 6 chapters without narration \(code, agents, capture, projects, plan, health\);/);
 
     assert.deepEqual(document.chapters.calendar.calendars.at(-1), { id: 'wife', name: 'Kája' });
     assert.deepEqual(document.chapters.calendar.days[2].allDay, [{ title: 'Name day', calendar: 'wife', link: null }]);
@@ -275,6 +306,41 @@ test('the judgement adds options, suggestions, bookmarks, mailboxes without a co
 
     const itemIds = (run: BriefDocument) => ['slack', 'code', 'agents'].flatMap((name) => run.chapters[name].items.map((item: { id: string }) => item.id));
     assert.deepEqual(itemIds(document), itemIds(before.document), 'a rebuilt document keeps its ids');
+  });
+});
+
+test('the report lists move destinations and the capture suggestions the app would refuse, and is kept in the log', async () => {
+  await withFixture(async (fixture) => {
+    await writeFile(join(fixture.vault, 'Daily', '2026-11-18.md'),
+      '# Dump\n\n- [ ] buy present sam 🔼\n- idea with details\n  - a detail\n- plain and resolved\n- plain and judged done\n');
+    const brief = pageBrief();
+    (brief.chapters[2]!.data as { groups: unknown[] }).groups = [{ id: 'daily', note: 'Daily/2026-11-18', items: [
+      { id: 't1', text: 'Present', line: 'buy present sam 🔼' },
+      { id: 't2', text: 'Idea', line: 'idea with details' },
+      { id: 't3', text: 'Resolved', line: 'plain and resolved', resolved: true, resolution: 'Done yesterday' },
+      { id: 't4', text: 'Done', line: 'plain and judged done' },
+    ] }];
+    await writeJson(join(fixture.dayDirectory, 'brief.json'), brief);
+    const noteId = (line: string) => idOf('note', 'Daily/2026-11-18.md', line);
+    await writeJson(join(fixture.dayDirectory, 'daily-brief.judgement.json'), {
+      notes: {
+        [await noteId('buy present sam 🔼')]: { action: 'move', destination: { notePath: '_Projekty/alfred/alfred.md', heading: 'Someday' }, priority: 3 },
+        [await noteId('idea with details')]: { action: 'delete', because: 'Stale' },
+        [await noteId('plain and judged done')]: { action: 'done', because: 'Finished' },
+      },
+      narration: { plan: [{ text: 'The invoice first.', targets: ['invoice'] }] },
+    });
+    const { stdout, document } = await runDocument(fixture);
+
+    assert.match(stdout, /Move destinations \(note: headings\):\n {2}_Projekty\/alfred\/alfred\.md: Ideas \| Tasks\n/);
+    assert.match(stdout, /"buy present sam 🔼" moves to _Projekty\/alfred\/alfred\.md under "Someday", which is not among the move destinations/);
+    assert.match(stdout, /note-[0-9a-f]{12} {2}capture notes: idea with details {2}\[lines nested under it: keep\] {2}\[plain bullet: no done or progress\]/);
+    assert.match(stdout, /"idea with details" has lines nested under it; the app refuses to delete it, so suggest keep\./);
+    assert.match(stdout, /"plain and judged done" has no checkbox; the app refuses done on it/);
+    const resolved = document.chapters.capture.notes.find((note: { lineText: string }) => note.lineText === 'plain and resolved');
+    assert.deepEqual([resolved.suggestion.action, resolved.suggestion.because], ['delete', 'Done yesterday'], 'a resolved plain bullet is removed, as it has no box to tick');
+    assert.match(stdout, /plan narration targets nothing on the page: invoice \(its sentences target \[\]\)/);
+    assert.equal(await readFile(join(fixture.dayDirectory, 'daily-brief.log'), 'utf8'), stdout);
   });
 });
 
@@ -310,7 +376,7 @@ test('a gatherer that failed leaves its mailbox and source not read', async () =
   });
 });
 
-test('the latest outcome drops seen and kept items and brings back snoozed and undecided ones', async () => {
+test('an outcome without dismissals leaves out the day\'s seen items and kept lines and brings back snoozed and undecided ones', async () => {
   await withFixture(async (fixture) => {
     const vatId = await idOf('mail', 'thread-vat');
     const tyresId = await idOf('note', 'Daily/2026-11-18.md', 'Book the winter tyres');
@@ -334,10 +400,73 @@ test('the latest outcome drops seen and kept items and brings back snoozed and u
 
     const { stdout, document } = await runDocument(fixture);
     assert.deepEqual(mailbox(document, 'personal').items, []);
-    assert.deepEqual(document.chapters.capture.notes.map((note: { lineText: string }) => note.lineText), ['buy present sam 🔼']);
+    assert.deepEqual(document.chapters.capture.notes.map((note: { lineText: string }) => note.lineText), ['buy present sam 🔼', 'what would a weekly brief need?']);
     assert.deepEqual(document.chapters.slack.items.map((item: { id: string }) => item.id), [await idOf('slack', PERMALINK), 'slack-earlier']);
-    assert.match(stdout, /Outcome of 2026-11-17: 2 seen or kept items dropped, 1 snoozed or undecided items returned\./);
+    assert.match(stdout, /Outcome of 2026-11-17: 2 dismissed or kept items left out, 1 snoozed or undecided items returned, 0 dismissed mails back with a newer message\./);
     assert.match(stdout, /Chapter feedback to respect: .*Fewer notifications/);
+  });
+});
+
+test('a dismissed mail stays out on the following days and returns with a newer message', async () => {
+  await withFixture(async (fixture) => {
+    const vatId = await idOf('mail', 'thread-vat');
+    const slackId = await idOf('slack', PERMALINK);
+    const writeOutcome = (day: string, dismissedAt: string) => writeJson(join(fixture.data, 'brief', day, 'outcome.json'), {
+      snoozed: [], undecided: [], kept: [], seen: [], keptBookmarks: [], feedback: {},
+      dismissed: [{ id: vatId, at: dismissedAt }, { id: slackId, at: '2026-11-16T09:00:00.000Z' }],
+    });
+    const personalItemIds = async () => mailbox((await runDocument(fixture)).document, 'personal').items.map((item: { id: string }) => item.id);
+
+    await writeOutcome('2026-11-16', '2026-11-17T21:00:00.000Z');
+    assert.deepEqual(await personalItemIds(), [], 'the third day, read from the outcome two days back');
+    await writeOutcome('2026-11-17', '2026-11-17T21:00:00.000Z');
+    const secondDay = await runDocument(fixture);
+    assert.deepEqual(mailbox(secondDay.document, 'personal').items, [], 'the second day');
+    assert.deepEqual(secondDay.document.chapters.slack.items, [], 'a Slack permalink is one message, so it stays out');
+    assert.match(secondDay.stdout, /Outcome of 2026-11-17: 2 dismissed or kept items left out, 0 snoozed or undecided items returned, 0 dismissed mails back with a newer message\./);
+
+    await writeOutcome('2026-11-17', '2026-11-17T18:00:00.000Z');
+    const newerMessage = await runDocument(fixture);
+    assert.deepEqual(mailbox(newerMessage.document, 'personal').items.map((item: { id: string }) => item.id), [vatId], 'the thread received a message after the dismissal');
+    assert.match(newerMessage.stdout, /1 dismissed mails back with a newer message/);
+  });
+});
+
+test('a dismissed pull request returns when its state changes', async () => {
+  await withFixture(async (fixture) => {
+    const pullRequest = 'https://github.com/owner/mpx/pull/218';
+    const writeDismissed = (id: string) => writeJson(join(fixture.data, 'brief', '2026-11-17', 'outcome.json'), {
+      snoozed: [], undecided: [], kept: [], seen: [], dismissed: [{ id, at: '2026-11-17T21:00:00.000Z' }], keptBookmarks: [], feedback: {},
+    });
+    await writeDismissed(await idOf('code', pullRequest, 'review'));
+    assert.deepEqual((await runDocument(fixture)).document.chapters.code.items.map((item: { id: string }) => item.id), [await idOf('code', pullRequest, 'ready')]);
+    await writeDismissed(await idOf('code', pullRequest, 'ready'));
+    assert.deepEqual((await runDocument(fixture)).document.chapters.code.items, []);
+  });
+});
+
+test('a snoozed line and a snoozed bookmark return, and kept articles are not judged again', async () => {
+  await withFixture(async (fixture) => {
+    const plumberId = await idOf('note', 'Daily/2026-11-18.md', 'call the plumber');
+    const calmId = await idOf('bookmark', '1002');
+    const calmBookmark = { id: calmId, bookmarkId: '1002', kind: 'article', suggestion: { action: 'keep', destination: null, because: null }, csfd: null };
+    await writeJson(join(fixture.home, 'work', 'morning-brief', '2026-11-17', 'daily-brief.json'), {
+      chapters: {
+        capture: {
+          narration: [],
+          notes: [{ id: plumberId, notePath: 'Daily/2026-11-18.md', lineText: 'call the plumber', suggestion: { action: 'keep' } }],
+          bookmarks: [calmBookmark],
+          wishlists: [],
+        },
+      },
+    });
+    await writeJson(join(fixture.data, 'brief', '2026-11-17', 'outcome.json'), {
+      snoozed: [plumberId, calmId], undecided: [], kept: [], seen: [], dismissed: [], keptBookmarks: ['1001'], feedback: {},
+    });
+    const { stdout, document } = await runDocument(fixture);
+    assert.ok(document.chapters.capture.notes.some((note: { id: string }) => note.id === plumberId));
+    assert.deepEqual(document.chapters.capture.bookmarks, [calmBookmark]);
+    assert.match(stdout, /Bookmarks without judgement:\n {2}none\n/);
   });
 });
 

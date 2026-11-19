@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // The id of a daily brief item: its kind and a hash of its source reference (thread id, permalink, note path and
-// line text, pull request address, bookmark id), so a rebuilt document keeps the ids the app's decisions name.
+// line text, pull request address with its state, bookmark id), so a rebuilt document keeps the ids the app's decisions name.
 // Usage: brief-id.mjs <kind> <reference part>...
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
