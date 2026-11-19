@@ -299,7 +299,7 @@ test('the judgement adds options, suggestions, bookmarks, mailboxes without a co
     assert.deepEqual(mailbox(document, 'personal').items[0].options, [{ ...vatReply, to: 'Accountant <accountant@example.com>' }, vatSnooze]);
     assert.deepEqual(mailbox(document, 'centrum'), {
       id: 'centrum', label: 'Centrum', provider: 'centrum', account: 'me@centrum.example', transport: 'imap', canSend: false,
-      status: 'not-read', reason: 'The headless morning run cannot unlock IMAP passwords; Unlock reads this mailbox at the desk.', items: [], quiet: [],
+      status: 'not-read', reason: 'Not read yet: its password needs your Windows Hello approval, so Start reads it at the desk.', items: [], quiet: [],
     });
     assert.ok(document.sources.some((source) => source.name === 'Centrum mail' && source.status === 'not-read'));
     const presentNote = document.chapters.capture.notes.find((note: { id: string }) => note.id === presentId);
