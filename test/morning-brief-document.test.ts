@@ -79,6 +79,7 @@ function pageBrief() {
       { id: 'overnight', type: 'overnight', status: 'needs', data: { runs: [
         { id: 'r1', project: 'videolab', outcome: 'fail', result: 'Render failed', title: 'Proxy render', detail: 'Disk D is full', when: '03:10', duration: '1 h 5 min', url: 'file:///C:/render.log' },
         { id: 'r2', project: 'videolab', outcome: 'partial', result: 'Staging running', title: 'Staging', detail: 'Still running', when: '23:30', duration: '6 h 30 min', session: 'C:/sessions/staging.jsonl' },
+        { id: 'r3', project: 'videolab', outcome: 'partial', result: 'Session limit', title: 'Migration', detail: 'Stopped at the session limit', startedAt: '2026-11-18T01:00:00+01:00', endedAt: '2026-11-18T02:40:00+01:00', session: 'C:/sessions/migration.jsonl' },
       ] } },
       { id: 'work', type: 'work', status: 'needs', data: { projects: [
         { id: 'mpx', name: 'mpx', app: 'github', cards: [
@@ -235,13 +236,14 @@ test('the document maps gathered data to the contract before any judgement', asy
     assert.deepEqual(code.merged.map((change: { reference: { label: string } }) => change.reference.label), ['#216']);
     assert.match(stdout, /platform: gerrit changes are left out/);
 
-    const [render, staging] = document.chapters.agents.items;
+    const [render, staging, migration] = document.chapters.agents.items;
     assert.deepEqual([render.id, render.projectName, render.outcome, render.logTail], [await idOf('agent', 'file:///C:/render.log'), 'videoLab', 'failed', ['Disk D is full']]);
     assert.equal(Date.parse(render.startedAt), new Date(2026, 10, 18, 3, 10).getTime());
     assert.equal(Date.parse(render.endedAt), new Date(2026, 10, 18, 4, 15).getTime());
     assert.equal(staging.id, await idOf('agent', 'C:/sessions/staging.jsonl'));
     assert.equal(Date.parse(staging.startedAt), new Date(2026, 10, 17, 23, 30).getTime(), 'a clock time after the window ended was the evening before');
-    assert.deepEqual([staging.outcome, staging.endedAt], ['running', null]);
+    assert.deepEqual([staging.outcome, staging.endedAt], ['running', null], 'a partial run without an end is still running');
+    assert.deepEqual([migration.outcome, migration.endedAt], ['blocked', '2026-11-18T02:40:00+01:00'], 'a partial run that ended stopped short');
 
     const capture = document.chapters.capture;
     assert.deepEqual(capture.notes.map((note: { id: string; lineText: string; suggestion: { action: string; because: string | null } }) => [note.id, note.lineText, note.suggestion.action, note.suggestion.because]), [
@@ -256,7 +258,7 @@ test('the document maps gathered data to the contract before any judgement', asy
     assert.match(stdout, /Bookmarks without judgement:\n {2}1001 {2}Headlamp/);
     assert.match(stdout, new RegExp(`Items without judgement[^\\n]*:\\n {2}mail personal:\\n {4}${await idOf('mail', 'thread-vat')} {2}Accountant: VAT draft\\n {2}mail work:\\n`));
     assert.match(stdout, /\n {2}capture notes:\n {4}note-[0-9a-f]{12} {2}buy present sam 🔼\n/);
-    assert.match(stdout, /Summary: 9 items and 2 bookmarks without judgement; 9 chapters without narration \(calendar, mail, slack, code, agents, capture, projects, plan, health\); the document is not valid\.\n?$/);
+    assert.match(stdout, /Summary: 10 items and 2 bookmarks without judgement; 9 chapters without narration \(calendar, mail, slack, code, agents, capture, projects, plan, health\); the document is not valid\.\n?$/);
     assert.ok(document.sources.every((source) => source.status === 'read'));
   });
 });
@@ -285,7 +287,7 @@ test('the judgement adds options, suggestions, bookmarks, mailboxes without a co
     assert.match(stdout, /calendar narration has 3 sentences; kept the first two, cut "Yesterday ended on the night train\."/);
     assert.match(stdout, /The judgement narrates chapters the document does not have: triage\./);
     assert.deepEqual(document.chapters.capture.notes.find((note: { id: string }) => note.id === weeklyId).suggestion.action, 'research');
-    assert.match(stdout, /Summary: 6 items and 1 bookmark without judgement; 6 chapters without narration \(code, agents, capture, projects, plan, health\);/);
+    assert.match(stdout, /Summary: 7 items and 1 bookmark without judgement; 6 chapters without narration \(code, agents, capture, projects, plan, health\);/);
 
     assert.deepEqual(document.chapters.calendar.calendars.at(-1), { id: 'wife', name: 'Kája' });
     assert.deepEqual(document.chapters.calendar.days[2].allDay, [{ title: 'Name day', calendar: 'wife', link: null }]);

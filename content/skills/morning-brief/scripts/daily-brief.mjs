@@ -26,6 +26,8 @@ const VALIDATOR_TIMEOUT_MILLISECONDS = 120_000;
 const CALENDAR_NAMES = { work: 'Work', personal: 'Personal', wife: 'Wife' };
 const FORGES = ['github', 'gitlab'];
 const AGENT_OUTCOMES = { ok: 'succeeded', fail: 'failed', check: 'blocked', partial: 'running' };
+// A partial run that ended stopped short of its goal; only its own end time says so, as a running one has a duration.
+const ENDED_PARTIAL_OUTCOME = 'blocked';
 const ALERT_SENDERS = { sentry: 'Sentry', pipeline: 'Pipeline', monitoring: 'Monitoring' };
 const IMAP_REASON = 'The headless morning run cannot unlock IMAP passwords; Unlock reads this mailbox at the desk.';
 // Projects targets are Orca's project names, which only the app reads; Plan and Health sentences target nothing.
@@ -451,7 +453,7 @@ function agentsChapter() {
   for (const run of briefChapter('overnight')?.data?.runs ?? []) {
     const projectName = text(projectNames.get(run.project)) || text(run.project) || 'unknown';
     const title = text(run.title) || text(run.result) || 'Run';
-    const outcome = AGENT_OUTCOMES[run.outcome];
+    const outcome = run.outcome === 'partial' && isInstant(run.endedAt) ? ENDED_PARTIAL_OUTCOME : AGENT_OUTCOMES[run.outcome];
     const startedAt = startOfRun(run);
     if (!outcome || !startedAt) {
       problems.push(`Overnight run "${title}" has no known outcome or start time; left out.`);
