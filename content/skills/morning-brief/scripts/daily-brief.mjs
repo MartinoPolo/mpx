@@ -2,10 +2,12 @@
 // Writes <day>/daily-brief.json, the document the Alfred control center serves, and checks it with the app's
 // validator. Calendar, mail and Slack come from the gatherers' sources, Code, Agents and the capture lines from the
 // page's brief.json, bookmarks from the bookmarks bridge; <day>/daily-brief.judgement.json adds the session's
-// judgement. The latest outcome the app wrote leaves out dismissed items and kept lines and brings back snoozed and
-// undecided ones. Prints the items with their ids, every item and bookmark still without judgement, the move
-// destinations, and a summary line counting what is unjudged and the chapters without narration, and keeps the same
-// report in <day>/daily-brief.log. Exit code 2 when the document is invalid or could not be validated.
+// judgement and <day>/daily-brief.clips.json the narration's clips. The latest outcome the app wrote leaves out
+// dismissed items and kept lines and brings back snoozed and undecided ones. Prints the items with their ids, every
+// item and bookmark still without judgement, the move destinations, the open health episode notes by path (never their
+// contents), and a summary line counting what is unjudged, the chapters without narration and the narration sentences
+// without a clip, and keeps the same report in <day>/daily-brief.log. Exit code 2 when the document is invalid or could
+// not be validated.
 // Usage: daily-brief.mjs <day-directory>
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -13,6 +15,7 @@ import { readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, isAbsolute, join } from 'node:path';
 import { briefItemId } from './brief-id.mjs';
+import { DOCUMENT_CLIPS_FILE, JUDGEMENT_FILE, judgedSentences, NARRATION_SENTENCE_LIMIT } from './document-narration.mjs';
 import { localIso } from './local-time.mjs';
 
 const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -21,17 +24,20 @@ const INSTANT_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z
 const MAIL_ADDRESS_PATTERN = /^[^\s@<>,]+@[^\s@<>,]+$/;
 const END_OF_DAY = '24:00';
 const SHORT_LENGTH = 60;
-const NARRATION_SENTENCE_LIMIT = 2;
 const VALIDATOR_TIMEOUT_MILLISECONDS = 120_000;
 const CALENDAR_NAMES = { work: 'Work', personal: 'Personal', wife: 'Wife' };
 const FORGES = ['github', 'gitlab'];
 const AGENT_OUTCOMES = { ok: 'succeeded', fail: 'failed', check: 'blocked', partial: 'running' };
+// A partial run that ended stopped short of its goal; only its own end time says so, as a running one has a duration.
+const ENDED_PARTIAL_OUTCOME = 'blocked';
 const ALERT_SENDERS = { sentry: 'Sentry', pipeline: 'Pipeline', monitoring: 'Monitoring' };
 const IMAP_REASON = 'The headless morning run cannot unlock IMAP passwords; Unlock reads this mailbox at the desk.';
 // Projects targets are Orca's project names, which only the app reads; Plan and Health sentences target nothing.
 const UNCHECKED_TARGET_CHAPTERS = ['projects'];
 const UNTARGETED_CHAPTERS = ['plan', 'health'];
 const PROJECTS_FOLDER = '_Projekty';
+const MEDICAL_RECORDS_FOLDER = 'Medical records';
+const FRONTMATTER_FENCE = /^---\s*$/;
 // The app's vault writers: a move or delete takes the line out, refused while lines are nested under it; done and
 // progress change the checkbox, refused on a plain bullet.
 const REMOVING_ACTIONS = ['move', 'delete'];
@@ -73,7 +79,8 @@ const work = gathererResult(await readJson(join(dayDirectory, 'sources', 'work.j
 const brief = await readJson(join(dayDirectory, 'brief.json'));
 // The document sits in <home>/work/morning-brief/<day>; the bookmarks bridge writes <home>/work/bookmarks.
 const capture = await readJson(join(dayDirectory, '..', '..', 'bookmarks', 'capture.json'));
-const judgement = (await readJson(join(dayDirectory, 'daily-brief.judgement.json'))) ?? {};
+const judgement = (await readJson(join(dayDirectory, JUDGEMENT_FILE))) ?? {};
+const clipsByText = (await readJson(join(dayDirectory, DOCUMENT_CLIPS_FILE))) ?? {};
 const vaultDirectory = process.env.MPX_OBSIDIAN_VAULT;
 const noteLineCache = new Map();
 const mailPeopleByItemId = new Map();
@@ -111,14 +118,21 @@ function captureSource() {
   return { name, status: 'read', reason: null };
 }
 
-// The document's narration is an overview: a chapter keeps its first sentences, the rest is reported.
+// The clip narrate.mjs voiced for a sentence's exact text, while its file is still in audio/.
+function clipOf(sentenceText) {
+  const clip = typeof sentenceText === 'string' && Object.hasOwn(clipsByText, sentenceText) ? clipsByText[sentenceText] : undefined;
+  const isClip = typeof clip?.audio === 'string' && Number.isFinite(clip.audioSeconds) && clip.audioSeconds > 0;
+  return isClip && existsSync(join(dayDirectory, 'audio', clip.audio)) ? { audio: clip.audio, audioSeconds: clip.audioSeconds } : {};
+}
+
+// A chapter keeps its first sentences, each with its clip; the rest is reported.
 function narrationOf(chapterName) {
-  const sentences = Array.isArray(judgement.narration?.[chapterName]) ? judgement.narration[chapterName] : [];
+  const sentences = judgedSentences(judgement, chapterName);
   if (sentences.length > NARRATION_SENTENCE_LIMIT) {
     const cut = sentences.slice(NARRATION_SENTENCE_LIMIT).map((sentence) => `"${shorten(text(sentence?.text))}"`).join(', ');
     problems.push(`${chapterName} narration has ${sentences.length} sentences; kept the first two, cut ${cut}.`);
   }
-  return sentences.slice(0, NARRATION_SENTENCE_LIMIT);
+  return sentences.slice(0, NARRATION_SENTENCE_LIMIT).map((sentence) => ({ text: sentence?.text, targets: sentence?.targets, ...clipOf(sentence?.text) }));
 }
 
 const indentOf = (line) => line.match(/^\s*/)[0].length;
@@ -161,6 +175,40 @@ async function moveDestinations() {
     destinations.push({ notePath, headings });
   }
   return destinations;
+}
+
+// As the app reads an episode note: open while its frontmatter has `illness` and `ended` is empty or missing.
+function isOpenEpisode(noteText) {
+  const lines = noteText.replace(/^﻿/, '').split(/\r?\n/);
+  const closingIndex = FRONTMATTER_FENCE.test(lines[0]) ? lines.findIndex((line, index) => index > 0 && FRONTMATTER_FENCE.test(line)) : -1;
+  if (closingIndex === -1) return false;
+  const fields = new Map();
+  for (const line of lines.slice(1, closingIndex)) {
+    const key = line.match(/^([^\s:#][^:]*):/)?.[1]?.trim();
+    if (key !== undefined && !fields.has(key)) fields.set(key, line.replace(/^[^:]*:/, '').trim().replace(/^(["'])(.*)\1$/, '$2').trim());
+  }
+  return fields.has('illness') && !fields.get('ended');
+}
+
+// The vault paths of the open episode notes directly in Medical records/, the conditions the hints are keyed by.
+async function openEpisodePaths() {
+  if (!vaultDirectory) return [];
+  const folder = join(vaultDirectory, MEDICAL_RECORDS_FOLDER);
+  const noteNames = (await readdir(folder, { withFileTypes: true }).catch(() => []))
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.md')).map((entry) => entry.name).sort();
+  const paths = [];
+  for (const noteName of noteNames) {
+    if (isOpenEpisode(await readFile(join(folder, noteName), 'utf8').catch(() => ''))) paths.push(`${MEDICAL_RECORDS_FOLDER}/${noteName}`);
+  }
+  return paths;
+}
+
+function healthHints(episodePaths) {
+  return (Array.isArray(judgement.hints) ? judgement.hints : []).filter((hint) => {
+    if (episodePaths.includes(hint?.conditionId)) return true;
+    problems.push(`A hint names ${hint?.conditionId}, which is not an open episode note; left out.`);
+    return false;
+  });
 }
 
 async function isNoteLineOpen(notePath, lineText) {
@@ -451,7 +499,7 @@ function agentsChapter() {
   for (const run of briefChapter('overnight')?.data?.runs ?? []) {
     const projectName = text(projectNames.get(run.project)) || text(run.project) || 'unknown';
     const title = text(run.title) || text(run.result) || 'Run';
-    const outcome = AGENT_OUTCOMES[run.outcome];
+    const outcome = run.outcome === 'partial' && isInstant(run.endedAt) ? ENDED_PARTIAL_OUTCOME : AGENT_OUTCOMES[run.outcome];
     const startedAt = startOfRun(run);
     if (!outcome || !startedAt) {
       problems.push(`Overnight run "${title}" has no known outcome or start time; left out.`);
@@ -668,6 +716,7 @@ function validate(documentPath) {
 }
 
 const imapMailboxes = (judgement.mailboxes ?? []).map(imapMailbox);
+const episodePaths = await openEpisodePaths();
 const document = {
   schemaVersion: 1,
   day,
@@ -691,7 +740,7 @@ const document = {
     capture: await captureChapter(),
     projects: { narration: narrationOf('projects') },
     plan: { narration: narrationOf('plan'), reminders: judgement.reminders ?? [] },
-    health: { narration: narrationOf('health'), hints: judgement.hints ?? [] },
+    health: { narration: narrationOf('health'), hints: healthHints(episodePaths) },
   },
 };
 dropRepeatedItems(document);
@@ -725,9 +774,12 @@ const unjudgedBookmarks = (capture?.bookmarks ?? [])
   .filter((bookmark) => !documentBookmarkIds.has(String(bookmark.id)) && !keptArticleIds.has(String(bookmark.id)))
   .map((bookmark) => `  ${bookmark.id}  ${bookmark.title}  ${bookmark.url}`);
 const unnarratedChapters = Object.entries(document.chapters).filter(([, chapter]) => chapter.narration.length === 0).map(([chapterName]) => chapterName);
+const unvoicedSentenceCount = Object.values(document.chapters).flatMap((chapter) => chapter.narration).filter((sentence) => !sentence.audio).length;
 const validation = validate(documentPath);
 const plural = (count, noun) => `${count} ${noun}${count === 1 ? '' : 's'}`;
 const destinationLines = destinations.map(({ notePath, headings }) => `  ${notePath}: ${headings.join(' | ') || 'no headings'}`);
+const hintedPaths = new Set(document.chapters.health.hints.map((hint) => hint.conditionId));
+const episodeLines = episodePaths.map((notePath) => `  ${notePath}${hintedPaths.has(notePath) ? '' : '  [no hint]'}`);
 const report = [
   `Wrote ${documentPath}`,
   outcomeReport,
@@ -735,11 +787,12 @@ const report = [
   `Items without judgement (judge each in daily-brief.judgement.json):\n${unjudgedItemLines.join('\n') || '  none'}`,
   `Bookmarks without judgement:\n${unjudgedBookmarks.join('\n') || '  none'}`,
   `Move destinations (note: headings):\n${destinationLines.join('\n') || '  none'}`,
+  `Open health episodes (read each note, one hint per path):\n${episodeLines.join('\n') || '  none'}`,
   `Problems:\n${problems.map((problem) => `  ${problem}`).join('\n') || '  none'}`,
   validation.report,
   `Summary: ${plural(unjudgedItemCount, 'item')} and ${plural(unjudgedBookmarks.length, 'bookmark')} without judgement; `
     + `${plural(unnarratedChapters.length, 'chapter')} without narration${unnarratedChapters.length ? ` (${unnarratedChapters.join(', ')})` : ''}; `
-    + `the document is ${validation.valid ? 'valid' : 'not valid'}.`,
+    + `${plural(unvoicedSentenceCount, 'narration sentence')} without a clip; the document is ${validation.valid ? 'valid' : 'not valid'}.`,
 ].join('\n');
 await writeFile(join(dayDirectory, 'daily-brief.log'), `${report}\n`);
 console.log(report);
