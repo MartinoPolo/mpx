@@ -253,12 +253,13 @@ test('the document maps gathered data to the contract before any judgement', asy
     ]);
     assert.match(stdout, /"Removed line" is not a list line of Daily\/2026-11-18\.md/);
     assert.match(stdout, /"Started already" is started \(\[\/\]\) in Daily\/2026-11-18\.md; left out/);
-    assert.match(stdout, /Mail "Sentry: TypeError in checkout" has no messageId/);
+    assert.doesNotMatch(stdout, /has no messageId/, 'a mail without a reply needs no messageId');
     assert.deepEqual(capture.bookmarks, []);
     assert.match(stdout, /Bookmarks without judgement:\n {2}1001 {2}Headlamp/);
-    assert.match(stdout, new RegExp(`Items without judgement[^\\n]*:\\n {2}mail personal:\\n {4}${await idOf('mail', 'thread-vat')} {2}Accountant: VAT draft\\n {2}mail work:\\n`));
-    assert.match(stdout, /\n {2}capture notes:\n {4}note-[0-9a-f]{12} {2}buy present sam 🔼\n/);
-    assert.match(stdout, /Summary: 10 items and 2 bookmarks without judgement; 9 chapters without narration \(calendar, mail, slack, code, agents, capture, projects, plan, health\); 0 narration sentences without a clip; the document is not valid\.\n?$/);
+    assert.match(stdout, new RegExp(`Items without judgement[^\\n]*:\\n {2}mail personal:\\n {4}${await idOf('mail', 'thread-vat')} {2}Accountant: VAT draft {2}\\[default: Snooze\\]\\n {2}mail work:\\n {4}mail-[0-9a-f]{12} {2}Sentry: TypeError in checkout {2}\\[default: Dismiss\\]\\n`));
+    assert.match(stdout, / {4}code-[0-9a-f]{12} {2}mpx #218 Skill palette aliases {2}\[default: Merge\]\n/);
+    assert.match(stdout, /\n {2}capture notes:\n {4}note-[0-9a-f]{12} {2}buy present sam 🔼 {2}\[default: keep\]\n/);
+    assert.match(stdout, /Summary: 10 items and 2 bookmarks without judgement; 0 narration sentences without a clip; the document is not valid\. No narration: calendar, mail, slack, code, agents, capture, projects, plan, health\.\n?$/);
     assert.ok(document.sources.every((source) => source.status === 'read'));
   });
 });
@@ -287,7 +288,7 @@ test('the judgement adds options, suggestions, bookmarks, mailboxes without a co
     assert.match(stdout, /calendar narration has 3 sentences; kept the first two, cut "Yesterday ended on the night train\."/);
     assert.match(stdout, /The judgement narrates chapters the document does not have: triage\./);
     assert.deepEqual(document.chapters.capture.notes.find((note: { id: string }) => note.id === weeklyId).suggestion.action, 'research');
-    assert.match(stdout, /Summary: 7 items and 1 bookmark without judgement; 6 chapters without narration \(code, agents, capture, projects, plan, health\); 5 narration sentences without a clip;/);
+    assert.match(stdout, /Summary: 7 items and 1 bookmark without judgement; 5 narration sentences without a clip; the document is not valid\. No narration: code, agents, capture, projects, plan, health\./);
 
     assert.deepEqual(document.chapters.calendar.calendars.at(-1), { id: 'wife', name: 'Kája' });
     assert.deepEqual(document.chapters.calendar.days[2].allDay, [{ title: 'Name day', calendar: 'wife', link: null }]);
@@ -343,6 +344,27 @@ test('the report lists move destinations and the capture suggestions the app wou
     assert.deepEqual([resolved.suggestion.action, resolved.suggestion.because], ['delete', 'Done yesterday'], 'a resolved plain bullet is removed, as it has no box to tick');
     assert.match(stdout, /plan narration targets nothing on the page: invoice \(its sentences target \[\]\)/);
     assert.equal(await readFile(join(fixture.dayDirectory, 'daily-brief.log'), 'utf8'), stdout);
+  });
+});
+
+test('"default" accepts an item\'s default, and only a mail whose options reply needs a messageId', async () => {
+  await withFixture(async (fixture) => {
+    const vatId = await idOf('mail', 'thread-vat');
+    const alertId = await idOf('mail', 'alert-1');
+    const codeId = await idOf('code', 'https://github.com/owner/mpx/pull/218', 'ready');
+    const presentId = await idOf('note', 'Daily/2026-11-18.md', 'buy present sam 🔼');
+    const reply = { kind: 'reply', gist: 'On it', subject: 'Re: TypeError in checkout', body: 'Looking at it.', attachments: [] };
+    await writeJson(join(fixture.dayDirectory, 'daily-brief.judgement.json'), {
+      options: { [vatId]: 'default', [codeId]: 'default', [alertId]: [reply] },
+      notes: { [presentId]: 'default' },
+    });
+    const { stdout, document } = await runDocument(fixture);
+    assert.deepEqual(mailbox(document, 'personal').items[0].options, [{ kind: 'snooze' }]);
+    assert.deepEqual(document.chapters.code.items[0].options.map((option: { label: string }) => option.label), ['Merge']);
+    assert.equal(document.chapters.capture.notes.find((note: { id: string }) => note.id === presentId).suggestion.action, 'keep');
+    assert.match(stdout, /Summary: 6 items and 2 bookmarks without judgement;/);
+    assert.doesNotMatch(stdout, /The judgement names items the document does not have/);
+    assert.match(stdout, /Mail "Sentry: TypeError in checkout" has no messageId; its reply draft would start a new mail instead of replying\./);
   });
 });
 

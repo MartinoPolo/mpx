@@ -5,9 +5,9 @@
 // sources/news-digest.json; <day>/daily-brief.judgement.json adds the session's
 // judgement and <day>/daily-brief.clips.json the narration's clips. The latest outcome the app wrote leaves out
 // dismissed items and kept lines and brings back snoozed and undecided ones. Prints the items with their ids, every
-// item and bookmark still without judgement, the move destinations, the open health episode notes by path (never their
-// contents), and a summary line counting what is unjudged, the chapters without narration and the narration sentences
-// without a clip, and keeps the same report in <day>/daily-brief.log. Exit code 2 when the document is invalid or could
+// item and bookmark still without judgement with its default, the move destinations, the open health episode notes by
+// path (never their contents), and a summary line counting what is unjudged and the narration sentences without a clip
+// and naming the chapters without narration, and keeps the same report in <day>/daily-brief.log. Exit code 2 when the document is invalid or could
 // not be validated.
 // Usage: daily-brief.mjs <day-directory>
 import { spawnSync } from 'node:child_process';
@@ -45,12 +45,16 @@ const REMOVING_ACTIONS = ['move', 'delete'];
 const CHECKBOX_ACTIONS = ['done', 'progress'];
 const SEEN = { kind: 'seen' };
 const SNOOZE = { kind: 'snooze' };
-// A state the page shows that needs a decision, with the options suggested until the session judges the item.
+// A state the page shows that needs a decision, with the options suggested until the session judges the item. The app
+// always offers Snooze and Dismiss, so a list with a real suggestion does not repeat them.
 const CODE_STATE_OPTIONS = {
-  ready: [{ kind: 'action', label: 'Merge', icon: 'git-merge', execution: { kind: 'merge' } }, SNOOZE],
-  failing: [{ kind: 'action', label: 'Rerun', icon: 'rotate-ccw', execution: { kind: 'rerun' } }, SNOOZE],
-  review: [{ kind: 'action', label: 'Review today', icon: 'eye', execution: { kind: 'reminder' } }, SNOOZE],
+  ready: [{ kind: 'action', label: 'Merge', icon: 'git-merge', execution: { kind: 'merge' } }],
+  failing: [{ kind: 'action', label: 'Rerun', icon: 'rotate-ccw', execution: { kind: 'rerun' } }],
+  review: [{ kind: 'action', label: 'Review today', icon: 'eye', execution: { kind: 'reminder' } }],
 };
+// The judgement's value for an item whose default options or capture suggestion stand.
+const ACCEPT_DEFAULT = 'default';
+const OPTION_LABELS = { snooze: 'Snooze', seen: 'Dismiss', reply: 'Reply', event: 'Event', task: 'Task' };
 const KEEP_LINE = { action: 'keep', destination: null, wording: null, priority: null, because: null, link: null };
 
 const [dayDirectory] = process.argv.slice(2);
@@ -282,7 +286,6 @@ function mailMessage(mail, { options, ...message }) {
   }
   const messageId = text(mail.messageId) || null;
   const short = shorten(`${message.from}: ${message.subject}`);
-  if (!messageId) problems.push(`Mail "${short}" has no messageId; a saved draft would start a new mail instead of replying.`);
   return { id: briefItemId('mail', threadId), short, link: link(mail.url), options, threadId, messageId, ...message };
 }
 
@@ -730,9 +733,16 @@ function applyJudgement(document, destinations) {
     for (const item of items) {
       knownIds.add(item.id);
       const people = mailPeopleByItemId.get(item.id);
-      if (judgement.options?.[item.id]) item.options = judgement.options[item.id].map((option) => (people ? addressedReply(option, item, people) : option));
-      if (judgement.notes?.[item.id]) item.suggestion = judgement.notes[item.id];
+      const options = judgement.options?.[item.id];
+      if (Array.isArray(options)) item.options = options.map((option) => (people ? addressedReply(option, item, people) : option));
+      else if (options !== undefined && options !== ACCEPT_DEFAULT) problems.push(`The options of ${item.id} are neither a list nor "${ACCEPT_DEFAULT}"; its default stands.`);
+      const suggestion = judgement.notes?.[item.id];
+      if (suggestion && suggestion !== ACCEPT_DEFAULT) item.suggestion = suggestion;
       if (listName === 'capture notes') checkNoteSuggestion(item, destinations);
+      const offersReply = item.options?.some((option) => option.kind === 'reply');
+      if (listName.startsWith('mail') && offersReply && !item.messageId) {
+        problems.push(`Mail "${item.short}" has no messageId; its reply draft would start a new mail instead of replying.`);
+      }
     }
   }
   const unknownIds = [...Object.keys(judgement.options ?? {}), ...Object.keys(judgement.notes ?? {})].filter((id) => !knownIds.has(id));
@@ -824,7 +834,12 @@ const unjudgedLists = itemLists(document).filter(([listName]) => listName !== 'c
   .map(([listName, items]) => [listName, items.filter((item) => !judgedIds.has(item.id))])
   .filter(([, items]) => items.length > 0);
 const unjudgedItemCount = unjudgedLists.reduce((count, [, items]) => count + items.length, 0);
-const unjudgedItemLines = unjudgedLists.flatMap(([listName, items]) => [`  ${listName}:`, ...items.map((item) => `    ${item.id}  ${itemLabel(item)}`)]);
+// What "default" in the judgement accepts: a capture's suggested action, or an item's options in order.
+function defaultLabel(item) {
+  if (item.suggestion) return item.suggestion.action;
+  return (item.options ?? []).map((option) => OPTION_LABELS[option.kind] ?? option.label ?? option.kind).join(', ');
+}
+const unjudgedItemLines = unjudgedLists.flatMap(([listName, items]) => [`  ${listName}:`, ...items.map((item) => `    ${item.id}  ${itemLabel(item)}  [default: ${defaultLabel(item)}]`)]);
 const documentBookmarkIds = new Set(document.chapters.capture.bookmarks.map((bookmark) => bookmark.bookmarkId));
 const keptArticleIds = new Set(idsIn(latest?.outcome.keptBookmarks).map(String));
 const unjudgedBookmarks = (capture?.bookmarks ?? [])
@@ -842,15 +857,15 @@ const report = [
   outcomeReport,
   `Items:\n${itemLines.join('\n') || '  none'}`,
   ...(document.chapters.news ? [`News:\n${document.chapters.news.items.map((item) => `  ${item.id}  ${item.kind}: ${item.title} (${item.source})`).join('\n') || '  none'}`] : []),
-  `Items without judgement (judge each in daily-brief.judgement.json):\n${unjudgedItemLines.join('\n') || '  none'}`,
+  `Items without judgement (judge each in daily-brief.judgement.json, or "${ACCEPT_DEFAULT}" to accept the default shown):\n${unjudgedItemLines.join('\n') || '  none'}`,
   `Bookmarks without judgement:\n${unjudgedBookmarks.join('\n') || '  none'}`,
   `Move destinations (note: headings):\n${destinationLines.join('\n') || '  none'}`,
   `Open health episodes (read each note, one hint per path):\n${episodeLines.join('\n') || '  none'}`,
   `Problems:\n${problems.map((problem) => `  ${problem}`).join('\n') || '  none'}`,
   validation.report,
   `Summary: ${plural(unjudgedItemCount, 'item')} and ${plural(unjudgedBookmarks.length, 'bookmark')} without judgement; `
-    + `${plural(unnarratedChapters.length, 'chapter')} without narration${unnarratedChapters.length ? ` (${unnarratedChapters.join(', ')})` : ''}; `
-    + `${plural(unvoicedSentenceCount, 'narration sentence')} without a clip; the document is ${validation.valid ? 'valid' : 'not valid'}.`,
+    + `${plural(unvoicedSentenceCount, 'narration sentence')} without a clip; the document is ${validation.valid ? 'valid' : 'not valid'}.`
+    + (unnarratedChapters.length ? ` No narration: ${unnarratedChapters.join(', ')}.` : ''),
 ].join('\n');
 await writeFile(join(dayDirectory, 'daily-brief.log'), `${report}\n`);
 console.log(report);

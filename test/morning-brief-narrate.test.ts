@@ -150,6 +150,8 @@ test('without a backend the narration keeps only the clips rendered before and t
       assert.match(run.stderr, /VoiceStudio is not reachable at .* and could not be started/);
       assert.match(run.stdout, /voiced 1 of 2 narration sentences, 0 rendered/);
       assert.deepEqual(Object.keys(await readClips(dayDirectory)), [kept.text]);
+      const log = await readFile(join(dayDirectory, 'narrate-document.log'), 'utf8');
+      assert.match(log, /^voiced 1 of 2 narration sentences, 0 rendered.*\nVoiceStudio is not reachable/, 'the result line stays in the day folder');
     });
   } finally {
     await voiceStudio.close();

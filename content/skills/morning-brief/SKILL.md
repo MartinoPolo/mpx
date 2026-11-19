@@ -88,17 +88,18 @@ foreground wait, never by ending the turn.
    without both. `node "<skill-dir>/scripts/daily-brief.mjs" <dayDirectory>` writes
    `daily-brief.json`, lists its items with their ids, then **Items without judgement**,
    **Bookmarks without judgement**, the move destinations, the open health episode notes by path,
-   its problems, the app's validator and a summary line counting what is unjudged, the chapters
-   without narration and the narration sentences without a clip; it keeps the same report in
-   `daily-brief.log`. Write
+   its problems, the app's validator and a summary line counting what is unjudged and the narration
+   sentences without a clip, then naming the chapters without narration (information: none is right
+   where nothing is worth saying); it keeps the same report in `daily-brief.log`. Write
    `<dayDirectory>/daily-brief.judgement.json`, narration included, and rerun until both lists say
    none and every problem you can fix is fixed. Exit code 2 means a chapter is still invalid or the
    validator could not run.
 8. `node "<skill-dir>/scripts/narrate.mjs" <dayDirectory> --document` voices the sentences the
-   document keeps as step 5 voices the beats and records each clip by its text in
-   `daily-brief.clips.json`; exit code 2 leaves sentences without a clip: continue. Then the
-   document's last write: `daily-brief.mjs` once more, which puts each clip on its sentence. A
-   narration changed after this needs both again.
+   document keeps as step 5 voices the beats, records each clip by its text in
+   `daily-brief.clips.json` and keeps its result line in `narrate-document.log`; exit code 2 leaves
+   sentences without a clip: continue. Then the document's last write: `daily-brief.mjs` once more,
+   which puts each clip on its sentence; its summary then counts no narration sentence without a
+   clip, unless the backend failed. A narration changed after this needs both again.
 
 ## Areas
 
@@ -243,9 +244,12 @@ apply:
   server names the account, `label`, `provider`, `account`). They are written as not read: the
   headless run cannot unlock them.
 - `options`: every mail, Slack, Code and Agents item id to what it suggests, in order, as the
-  contract types them. The list replaces the default whole and needs one entry at least. The app
-  always shows Snooze and Dismiss (`seen`) and highlights the one listed, so list one only as the
-  suggestion, alone for an item that needs nothing else. A `reply` draft wherever the sender waits
+  contract types them. The list replaces the default whole and needs one entry at least; `"default"`
+  instead of a list, or of a capture's suggestion in `notes`, accepts the default the script prints
+  beside the item. The app always shows Snooze and Dismiss (`seen`) and highlights the one listed, so
+  a list with a reply, event, task or action never ends with them; list one only when it is the
+  suggestion itself, alone. A pull request whose state changed gets a new id, so a rebuild drops the
+  judgement written for its old id, which the script reports. A `reply` draft wherever the sender waits
   for an answer, in my voice and the thread's language (`subject` for mail, `where` for Slack); an
   `event` or `task` where the message asks for one; on Code and Agents an `action` (`label`,
   `icon` from the app's `ACTION_ICONS` in

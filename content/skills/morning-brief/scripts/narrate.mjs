@@ -3,7 +3,7 @@
 // its beat. With --document it voices instead the sentences the daily brief document keeps of the judgement's
 // narration and the news digest's sentence, and records each clip's file name and length by sentence text in <day>/daily-brief.clips.json, which
 // daily-brief.mjs writes on the sentences. Clips are keyed by voice, language and text, so a rerun only renders changed
-// sentences. When the backend is not running, it is started from the VoiceStudio checkout for this run and stopped
+// sentences; the document's run keeps its result line in <day>/narrate-document.log. When the backend is not running, it is started from the VoiceStudio checkout for this run and stopped
 // afterwards, so nothing stays resident between briefs. Exit code 2 when the backend cannot start or a clip fails.
 // Usage: narrate.mjs <day-directory> [--document] [--voice <profile id or name>] [--language <ISO 639-1>]
 import { spawn, spawnSync } from 'node:child_process';
@@ -24,6 +24,7 @@ const STARTUP_POLL_MILLISECONDS = 2000;
 // The first request loads the model onto the GPU.
 const REQUEST_TIMEOUT_MILLISECONDS = 300000;
 const RETRY_ATTEMPTS = 5;
+const DOCUMENT_NARRATION_LOG = 'narrate-document.log';
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,
@@ -177,8 +178,8 @@ if (brief) {
 const totalSeconds = [...clips.values()].reduce((total, clip) => total + clip.seconds, 0);
 const rendered = missing.filter((text) => clips.has(text)).length;
 const started = startedBackend ? ', backend started and stopped for this run' : '';
-console.log(`voiced ${clips.size} of ${texts.length} ${spokenUnit}, ${rendered} rendered${started}, ${Math.round(totalSeconds)} s, ${texts.reduce((total, text) => total + text.length, 0)} characters`);
-if (failures.length) {
-  console.error(failures.join('\n'));
-  process.exit(2);
-}
+const resultLine = `voiced ${clips.size} of ${texts.length} ${spokenUnit}, ${rendered} rendered${started}, ${Math.round(totalSeconds)} s, ${texts.reduce((total, text) => total + text.length, 0)} characters`;
+console.log(resultLine);
+if (failures.length) console.error(failures.join('\n'));
+if (!brief) await writeFile(join(dayDirectory, DOCUMENT_NARRATION_LOG), `${[resultLine, ...failures].join('\n')}\n`);
+if (failures.length) process.exit(2);
