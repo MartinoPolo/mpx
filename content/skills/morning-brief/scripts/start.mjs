@@ -49,6 +49,6 @@ const run = `${JSON.stringify({
   lastSuccess: lastSuccess ? localIso(lastSuccess) : null,
   calendarDays: calendarOffsets.map((offset) => localDate(startOfDay(offset))),
 }, null, 2)}\n`;
-// Later steps read the run from here: building the page moves state.json on, so it cannot be recomputed.
+// Later steps read the run from here: writing the document moves state.json on, so it cannot be recomputed.
 await writeFile(join(dayDirectory, 'start.json'), run);
 process.stdout.write(run);

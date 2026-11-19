@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Lists Claude and Pi sessions of both accounts that changed in the window, with their first prompt,
-// last prompt and failed tool results, plus `away`: last night, the longest gap between my prompts in
-// the day before `until`. Sessions with `activeWhileAway` kept working in it.
+// Lists Claude and Pi sessions of both accounts that changed in the window, with their first and last prompt, plus
+// `away`: last night, the longest gap between my prompts in the day before `until`. Sessions with `activeWhileAway`
+// kept working in it.
 // Usage: sessions.mjs --since <iso> [--until <iso>] [--out <file>]
 import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -65,7 +65,6 @@ async function sessionsIn(account, harness, projectsDirectory) {
       found.push({
         account, harness, project: project.name, file: path, modified: info.mtime.toISOString(),
         sizeKilobytes: Math.round(info.size / 1024), lines: lines.length,
-        toolErrors: text.split('"is_error":true').length - 1,
         title: (entries.find((entry) => entry.prompt)?.prompt ?? '').slice(0, TITLE_LENGTH),
         lastPrompt: prompts.at(-1)?.time.toISOString(),
         promptTimes: prompts.map((entry) => entry.time),

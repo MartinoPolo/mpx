@@ -6,9 +6,11 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
+import { fakeVoiceStudio, narrate } from './morning-brief-voice-studio.js';
 
 const exec = promisify(execFile);
 const documentScript = resolve('content/skills/morning-brief/scripts/daily-brief.mjs');
+const startScript = resolve('content/skills/morning-brief/scripts/start.mjs');
 const idScript = resolve('content/skills/morning-brief/scripts/brief-id.mjs');
 const DAY = '2026-11-18';
 const PERMALINK = 'https://example.slack.com/archives/C1/p1794779220000100?thread_ts=1794779220.000100&cid=C1';
@@ -72,30 +74,31 @@ function workSource() {
   };
 }
 
-function pageBrief() {
+function sessionBrief() {
   return {
     projects: [{ id: 'videolab', name: 'videoLab' }],
     chapters: [
-      { id: 'overnight', type: 'overnight', status: 'needs', data: { runs: [
-        { id: 'r1', project: 'videolab', outcome: 'fail', result: 'Render failed', title: 'Proxy render', detail: 'Disk D is full', when: '03:10', duration: '1 h 5 min', url: 'file:///C:/render.log' },
-        { id: 'r2', project: 'videolab', outcome: 'partial', result: 'Staging running', title: 'Staging', detail: 'Still running', when: '23:30', duration: '6 h 30 min', session: 'C:/sessions/staging.jsonl' },
-        { id: 'r3', project: 'videolab', outcome: 'partial', result: 'Session limit', title: 'Migration', detail: 'Stopped at the session limit', startedAt: '2026-11-18T01:00:00+01:00', endedAt: '2026-11-18T02:40:00+01:00', session: 'C:/sessions/migration.jsonl' },
+      { type: 'overnight', data: { runs: [
+        { project: 'videolab', outcome: 'fail', title: 'Proxy render', startedAt: '2026-11-18T03:10:00+01:00', endedAt: '2026-11-18T04:15:00+01:00', logTail: ['Disk D is full'], url: 'file:///C:/render.log' },
+        { project: 'videolab', outcome: 'partial', title: 'Staging', startedAt: '2026-11-17T23:30:00+01:00', session: 'C:/sessions/staging.jsonl' },
+        { project: 'videolab', outcome: 'partial', title: 'Migration', startedAt: '2026-11-18T01:00:00+01:00', endedAt: '2026-11-18T02:40:00+01:00', session: 'C:/sessions/migration.jsonl' },
+        { project: 'videolab', outcome: 'ok', title: 'No start time' },
       ] } },
-      { id: 'work', type: 'work', status: 'needs', data: { projects: [
+      { type: 'work', data: { projects: [
         { id: 'mpx', name: 'mpx', app: 'github', cards: [
-          { id: 'c1', ref: '#218', title: 'Skill palette aliases', state: 'ready', url: 'https://github.com/owner/mpx/pull/218', pipeline: { status: 'success' } },
-          { id: 'c2', ref: '#219', title: 'Work in progress', state: 'draft', url: 'https://github.com/owner/mpx/pull/219' },
-          { id: 'c3', ref: '#216', title: 'Changelog skips merge commits', state: 'merged', url: 'https://github.com/owner/mpx/pull/216' },
+          { ref: '#218', title: 'Skill palette aliases', state: 'ready', url: 'https://github.com/owner/mpx/pull/218', pipeline: { status: 'success' } },
+          { ref: '#219', title: 'Work in progress', state: 'draft', url: 'https://github.com/owner/mpx/pull/219' },
+          { ref: '#216', title: 'Changelog skips merge commits', state: 'merged', url: 'https://github.com/owner/mpx/pull/216' },
         ] },
-        { id: 'platform', name: 'platform', app: 'gerrit', cards: [{ id: 'g1', ref: '4711', title: 'Fix', state: 'review', url: 'https://gerrit.example/c/4711' }] },
+        { id: 'platform', name: 'platform', app: 'gerrit', cards: [{ ref: '4711', title: 'Fix', state: 'review', url: 'https://gerrit.example/c/4711' }] },
       ] } },
-      { id: 'triage', type: 'triage', status: 'fyi', data: { groups: [
-        { id: 'daily', note: 'Daily/2026-11-18', items: [
-          { id: 't1', text: 'Buy a birthday present for Sam', line: 'buy present sam 🔼' },
-          { id: 't2', text: 'Book the winter tyres', line: 'Book the winter tyres', resolved: true, resolution: 'Booked for Saturday' },
-          { id: 't3', text: 'A line no longer in the note', line: 'Removed line' },
-          { id: 't4', text: 'What a weekly brief needs', line: 'what would a weekly brief need?' },
-          { id: 't5', text: 'A task already started', line: 'Started already' },
+      { type: 'triage', data: { groups: [
+        { note: 'Daily/2026-11-18', items: [
+          { line: 'buy present sam 🔼' },
+          { line: 'Book the winter tyres', resolved: true, resolution: 'Booked for Saturday' },
+          { line: 'Removed line' },
+          { line: 'what would a weekly brief need?' },
+          { line: 'Started already' },
         ] },
       ] } },
     ],
@@ -114,7 +117,7 @@ async function withFixture<Result>(use: (fixture: Fixture) => Promise<Result>): 
     });
     await writeJson(join(fixture.dayDirectory, 'sources', 'personal.json'), personalSource());
     await writeJson(join(fixture.dayDirectory, 'sources', 'work.json'), workSource());
-    await writeJson(join(fixture.dayDirectory, 'brief.json'), pageBrief());
+    await writeJson(join(fixture.dayDirectory, 'brief.json'), sessionBrief());
     await writeJson(join(home, 'work', 'bookmarks', 'capture.json'), {
       syncedAt: '2026-11-18T05:00:00Z',
       bookmarks: [
@@ -133,12 +136,12 @@ async function withFixture<Result>(use: (fixture: Fixture) => Promise<Result>): 
   }
 }
 
-async function runDocument(fixture: Fixture, projectsRoot = join(fixture.home, 'projects')): Promise<DocumentRun> {
+async function runDocument(fixture: Fixture, projectsRoot = join(fixture.home, 'projects'), ...flags: string[]): Promise<DocumentRun> {
   const env = { ...process.env, MPX_OBSIDIAN_VAULT: fixture.vault, ALFRED_CONTROL_CENTER_DATA: fixture.data, MPX_PROJECTS: projectsRoot };
   let exitCode = 0;
   let stdout = '';
   try {
-    ({ stdout } = await exec(process.execPath, [documentScript, fixture.dayDirectory], { env, timeout: 150_000 }));
+    ({ stdout } = await exec(process.execPath, [documentScript, fixture.dayDirectory, ...flags], { env, timeout: 150_000 }));
   } catch (error) {
     const failure = error as { code?: number; stdout?: string; stderr?: string };
     exitCode = failure.code ?? -1;
@@ -238,12 +241,12 @@ test('the document maps gathered data to the contract before any judgement', asy
 
     const [render, staging, migration] = document.chapters.agents.items;
     assert.deepEqual([render.id, render.projectName, render.outcome, render.logTail], [await idOf('agent', 'file:///C:/render.log'), 'videoLab', 'failed', ['Disk D is full']]);
-    assert.equal(Date.parse(render.startedAt), new Date(2026, 10, 18, 3, 10).getTime());
-    assert.equal(Date.parse(render.endedAt), new Date(2026, 10, 18, 4, 15).getTime());
+    assert.deepEqual([render.startedAt, render.endedAt], ['2026-11-18T03:10:00+01:00', '2026-11-18T04:15:00+01:00']);
     assert.equal(staging.id, await idOf('agent', 'C:/sessions/staging.jsonl'));
-    assert.equal(Date.parse(staging.startedAt), new Date(2026, 10, 17, 23, 30).getTime(), 'a clock time after the window ended was the evening before');
     assert.deepEqual([staging.outcome, staging.endedAt], ['running', null], 'a partial run without an end is still running');
     assert.deepEqual([migration.outcome, migration.endedAt], ['blocked', '2026-11-18T02:40:00+01:00'], 'a partial run that ended stopped short');
+    assert.equal(document.chapters.agents.items.length, 3);
+    assert.match(stdout, /Overnight run "No start time" has no known outcome or no startedAt instant; left out\./);
 
     const capture = document.chapters.capture;
     assert.deepEqual(capture.notes.map((note: { id: string; lineText: string; suggestion: { action: string; because: string | null } }) => [note.id, note.lineText, note.suggestion.action, note.suggestion.because]), [
@@ -316,12 +319,12 @@ test('the report lists move destinations and the capture suggestions the app wou
   await withFixture(async (fixture) => {
     await writeFile(join(fixture.vault, 'Daily', '2026-11-18.md'),
       '# Dump\n\n- [ ] buy present sam 🔼\n- idea with details\n  - a detail\n- plain and resolved\n- plain and judged done\n');
-    const brief = pageBrief();
-    (brief.chapters[2]!.data as { groups: unknown[] }).groups = [{ id: 'daily', note: 'Daily/2026-11-18', items: [
-      { id: 't1', text: 'Present', line: 'buy present sam 🔼' },
-      { id: 't2', text: 'Idea', line: 'idea with details' },
-      { id: 't3', text: 'Resolved', line: 'plain and resolved', resolved: true, resolution: 'Done yesterday' },
-      { id: 't4', text: 'Done', line: 'plain and judged done' },
+    const brief = sessionBrief();
+    (brief.chapters[2]!.data as { groups: unknown[] }).groups = [{ note: 'Daily/2026-11-18', items: [
+      { line: 'buy present sam 🔼' },
+      { line: 'idea with details' },
+      { line: 'plain and resolved', resolved: true, resolution: 'Done yesterday' },
+      { line: 'plain and judged done' },
     ] }];
     await writeJson(join(fixture.dayDirectory, 'brief.json'), brief);
     const noteId = (line: string) => idOf('note', 'Daily/2026-11-18.md', line);
@@ -574,7 +577,65 @@ test('an outcome without chapter feedback prints no feedback line', async () => 
   });
 });
 
+test('the sample brief.json gives Code, Agents and the capture lines', async () => {
+  await withFixture(async (fixture) => {
+    await writeFile(join(fixture.dayDirectory, 'brief.json'), await readFile(resolve('content/skills/morning-brief/brief.sample.json')));
+    const { stdout, document } = await runDocument(fixture);
+    assert.deepEqual(document.chapters.code.items.map((item: { reference: { label: string } }) => item.reference.label), ['!318', '!321', '!320']);
+    assert.deepEqual(document.chapters.code.merged.map((change: { reference: { label: string } }) => change.reference.label), ['!316']);
+    assert.deepEqual(document.chapters.agents.items.map((run: { projectName: string; outcome: string }) => [run.projectName, run.outcome]), [['videoLab', 'failed']]);
+    assert.deepEqual(document.chapters.capture.notes.map((note: { lineText: string }) => note.lineText), ['buy present sam 🔼']);
+    assert.doesNotMatch(stdout, /Overnight run .* left out/);
+  });
+});
+
+const statePath = (fixture: Fixture) => join(fixture.home, 'work', 'morning-brief', 'state.json');
+
+test('writing the document records the brief as the last one, and start.mjs begins the next window there', async () => {
+  await withFixture(async (fixture) => {
+    await runDocument(fixture);
+    const until = new Date(2026, 10, 18, 6).toISOString();
+    assert.deepEqual(JSON.parse(await readFile(statePath(fixture), 'utf8')), { lastSuccess: until, lastBrief: fixture.dayDirectory });
+    const { stdout } = await exec(process.execPath, [startScript], { env: { ...process.env, MPX_AI_RETAINED: join(fixture.home, 'work') }, timeout: 20_000 });
+    assert.equal(Date.parse(JSON.parse(stdout).lastSuccess), Date.parse(until));
+  });
+});
+
+test('a --no-state run and a rebuild of an earlier day leave the record of the last brief', async () => {
+  await withFixture(async (fixture) => {
+    await runDocument(fixture, undefined, '--no-state');
+    assert.equal(existsSync(statePath(fixture)), false);
+    const laterBrief = { lastSuccess: new Date(2026, 10, 19, 6).toISOString(), lastBrief: 'the next day' };
+    await writeJson(statePath(fixture), laterBrief);
+    await runDocument(fixture);
+    assert.deepEqual(JSON.parse(await readFile(statePath(fixture), 'utf8')), laterBrief);
+  });
+});
+
 const appSkip = !existsSync(join(APP_DIRECTORY, 'package.json')) && 'the alfred-control-center repository is not checked out';
+
+test('a --no-state run gives a valid document with clips and writes no page and no record of the last brief', { skip: appSkip }, async () => {
+  const voiceStudio = await fakeVoiceStudio();
+  try {
+    await withFixture(async (fixture) => {
+      const sessionJudgement = (await judgement()).judgement;
+      await writeJson(join(fixture.dayDirectory, 'daily-brief.judgement.json'), sessionJudgement);
+      const voicing = await narrate(fixture.dayDirectory, voiceStudio.url);
+      assert.equal(voicing.exitCode, 0, voicing.stderr);
+      const { exitCode, stdout, document } = await runDocument(fixture, process.env.MPX_PROJECTS, '--no-state');
+      assert.equal(exitCode, 0, stdout);
+      assert.match(stdout, /Valid: every chapter can be shown\./);
+      assert.match(stdout, /; 0 narration sentences without a clip; the document is valid\./);
+      const sentences = Object.values(document.chapters).flatMap((chapter) => chapter.narration);
+      assert.equal(sentences.length, 3);
+      for (const sentence of sentences) assert.match(sentence.audio, /^[0-9a-f]{16}\.wav$/);
+      for (const pageFile of ['index.html', 'process.json']) assert.equal(existsSync(join(fixture.dayDirectory, pageFile)), false, pageFile);
+      assert.equal(existsSync(statePath(fixture)), false);
+    });
+  } finally {
+    await voiceStudio.close();
+  }
+});
 
 test('a judged document with clips and a health hint passes the app validator', { skip: appSkip }, async () => {
   await withFixture(async (fixture) => {
