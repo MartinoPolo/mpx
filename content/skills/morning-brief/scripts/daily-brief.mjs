@@ -2,9 +2,11 @@
 // Writes <day>/daily-brief.json, the document the Alfred control center serves, and checks it with the app's
 // validator. Calendar, mail and Slack come from the gatherers' sources, Code, Agents and the capture lines from the
 // page's brief.json, bookmarks from the bookmarks bridge; <day>/daily-brief.judgement.json adds the session's
-// judgement. The latest outcome the app wrote drops seen and kept items and brings back snoozed and undecided ones.
-// Prints the items with their ids and what still lacks judgement. Exit code 2 when the document is invalid or could
-// not be validated. Usage: daily-brief.mjs <day-directory>
+// judgement. The latest outcome the app wrote leaves out dismissed items and kept lines and brings back snoozed and
+// undecided ones. Prints the items with their ids, every item and bookmark still without judgement, the move
+// destinations, and a summary line counting what is unjudged and the chapters without narration, and keeps the same
+// report in <day>/daily-brief.log. Exit code 2 when the document is invalid or could not be validated.
+// Usage: daily-brief.mjs <day-directory>
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { readdir, readFile, rename, writeFile } from 'node:fs/promises';
@@ -19,13 +21,21 @@ const INSTANT_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z
 const MAIL_ADDRESS_PATTERN = /^[^\s@<>,]+@[^\s@<>,]+$/;
 const END_OF_DAY = '24:00';
 const SHORT_LENGTH = 60;
+const NARRATION_SENTENCE_LIMIT = 2;
 const VALIDATOR_TIMEOUT_MILLISECONDS = 120_000;
 const CALENDAR_NAMES = { work: 'Work', personal: 'Personal', wife: 'Wife' };
 const FORGES = ['github', 'gitlab'];
 const AGENT_OUTCOMES = { ok: 'succeeded', fail: 'failed', check: 'blocked', partial: 'running' };
 const ALERT_SENDERS = { sentry: 'Sentry', pipeline: 'Pipeline', monitoring: 'Monitoring' };
 const IMAP_REASON = 'The headless morning run cannot unlock IMAP passwords; Unlock reads this mailbox at the desk.';
-const UNCHECKED_TARGET_CHAPTERS = ['projects', 'plan', 'health'];
+// Projects targets are Orca's project names, which only the app reads; Plan and Health sentences target nothing.
+const UNCHECKED_TARGET_CHAPTERS = ['projects'];
+const UNTARGETED_CHAPTERS = ['plan', 'health'];
+const PROJECTS_FOLDER = '_Projekty';
+// The app's vault writers: a move or delete takes the line out, refused while lines are nested under it; done and
+// progress change the checkbox, refused on a plain bullet.
+const REMOVING_ACTIONS = ['move', 'delete'];
+const CHECKBOX_ACTIONS = ['done', 'progress'];
 const SEEN = { kind: 'seen' };
 const SNOOZE = { kind: 'snooze' };
 // A state the page shows that needs a decision, with the options suggested until the session judges the item.
@@ -101,22 +111,66 @@ function captureSource() {
   return { name, status: 'read', reason: null };
 }
 
+// The document's narration is an overview: a chapter keeps its first sentences, the rest is reported.
 function narrationOf(chapterName) {
-  return judgement.narration?.[chapterName] ?? [];
+  const sentences = Array.isArray(judgement.narration?.[chapterName]) ? judgement.narration[chapterName] : [];
+  if (sentences.length > NARRATION_SENTENCE_LIMIT) {
+    const cut = sentences.slice(NARRATION_SENTENCE_LIMIT).map((sentence) => `"${shorten(text(sentence?.text))}"`).join(', ');
+    problems.push(`${chapterName} narration has ${sentences.length} sentences; kept the first two, cut ${cut}.`);
+  }
+  return sentences.slice(0, NARRATION_SENTENCE_LIMIT);
 }
 
-// The text of every list line of a vault note, as the app finds a task: without its marker and checkbox.
-async function noteLineTexts(notePath) {
+const indentOf = (line) => line.match(/^\s*/)[0].length;
+
+// The text of every list line of a vault note, as the app finds a task: without its marker and checkbox. A started
+// line (`[/]`) is no capture: it is work in progress or a line handed to research. The app refuses to move, tick or
+// delete a line with lines nested under it.
+async function noteLines(notePath) {
   if (!noteLineCache.has(notePath)) {
     const noteText = await readFile(join(vaultDirectory, notePath), 'utf8').catch(() => '');
-    const lineTexts = noteText.split(/\r?\n/).map((line) => line.match(/^\s*(?:[-*+]|\d+[.)])\s+(?:\[.\]\s+)?(.*\S)\s*$/)?.[1]).filter(Boolean);
-    noteLineCache.set(notePath, new Set(lineTexts));
+    const lines = noteText.split(/\r?\n/);
+    const open = new Set();
+    const started = new Set();
+    const nested = new Set();
+    const plain = new Set();
+    lines.forEach((line, index) => {
+      const match = line.match(/^\s*(?:[-*+]|\d+[.)])\s+(?:\[(.)\]\s+)?(.*\S)\s*$/);
+      if (!match) return;
+      (match[1] === '/' ? started : open).add(match[2]);
+      if (match[1] === undefined) plain.add(match[2]);
+      const nextLine = lines[index + 1] ?? '';
+      if (nextLine.trim() && indentOf(nextLine) > indentOf(line)) nested.add(match[2]);
+    });
+    noteLineCache.set(notePath, { open, started, nested, plain });
   }
   return noteLineCache.get(notePath);
 }
 
-async function isNoteLinePresent(notePath, lineText) {
-  return !vaultDirectory || (await noteLineTexts(notePath)).has(lineText);
+// The headings below each project note's title, the places the app offers a capture to move under.
+async function moveDestinations() {
+  if (!vaultDirectory) return [];
+  const projectFolders = (await readdir(join(vaultDirectory, PROJECTS_FOLDER), { withFileTypes: true }).catch(() => []))
+    .filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
+  const destinations = [];
+  for (const folder of projectFolders) {
+    const notePath = `${PROJECTS_FOLDER}/${folder}/${folder}.md`;
+    const noteText = await readFile(join(vaultDirectory, notePath), 'utf8').catch(() => undefined);
+    if (noteText === undefined) continue;
+    const headings = noteText.split('\n').map((line) => line.match(/^﻿?(#{2,6})\s+(.*?)\s*$/)?.[2]).filter(Boolean);
+    destinations.push({ notePath, headings });
+  }
+  return destinations;
+}
+
+async function isNoteLineOpen(notePath, lineText) {
+  return !vaultDirectory || (await noteLines(notePath)).open.has(lineText);
+}
+
+// What the app's writers would refuse for a capture line already read: `nested` and `plain` are both false without a vault.
+function lineShapeOf({ notePath, lineText }) {
+  const lines = noteLineCache.get(notePath);
+  return { nested: Boolean(lines?.nested.has(lineText)), plain: Boolean(lines?.plain.has(lineText)) };
 }
 
 function calendarChapter() {
@@ -176,7 +230,9 @@ function mailMessage(mail, { options, ...message }) {
     return undefined;
   }
   const messageId = text(mail.messageId) || null;
-  return { id: briefItemId('mail', threadId), short: shorten(`${message.from}: ${message.subject}`), link: link(mail.url), options, threadId, messageId, ...message };
+  const short = shorten(`${message.from}: ${message.subject}`);
+  if (!messageId) problems.push(`Mail "${short}" has no messageId; a saved draft would start a new mail instead of replying.`);
+  return { id: briefItemId('mail', threadId), short, link: link(mail.url), options, threadId, messageId, ...message };
 }
 
 // A gathered `Name <address>` or bare address.
@@ -354,7 +410,8 @@ function codeChapter() {
         continue;
       }
       items.push({
-        id: briefItemId('code', reference.link),
+        // The state is part of the id: a dismissed pull request returns once its state changes.
+        id: briefItemId('code', reference.link, card.state),
         short: shorten(`${projectName} ${reference.label} ${title}`),
         link: reference.link,
         options: CODE_STATE_OPTIONS[card.state],
@@ -427,11 +484,16 @@ async function captureChapter() {
     for (const item of group.items ?? []) {
       const lineText = text(item.line) || text(item.text);
       if (!lineText) continue;
-      if (!(await isNoteLinePresent(notePath, lineText))) {
-        problems.push(`"${shorten(lineText)}" is not a list line of ${notePath}; left out (give the triage item its exact line).`);
+      if (!(await isNoteLineOpen(notePath, lineText))) {
+        problems.push((await noteLines(notePath)).started.has(lineText)
+          ? `"${shorten(lineText)}" is started ([/]) in ${notePath}; left out.`
+          : `"${shorten(lineText)}" is not a list line of ${notePath}; left out (a triage item's line is a whole bullet or task, exactly as it stands without marker and checkbox).`);
         continue;
       }
-      const suggestion = item.resolved ? { ...KEEP_LINE, action: 'done', because: text(item.resolution) || null } : KEEP_LINE;
+      // A resolved task is ticked; a resolved plain bullet is removed, unless lines nested under it keep it.
+      const { nested, plain } = lineShapeOf({ notePath, lineText });
+      const resolvedAction = plain ? (nested ? 'keep' : 'delete') : 'done';
+      const suggestion = item.resolved ? { ...KEEP_LINE, action: resolvedAction, because: text(item.resolution) || null } : KEEP_LINE;
       notes.push({ id: briefItemId('note', notePath, lineText), notePath, lineText, suggestion });
     }
   }
@@ -495,45 +557,80 @@ async function latestOutcome() {
 }
 
 async function isStillCurrent(listName, item) {
-  if (listName === 'capture notes') return isNoteLinePresent(item.notePath, item.lineText);
+  if (listName === 'capture notes') return isNoteLineOpen(item.notePath, item.lineText);
   if (listName === 'capture bookmarks') return capturedBookmarkIds.has(item.bookmarkId);
   return true;
 }
 
-// Seen items and kept lines are dropped; snoozed and undecided items of the outcome's document come back.
+// Item id to the time it was dismissed, or null when the outcome gives none. `dismissed` is the app's standing list of
+// every day; an app that does not yet write it lists only the day's dismissals, as `seen`.
+function dismissalsOf(outcome) {
+  if (!Array.isArray(outcome.dismissed)) return new Map(idsIn(outcome.seen).map((id) => [id, null]));
+  return new Map(outcome.dismissed.filter((entry) => typeof entry?.id === 'string').map(({ id, at }) => [id, isInstant(at) ? at : null]));
+}
+
+// A mail thread whose message arrived after its dismissal returns; any other dismissed item stays out, as its id names
+// one message, one state of a pull request or one run.
+function hasNewsSince(item, dismissedAt) {
+  return dismissedAt !== null && isInstant(item.receivedAt) && Date.parse(item.receivedAt) > Date.parse(dismissedAt);
+}
+
+// Dismissed items and kept lines are left out; snoozed and undecided items of the outcome's document come back.
 async function applyOutcome(document, { outcomeDay, outcome }) {
-  const dropped = new Set([...idsIn(outcome.seen), ...idsIn(outcome.kept)]);
+  const dismissals = dismissalsOf(outcome);
+  const keptIds = new Set(idsIn(outcome.kept));
   const returning = new Set([...idsIn(outcome.snoozed), ...idsIn(outcome.undecided)]);
   const earlierDocument = outcomeDay === day ? undefined : await readJson(join(dayDirectory, '..', outcomeDay, 'daily-brief.json'));
   const earlierLists = new Map(itemLists(earlierDocument));
-  let returnedCount = 0;
-  let droppedCount = 0;
+  const returnedIds = new Set();
+  let leftOutCount = 0;
+  let renewedCount = 0;
   for (const [listName, items] of itemLists(document)) {
     for (let index = items.length - 1; index >= 0; index--) {
-      if (dropped.has(items[index].id)) {
+      const { id } = items[index];
+      if (dismissals.has(id) && hasNewsSince(items[index], dismissals.get(id))) {
+        renewedCount++;
+      } else if (dismissals.has(id) || keptIds.has(id)) {
         items.splice(index, 1);
-        droppedCount++;
+        leftOutCount++;
       }
     }
     const presentIds = new Set(items.map((item) => item.id));
     for (const item of earlierLists.get(listName) ?? []) {
       if (!returning.has(item.id) || presentIds.has(item.id) || !(await isStillCurrent(listName, item))) continue;
       items.push(item);
-      returnedCount++;
+      returnedIds.add(item.id);
     }
   }
-  return `Outcome of ${outcomeDay}: ${droppedCount} seen or kept items dropped, ${returnedCount} snoozed or undecided items returned.`
+  const report = `Outcome of ${outcomeDay}: ${leftOutCount} dismissed or kept items left out, ${returnedIds.size} snoozed or undecided items returned, `
+    + `${renewedCount} dismissed mails back with a newer message.`
     + (Object.keys(outcome.feedback ?? {}).length > 0 ? `\nChapter feedback to respect: ${JSON.stringify(outcome.feedback)}` : '');
+  return { report, returnedIds };
 }
 
-function applyJudgement(document) {
+// The problems the app's writers would meet when the suggestion is accepted.
+function checkNoteSuggestion(note, destinations) {
+  const { action, destination } = note.suggestion;
+  const { nested, plain } = lineShapeOf(note);
+  const label = `"${shorten(note.lineText)}"`;
+  if (nested && REMOVING_ACTIONS.includes(action)) problems.push(`${label} has lines nested under it; the app refuses to ${action} it, so suggest keep.`);
+  if (plain && CHECKBOX_ACTIONS.includes(action)) problems.push(`${label} has no checkbox; the app refuses ${action} on it, so suggest delete or keep.`);
+  if (action !== 'move' || !vaultDirectory) return;
+  const offered = destinations.find((candidate) => candidate.notePath === destination?.notePath);
+  if (!offered?.headings.includes(destination?.heading)) {
+    problems.push(`${label} moves to ${destination?.notePath} under "${destination?.heading}", which is not among the move destinations.`);
+  }
+}
+
+function applyJudgement(document, destinations) {
   const knownIds = new Set();
-  for (const [, items] of itemLists(document)) {
+  for (const [listName, items] of itemLists(document)) {
     for (const item of items) {
       knownIds.add(item.id);
       const people = mailPeopleByItemId.get(item.id);
       if (judgement.options?.[item.id]) item.options = judgement.options[item.id].map((option) => (people ? addressedReply(option, item, people) : option));
       if (judgement.notes?.[item.id]) item.suggestion = judgement.notes[item.id];
+      if (listName === 'capture notes') checkNoteSuggestion(item, destinations);
     }
   }
   const unknownIds = [...Object.keys(judgement.options ?? {}), ...Object.keys(judgement.notes ?? {})].filter((id) => !knownIds.has(id));
@@ -548,9 +645,13 @@ function checkNarrationTargets(document) {
   ]);
   for (const [chapterName, chapter] of Object.entries(document.chapters)) {
     if (UNCHECKED_TARGET_CHAPTERS.includes(chapterName)) continue;
-    const unknown = (chapter.narration ?? []).flatMap((sentence) => sentence.targets ?? []).filter((target) => !targets.has(target));
-    if (unknown.length) problems.push(`${chapterName} narration targets nothing on the page: ${unknown.join(', ')}.`);
+    const unknown = (chapter.narration ?? []).flatMap((sentence) => sentence.targets ?? [])
+      .filter((target) => UNTARGETED_CHAPTERS.includes(chapterName) || !targets.has(target));
+    const hint = UNTARGETED_CHAPTERS.includes(chapterName) ? ` (its sentences target [])` : '';
+    if (unknown.length) problems.push(`${chapterName} narration targets nothing on the page: ${unknown.join(', ')}${hint}.`);
   }
+  const unknownChapters = Object.keys(judgement.narration ?? {}).filter((chapterName) => !Object.hasOwn(document.chapters, chapterName));
+  if (unknownChapters.length) problems.push(`The judgement narrates chapters the document does not have: ${unknownChapters.join(', ')}.`);
 }
 
 function validate(documentPath) {
@@ -595,8 +696,9 @@ const document = {
 };
 dropRepeatedItems(document);
 const latest = await latestOutcome();
-const outcomeReport = latest ? await applyOutcome(document, latest) : 'No outcome from the app yet.';
-applyJudgement(document);
+const { report: outcomeReport, returnedIds } = latest ? await applyOutcome(document, latest) : { report: 'No outcome from the app yet.', returnedIds: new Set() };
+const destinations = await moveDestinations();
+applyJudgement(document, destinations);
 checkNarrationTargets(document);
 
 const documentPath = join(dayDirectory, 'daily-brief.json');
@@ -604,20 +706,41 @@ const documentPath = join(dayDirectory, 'daily-brief.json');
 await writeFile(`${documentPath}.partial`, `${JSON.stringify(document, null, 2)}\n`);
 await rename(`${documentPath}.partial`, documentPath);
 
-const judgedIds = new Set([...Object.keys(judgement.options ?? {}), ...Object.keys(judgement.notes ?? {})]);
-const itemLines = itemLists(document).flatMap(([listName, items]) => items.map((item) => {
-  const judged = listName === 'capture bookmarks' || judgedIds.has(item.id) ? 'judged ' : 'default';
-  return `  ${judged}  ${item.id}  ${listName}: ${item.short ?? item.lineText ?? item.bookmarkId}`;
-}));
-const unjudgedBookmarks = (capture?.bookmarks ?? []).filter((bookmark) => !judgement.bookmarks?.[String(bookmark.id)])
+function itemLabel(item) {
+  if (!item.lineText) return item.short ?? item.bookmarkId;
+  const { nested, plain } = lineShapeOf(item);
+  return `${item.lineText}${nested ? '  [lines nested under it: keep]' : ''}${plain ? '  [plain bullet: no done or progress]' : ''}`;
+}
+const itemLines = itemLists(document).flatMap(([listName, items]) => items.map((item) => `  ${item.id}  ${listName}: ${itemLabel(item)}`));
+// A bookmark is judged once it is in the document; a returned item keeps the judgement of the day it came from.
+const judgedIds = new Set([...Object.keys(judgement.options ?? {}), ...Object.keys(judgement.notes ?? {}), ...returnedIds]);
+const unjudgedLists = itemLists(document).filter(([listName]) => listName !== 'capture bookmarks')
+  .map(([listName, items]) => [listName, items.filter((item) => !judgedIds.has(item.id))])
+  .filter(([, items]) => items.length > 0);
+const unjudgedItemCount = unjudgedLists.reduce((count, [, items]) => count + items.length, 0);
+const unjudgedItemLines = unjudgedLists.flatMap(([listName, items]) => [`  ${listName}:`, ...items.map((item) => `    ${item.id}  ${itemLabel(item)}`)]);
+const documentBookmarkIds = new Set(document.chapters.capture.bookmarks.map((bookmark) => bookmark.bookmarkId));
+const keptArticleIds = new Set(idsIn(latest?.outcome.keptBookmarks).map(String));
+const unjudgedBookmarks = (capture?.bookmarks ?? [])
+  .filter((bookmark) => !documentBookmarkIds.has(String(bookmark.id)) && !keptArticleIds.has(String(bookmark.id)))
   .map((bookmark) => `  ${bookmark.id}  ${bookmark.title}  ${bookmark.url}`);
+const unnarratedChapters = Object.entries(document.chapters).filter(([, chapter]) => chapter.narration.length === 0).map(([chapterName]) => chapterName);
 const validation = validate(documentPath);
-console.log([
+const plural = (count, noun) => `${count} ${noun}${count === 1 ? '' : 's'}`;
+const destinationLines = destinations.map(({ notePath, headings }) => `  ${notePath}: ${headings.join(' | ') || 'no headings'}`);
+const report = [
   `Wrote ${documentPath}`,
   outcomeReport,
   `Items:\n${itemLines.join('\n') || '  none'}`,
+  `Items without judgement (judge each in daily-brief.judgement.json):\n${unjudgedItemLines.join('\n') || '  none'}`,
   `Bookmarks without judgement:\n${unjudgedBookmarks.join('\n') || '  none'}`,
+  `Move destinations (note: headings):\n${destinationLines.join('\n') || '  none'}`,
   `Problems:\n${problems.map((problem) => `  ${problem}`).join('\n') || '  none'}`,
   validation.report,
-].join('\n'));
+  `Summary: ${plural(unjudgedItemCount, 'item')} and ${plural(unjudgedBookmarks.length, 'bookmark')} without judgement; `
+    + `${plural(unnarratedChapters.length, 'chapter')} without narration${unnarratedChapters.length ? ` (${unnarratedChapters.join(', ')})` : ''}; `
+    + `the document is ${validation.valid ? 'valid' : 'not valid'}.`,
+].join('\n');
+await writeFile(join(dayDirectory, 'daily-brief.log'), `${report}\n`);
+console.log(report);
 process.exit(validation.valid ? 0 : 2);

@@ -72,17 +72,20 @@ foreground wait, never by ending the turn.
    is a VoiceStudio profile id or name (`--voice`, `MORNING_BRIEF_VOICE`, default `Morning brief`)
    and `--language` (`MORNING_BRIEF_LANGUAGE`, default `en`) must match the language of the `say`
    sentences. Exit code 2 when the backend cannot start or a clip fails: continue, the page falls
-   back to the browser voice. Narration stays on the machine.
+   back to the browser voice. Narration stays on the machine. Only the page's beats are voiced: the
+   document's narration has no clips.
 6. `node "<skill-dir>/scripts/build.mjs" <dayDirectory> --commit-state` (omit the flag for
    `--no-state`) validates the brief, writes a `process.token` into it when missing, writes
    `process.json`, and renders `index.html`. Open the page in a browser and step through every beat
    before delivering: nothing overlaps, every highlight lands on what is said.
-7. Only after the page, so it never delays or breaks it, write the [document](#daily-briefjson):
-   `node "<skill-dir>/scripts/daily-brief.mjs" <dayDirectory>` writes `daily-brief.json` and lists
-   its items with their ids, the bookmarks still to judge and its problems. Write
-   `<dayDirectory>/daily-brief.judgement.json`, then run the script again; it ends with the app's
-   validator. Fix what you can and rerun; exit code 2 means a chapter is still invalid or the
-   validator could not run.
+7. After the page, write the [document](#daily-briefjson) and its judgement; the run is not done
+   without both. `node "<skill-dir>/scripts/daily-brief.mjs" <dayDirectory>` writes
+   `daily-brief.json`, lists its items with their ids, then **Items without judgement**,
+   **Bookmarks without judgement**, the move destinations, its problems, the app's validator and a
+   summary line counting what is unjudged and the chapters without narration; it keeps the same
+   report in `daily-brief.log`. Write `<dayDirectory>/daily-brief.judgement.json` and rerun until
+   both lists say none and every problem you can fix is fixed. Exit code 2 means a chapter is
+   still invalid or the validator could not run.
 
 ## Areas
 
@@ -113,10 +116,15 @@ foreground wait, never by ending the turn.
   Routines are not reported: skipped or scheduled runs that did nothing, and the brief's own runs.
 - **Obsidian triage**: daily notes in `$MPX_OBSIDIAN_VAULT/Daily/` from the window and today, and
   changes to `Ideas.md`. Unchecked dump bullets and tasks not yet under a capture heading become
-  items with a proposed destination (a `## Inbox`, `## Ideas` or `## Tasks` section of
-  `_Projekty/<project>/<project>.md`, or a daily capture heading) and priority. Link each to its note with `obsidian://open?vault=<vault>&file=<path>`.
-  A group's `note` is its vault path without `.md`; each item keeps `line`, its text exactly as it
-  stands in the note without list marker or checkbox, however `text` rewords it.
+  items with a proposed destination and priority. The app moves a line only under an existing
+  heading below the title of a project note, `_Projekty/<project>/<project>.md` (such as
+  `## Inbox`, `## Ideas`, `## Tasks`), so propose no other place. One that reads as brainstorming
+  or a question to look into proposes research, with the question. Only bullets and tasks are
+  captures: leave out plain paragraphs and started `[/]` lines. Link each to its note with
+  `obsidian://open?vault=<vault>&file=<path>`. A group's `note` is its vault path without `.md`;
+  each item keeps `line`, the whole line copied character for character (emoji, tags and links
+  included) without list marker or checkbox, however `text` rewords it; `daily-brief.mjs` leaves
+  out an item whose line it cannot find.
   Before proposing a capture, check the vault for it: one already filed, done or superseded gets
   `resolved: true` and a `resolution` of a few words with the evidence. Resolved captures stay
   listed, shown as done; they count neither in `count` nor toward `needs`. I can mark any capture
@@ -198,14 +206,20 @@ brief itself.
 The document the Alfred control center serves. Its contract, validator and sample belong to the app:
 `packages/core/src/brief/` in `$MPX_PROJECTS/alfred-control-center`. `daily-brief.mjs` writes
 everything that comes from data: the calendar days and events from the gatherers, one mailbox per
-connector account (each mail with the `messageId` a saved draft replies to), Slack items with their permalinks, Code from the merge request cards that are
-ready, in review or failing (merged ones as `merged`), Agents from the overnight runs, the triage
-captures whose line still stands in its note, the sources, and every item id, a hash of the item's
-source reference (`brief-id.mjs`). It drops what the app's latest outcome marks seen or kept, brings
-back what it marks snoozed or undecided, and prints its chapter feedback for you to follow. Issue
-boards, AI retro, instructions and AI news stay on the page only.
+connector account (each mail with the `messageId` a saved draft replies to), Slack items with their
+permalinks, Code from the merge request cards that are ready, in review or failing (merged ones as
+`merged`), Agents from the overnight runs, the triage captures whose line still stands in its note,
+the sources, and every item id, a hash of the item's source reference (`brief-id.mjs`; a pull
+request's with its state). From the app's latest outcome it
+leaves out the `dismissed` items, unless a mail's newest message arrived after the dismissal (a
+Slack message, a pull request's state and a run never change, so they stay out), and the kept
+lines; brings back what it marks snoozed or undecided; leaves the kept articles (`keptBookmarks`)
+unjudged; and prints its chapter feedback for you to follow. Issue boards, AI retro, instructions
+and AI news stay on the page only.
 
-`daily-brief.judgement.json` adds the judgement; every key is optional:
+`daily-brief.judgement.json` adds the judgement. `options`, `notes`, `bookmarks` and `narration`
+are required work, covering every item the script lists without judgement; the other keys as they
+apply:
 
 - `calendars`: gatherer calendar id to `work`, `personal`, `wife` or `skip`; by default the work
   account's and free/busy calendars are work, my own personal and the rest skipped.
@@ -213,21 +227,42 @@ boards, AI retro, instructions and AI news stay on the page only.
 - `mailboxes`: every mailbox without a connector that the home's instructions name (`id` as its mail
   server names the account, `label`, `provider`, `account`). They are written as not read: the
   headless run cannot unlock them.
-- `options`: item id to its options in suggested order, as the contract types them: reply drafts
-  (`subject` for mail, `where` for Slack), events, tasks, `snooze`, `seen`, and actions on Code and
-  Agents. A mail reply's `to` names its recipients, or is left out for the sender;
-  `daily-brief.mjs` writes each as `Name <address>` from the gathered message and reports a name
-  it cannot address, which the app refuses until I add one. Without, a mail ask is snoozed, other messages and runs are seen, and a card offers Merge,
-  Rerun or Review today by its state.
-- `notes`: capture item id to its suggestion; without, a resolved capture is done and the rest kept.
+- `options`: every mail, Slack, Code and Agents item id to what it suggests, in order, as the
+  contract types them. The list replaces the default whole and needs one entry at least. The app
+  always shows Snooze and Dismiss (`seen`) and highlights the one listed, so list one only as the
+  suggestion, alone for an item that needs nothing else. A `reply` draft wherever the sender waits
+  for an answer, in my voice and the thread's language (`subject` for mail, `where` for Slack); an
+  `event` or `task` where the message asks for one; on Code and Agents an `action` (`label`,
+  `icon` from the app's `ACTION_ICONS` in
+  `packages/ui/src/lib/components/blocks/decision-item/decision-group-icons.ts`, `execution`):
+  `merge`, `rerun`, `reminder` (a Plan row for me), or `session` (a new Orca session in
+  `projectName` running `prompt`). A mail reply's `to` names its recipients, or is left out for
+  the sender; `daily-brief.mjs` writes each as `Name <address>` from the gathered message and
+  reports a name it cannot address, which the app refuses until I add one. A Slack reply's `to`
+  and `where` are only shown: it goes to the permalink's thread. An unjudged item keeps a default:
+  a mail ask snoozed, other messages and runs dismissed, a card Merge, Rerun or Review today.
+  Judge and narrate only what was read: a thread the gatherer could not read in full is said to be
+  not read in full, never filled in.
+- `notes`: every capture id to its suggestion: `move` with `destination` (`notePath`, `heading`:
+  one of the move destinations the script lists), `priority` (1 to 5) and optional new `wording`;
+  `research` with the question as `wording`, for a line that reads as brainstorming or a question;
+  `done`, `progress` (with the `link` of the issue or pull request that tracks it), `delete` or
+  `keep`. Only a move carries `destination` and `priority`, and only a move or research `wording`;
+  any may say `because`. The app refuses to move or delete a line with lines nested under it and to
+  tick a plain bullet; the script marks both, and refused suggestions are problems. An unjudged
+  capture is kept, or done when resolved (deleted when a plain bullet).
 - `bookmarks`: every `capture.json` bookmark id to its `kind`, `suggestion` and `csfd`;
   `wishlists` lists the wishlists a shop find can move to.
 - `quietRuns`: automations that ran fine and sessions closed in the window.
 - `reminders`: Plan reminders, the home's additions such as deadlines and the monthly invoice.
 - `hints`: health hints, only once the vault has a health note.
-- `narration`: chapter name to its sentences (`text`, `targets`), spoken like the page's beats.
-  Targets are item ids, mailbox ids or calendar days, project names on `projects`, and `[]` for a
-  sentence about nothing shown.
+- `narration`: per document chapter (`calendar`, `mail`, `slack`, `code`, `agents`, `capture`,
+  `projects`, `plan`, `health`) an overview of at most two short sentences (`text`, `targets`)
+  saying what matters, such as the event that shapes the day or how many messages wait;
+  none where nothing is worth saying. `daily-brief.mjs` keeps the first two and reports the rest.
+  Targets are item ids, mailbox ids or calendar days, and `[]` for a sentence about nothing shown,
+  always on `plan` and `health`. On `projects` they are Orca's project names, exactly as the app's
+  `GET /api/projects` lists them, letter case included, which `daily-brief.mjs` cannot check.
 
 ## Narration
 
@@ -307,6 +342,6 @@ operation is done.
 
 Report the `file:///` link to `index.html` first, then sources that were unavailable and why, the
 gatherer cost, narrated characters, and action point count. Then the document's result: each chapter
-the validator calls invalid with its reason, and the problems `daily-brief.mjs` printed. The page is
-local. Publish it as an artifact only when asked, from the work account; before sharing beyond me, ask whether personal mail and calendar items stay.
+the validator calls invalid with its reason, the problems `daily-brief.mjs` printed, and its summary
+line. The page is local. Publish it as an artifact only when asked, from the work account; before sharing beyond me, ask whether personal mail and calendar items stay.
 End with the [result line]({{MPX_SHARED_INSTRUCTIONS}}/RESULT_LINE.md) linking the page.
