@@ -394,6 +394,50 @@ test('a narration sentence carries the clip recorded for its exact text while th
   });
 });
 
+const OPEN_EPISODE = 'Medical records/2026-11-12 Lower back pain.md';
+const SYNTHETIC_CHECK_IN = 'stretched before the synthetic walk';
+
+async function writeEpisodeNotes(fixture: Fixture): Promise<void> {
+  const notes: Record<string, string> = {
+    [OPEN_EPISODE]: `---\nillness: "Lower back pain"\nstarted: 2026-11-12\nended:\ntreatment: ""\n---\n\n- 2026-11-17 · pain 4 · better · ${SYNTHETIC_CHECK_IN} ·\n`,
+    'Medical records/2026-10-01 Flu.md': '---\nillness: "Flu"\nstarted: 2026-10-01\nended: 2026-10-08\n---\n',
+    'Medical records/Diet.md': '---\ntopic: diet\n---\n',
+    'Medical records/Archive/2026-01-03 Cold.md': '---\nillness: "Cold"\nended:\n---\n',
+  };
+  for (const [notePath, noteText] of Object.entries(notes)) {
+    await mkdir(dirname(join(fixture.vault, notePath)), { recursive: true });
+    await writeFile(join(fixture.vault, notePath), noteText);
+  }
+}
+
+test('the open episode notes are listed by path and a hint for any other note is left out', async () => {
+  await withFixture(async (fixture) => {
+    await writeEpisodeNotes(fixture);
+    const openHint = { conditionId: OPEN_EPISODE, text: 'Keep the short walks; see a doctor if it gets worse over several days.' };
+    await writeJson(join(fixture.dayDirectory, 'daily-brief.judgement.json'), {
+      hints: [openHint, { conditionId: 'Medical records/2026-10-01 Flu.md', text: 'Rest.' }],
+    });
+    const { stdout, document } = await runDocument(fixture);
+    assert.deepEqual(document.chapters.health.hints, [openHint]);
+    assert.match(stdout, /Open health episodes \(read each note, one hint per path\):\n {2}Medical records\/2026-11-12 Lower back pain\.md\nProblems:/);
+    assert.match(stdout, /A hint names Medical records\/2026-10-01 Flu\.md, which is not an open episode note; left out\./);
+    assert.doesNotMatch(stdout, new RegExp(SYNTHETIC_CHECK_IN), 'a note is listed by its path, never by its contents');
+
+    await writeJson(join(fixture.dayDirectory, 'daily-brief.judgement.json'), {});
+    assert.match((await runDocument(fixture)).stdout, /Medical records\/2026-11-12 Lower back pain\.md {2}\[no hint\]\n/);
+  });
+});
+
+test('without open episodes there are no hints', async () => {
+  await withFixture(async (fixture) => {
+    await writeJson(join(fixture.dayDirectory, 'daily-brief.judgement.json'), { hints: [{ conditionId: OPEN_EPISODE, text: 'Walk.' }] });
+    const { stdout, document } = await runDocument(fixture);
+    assert.deepEqual(document.chapters.health.hints, []);
+    assert.match(stdout, /Open health episodes \(read each note, one hint per path\):\n {2}none\n/);
+    assert.match(stdout, /A hint names Medical records\/2026-11-12 Lower back pain\.md, which is not an open episode note/);
+  });
+});
+
 test('a gatherer that failed leaves its mailbox and source not read', async () => {
   await withFixture(async (fixture) => {
     await writeJson(join(fixture.dayDirectory, 'sources', 'work.json'), { status: 'unavailable', reason: 'work gatherer: timed out after 12 minutes' });
@@ -510,15 +554,17 @@ test('an outcome without chapter feedback prints no feedback line', async () => 
 
 const appSkip = !existsSync(join(APP_DIRECTORY, 'package.json')) && 'the alfred-control-center repository is not checked out';
 
-test('a judged document with clips passes the app validator', { skip: appSkip }, async () => {
+test('a judged document with clips and a health hint passes the app validator', { skip: appSkip }, async () => {
   await withFixture(async (fixture) => {
     const sessionJudgement = (await judgement()).judgement;
-    await writeJson(join(fixture.dayDirectory, 'daily-brief.judgement.json'), sessionJudgement);
+    await writeEpisodeNotes(fixture);
+    await writeJson(join(fixture.dayDirectory, 'daily-brief.judgement.json'), { ...sessionJudgement, hints: [{ conditionId: OPEN_EPISODE, text: 'Keep walking.' }] });
     await writeJson(join(fixture.dayDirectory, 'daily-brief.clips.json'), { [sessionJudgement.narration.calendar[0]!.text]: { audio: '0a1b2c3d4e5f6a7b.wav', audioSeconds: 2.4 } });
     await writeClip(fixture, '0a1b2c3d4e5f6a7b.wav');
     const { exitCode, stdout, document } = await runDocument(fixture, process.env.MPX_PROJECTS);
     assert.equal(exitCode, 0, stdout);
     assert.equal(document.chapters.calendar.narration[0].audio, '0a1b2c3d4e5f6a7b.wav');
+    assert.equal(document.chapters.health.hints.length, 1);
     assert.match(stdout, /Valid: every chapter can be shown\./);
   });
 });

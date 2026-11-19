@@ -80,9 +80,10 @@ foreground wait, never by ending the turn.
 7. After the page, write the [document](#daily-briefjson) and its judgement; the run is not done
    without both. `node "<skill-dir>/scripts/daily-brief.mjs" <dayDirectory>` writes
    `daily-brief.json`, lists its items with their ids, then **Items without judgement**,
-   **Bookmarks without judgement**, the move destinations, its problems, the app's validator and a
-   summary line counting what is unjudged, the chapters without narration and the narration
-   sentences without a clip; it keeps the same report in `daily-brief.log`. Write
+   **Bookmarks without judgement**, the move destinations, the open health episode notes by path,
+   its problems, the app's validator and a summary line counting what is unjudged, the chapters
+   without narration and the narration sentences without a clip; it keeps the same report in
+   `daily-brief.log`. Write
    `<dayDirectory>/daily-brief.judgement.json`, narration included, and rerun until both lists say
    none and every problem you can fix is fixed. Exit code 2 means a chapter is still invalid or the
    validator could not run.
@@ -260,7 +261,10 @@ apply:
   `wishlists` lists the wishlists a shop find can move to.
 - `quietRuns`: automations that ran fine and sessions closed in the window.
 - `reminders`: Plan reminders, the home's additions such as deadlines and the monthly invoice.
-- `hints`: health hints, only once the vault has a health note.
+- `hints`: one per open health episode note the script lists, `conditionId` its path and `text`
+  one short practical hint. Read each listed note yourself, without a subagent: what to try or watch
+  given its check-ins, no diagnosis, and to see a doctor when it worsens over several days. Never
+  quote a note. A hint for any other path is a problem and left out.
 - `narration`: per document chapter (`calendar`, `mail`, `slack`, `code`, `agents`, `capture`,
   `projects`, `plan`, `health`) an overview of at most two short sentences (`text`, `targets`)
   saying what matters, such as the event that shapes the day or how many messages wait;
