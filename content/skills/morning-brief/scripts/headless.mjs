@@ -1,4 +1,4 @@
-// The headless cheap-model recipe shared by gather.mjs, apply.mjs and news-digest.mjs: one Claude session per
+// The headless cheap-model recipe shared by gather.mjs, apply.mjs, news-digest.mjs and mailboxes.mjs: one Claude session per
 // account, launched through mpx in print mode with only the listed tools allowed.
 import { spawn, spawnSync } from 'node:child_process';
 import { isAbsolute, join } from 'node:path';
@@ -12,7 +12,7 @@ export function contentRoot() {
   return root && isAbsolute(root) ? root : null;
 }
 
-function stopTree(child) {
+export function stopTree(child) {
   if (process.platform === 'win32') spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
   else child.kill('SIGKILL');
 }
