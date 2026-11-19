@@ -136,6 +136,28 @@ test('the document narration is voiced up to the two kept sentences per chapter 
   }
 });
 
+test('the document narration voices the news digest\'s sentence unless the judgement narrates news', async () => {
+  const voiceStudio = await fakeVoiceStudio();
+  try {
+    await withDayDirectory(async (dayDirectory) => {
+      const mail = [{ text: 'Two mails wait.', targets: ['personal'] }];
+      await mkdir(join(dayDirectory, 'sources'));
+      await writeFile(join(dayDirectory, 'sources', 'news-digest.json'), JSON.stringify({
+        status: 'ok', lead: null, releases: [], narration: { text: 'Model Nine leads the news.', links: [] },
+      }));
+      await writeJudgement(dayDirectory, { mail });
+      assert.equal((await narrate(dayDirectory, voiceStudio.url, '--document')).exitCode, 0);
+      assert.deepEqual(voiceStudio.spokenTexts, ['Two mails wait.', 'Model Nine leads the news.']);
+
+      await writeJudgement(dayDirectory, { mail, news: [{ text: 'Nothing new in AI.', targets: [] }] });
+      assert.equal((await narrate(dayDirectory, voiceStudio.url, '--document')).exitCode, 0);
+      assert.deepEqual(Object.keys(await readClips(dayDirectory)), ['Two mails wait.', 'Nothing new in AI.']);
+    });
+  } finally {
+    await voiceStudio.close();
+  }
+});
+
 test('without a backend the narration keeps only the clips rendered before and the script exits 2', async () => {
   const voiceStudio = await fakeVoiceStudio();
   try {
@@ -150,6 +172,8 @@ test('without a backend the narration keeps only the clips rendered before and t
       assert.match(run.stderr, /VoiceStudio is not reachable at .* and could not be started/);
       assert.match(run.stdout, /voiced 1 of 2 narration sentences, 0 rendered/);
       assert.deepEqual(Object.keys(await readClips(dayDirectory)), [kept.text]);
+      const log = await readFile(join(dayDirectory, 'narrate-document.log'), 'utf8');
+      assert.match(log, /^voiced 1 of 2 narration sentences, 0 rendered.*\nVoiceStudio is not reachable/, 'the result line stays in the day folder');
     });
   } finally {
     await voiceStudio.close();

@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // Voices every beat of <day>/brief.json with VoiceStudio into <day>/audio/ and records each clip's path and length on
 // its beat. With --document it voices instead the sentences the daily brief document keeps of the judgement's
-// narration and records each clip's file name and length by sentence text in <day>/daily-brief.clips.json, which
+// narration and the news digest's sentence, and records each clip's file name and length by sentence text in <day>/daily-brief.clips.json, which
 // daily-brief.mjs writes on the sentences. Clips are keyed by voice, language and text, so a rerun only renders changed
-// sentences. When the backend is not running, it is started from the VoiceStudio checkout for this run and stopped
+// sentences; the document's run keeps its result line in <day>/narrate-document.log. When the backend is not running, it is started from the VoiceStudio checkout for this run and stopped
 // afterwards, so nothing stays resident between briefs. Exit code 2 when the backend cannot start or a clip fails.
 // Usage: narrate.mjs <day-directory> [--document] [--voice <profile id or name>] [--language <ISO 639-1>]
 import { spawn, spawnSync } from 'node:child_process';
@@ -13,7 +13,7 @@ import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { parseArgs } from 'node:util';
-import { DOCUMENT_CLIPS_FILE, JUDGEMENT_FILE, judgedSentences, NARRATION_SENTENCE_LIMIT } from './document-narration.mjs';
+import { DOCUMENT_CLIPS_FILE, documentSentences, JUDGEMENT_FILE, NARRATION_SENTENCE_LIMIT, NEWS_DIGEST_FILE } from './document-narration.mjs';
 
 const DEFAULT_BACKEND = 'http://127.0.0.1:3900';
 const DEFAULT_VOICE = 'Morning brief';
@@ -24,6 +24,7 @@ const STARTUP_POLL_MILLISECONDS = 2000;
 // The first request loads the model onto the GPU.
 const REQUEST_TIMEOUT_MILLISECONDS = 300000;
 const RETRY_ATTEMPTS = 5;
+const DOCUMENT_NARRATION_LOG = 'narrate-document.log';
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,
@@ -42,12 +43,14 @@ const readJson = async (path) => JSON.parse((await readFile(path, 'utf8')).repla
 const briefPath = join(dayDirectory, 'brief.json');
 const brief = values.document ? undefined : await readJson(briefPath);
 const judgement = values.document ? await readJson(join(dayDirectory, JUDGEMENT_FILE)) : undefined;
+const newsDigest = values.document ? await readJson(join(dayDirectory, NEWS_DIGEST_FILE)).catch(() => undefined) : undefined;
 await mkdir(join(dayDirectory, 'audio'), { recursive: true });
 
 const exists = (path) => access(path).then(() => true, () => false);
 const beats = brief ? brief.chapters.flatMap((chapter) => (chapter.beats ?? []).filter((beat) => beat.say && !beat.hold)) : [];
 const sentenceTexts = judgement
-  ? Object.keys(judgement.narration ?? {}).flatMap((chapterName) => judgedSentences(judgement, chapterName).slice(0, NARRATION_SENTENCE_LIMIT))
+  ? [...new Set([...Object.keys(judgement.narration ?? {}), 'news'])]
+    .flatMap((chapterName) => documentSentences(judgement, newsDigest, chapterName).slice(0, NARRATION_SENTENCE_LIMIT))
     .map((sentence) => sentence?.text).filter((text) => typeof text === 'string' && text.trim())
   : [];
 const texts = [...new Set(brief ? beats.map((beat) => beat.say) : sentenceTexts)];
@@ -175,8 +178,8 @@ if (brief) {
 const totalSeconds = [...clips.values()].reduce((total, clip) => total + clip.seconds, 0);
 const rendered = missing.filter((text) => clips.has(text)).length;
 const started = startedBackend ? ', backend started and stopped for this run' : '';
-console.log(`voiced ${clips.size} of ${texts.length} ${spokenUnit}, ${rendered} rendered${started}, ${Math.round(totalSeconds)} s, ${texts.reduce((total, text) => total + text.length, 0)} characters`);
-if (failures.length) {
-  console.error(failures.join('\n'));
-  process.exit(2);
-}
+const resultLine = `voiced ${clips.size} of ${texts.length} ${spokenUnit}, ${rendered} rendered${started}, ${Math.round(totalSeconds)} s, ${texts.reduce((total, text) => total + text.length, 0)} characters`;
+console.log(resultLine);
+if (failures.length) console.error(failures.join('\n'));
+if (!brief) await writeFile(join(dayDirectory, DOCUMENT_NARRATION_LOG), `${[resultLine, ...failures].join('\n')}\n`);
+if (failures.length) process.exit(2);

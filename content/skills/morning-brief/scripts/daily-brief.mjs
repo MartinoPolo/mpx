@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 // Writes <day>/daily-brief.json, the document the Alfred control center serves, and checks it with the app's
 // validator. Calendar, mail and Slack come from the gatherers' sources, Code, Agents and the capture lines from the
-// page's brief.json, bookmarks from the bookmarks bridge; <day>/daily-brief.judgement.json adds the session's
+// page's brief.json, bookmarks from the bookmarks bridge, AI news from sources/news.json with the picks and summaries of
+// sources/news-digest.json; <day>/daily-brief.judgement.json adds the session's
 // judgement and <day>/daily-brief.clips.json the narration's clips. The latest outcome the app wrote leaves out
 // dismissed items and kept lines and brings back snoozed and undecided ones. Prints the items with their ids, every
-// item and bookmark still without judgement, the move destinations, the open health episode notes by path (never their
-// contents), and a summary line counting what is unjudged, the chapters without narration and the narration sentences
-// without a clip, and keeps the same report in <day>/daily-brief.log. Exit code 2 when the document is invalid or could
+// item and bookmark still without judgement with its default, the move destinations, the open health episode notes by
+// path (never their contents), and a summary line counting what is unjudged and the narration sentences without a clip
+// and naming the chapters without narration, and keeps the same report in <day>/daily-brief.log. Exit code 2 when the document is invalid or could
 // not be validated.
 // Usage: daily-brief.mjs <day-directory>
 import { spawnSync } from 'node:child_process';
@@ -15,7 +16,7 @@ import { readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, isAbsolute, join } from 'node:path';
 import { briefItemId } from './brief-id.mjs';
-import { DOCUMENT_CLIPS_FILE, JUDGEMENT_FILE, judgedSentences, NARRATION_SENTENCE_LIMIT } from './document-narration.mjs';
+import { DOCUMENT_CLIPS_FILE, documentSentences, JUDGEMENT_FILE, NARRATION_SENTENCE_LIMIT, NEWS_DIGEST_FILE, NEWS_FILE } from './document-narration.mjs';
 import { localIso } from './local-time.mjs';
 
 const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -44,12 +45,16 @@ const REMOVING_ACTIONS = ['move', 'delete'];
 const CHECKBOX_ACTIONS = ['done', 'progress'];
 const SEEN = { kind: 'seen' };
 const SNOOZE = { kind: 'snooze' };
-// A state the page shows that needs a decision, with the options suggested until the session judges the item.
+// A state the page shows that needs a decision, with the options suggested until the session judges the item. The app
+// always offers Snooze and Dismiss, so a list with a real suggestion does not repeat them.
 const CODE_STATE_OPTIONS = {
-  ready: [{ kind: 'action', label: 'Merge', icon: 'git-merge', execution: { kind: 'merge' } }, SNOOZE],
-  failing: [{ kind: 'action', label: 'Rerun', icon: 'rotate-ccw', execution: { kind: 'rerun' } }, SNOOZE],
-  review: [{ kind: 'action', label: 'Review today', icon: 'eye', execution: { kind: 'reminder' } }, SNOOZE],
+  ready: [{ kind: 'action', label: 'Merge', icon: 'git-merge', execution: { kind: 'merge' } }],
+  failing: [{ kind: 'action', label: 'Rerun', icon: 'rotate-ccw', execution: { kind: 'rerun' } }],
+  review: [{ kind: 'action', label: 'Review today', icon: 'eye', execution: { kind: 'reminder' } }],
 };
+// The judgement's value for an item whose default options or capture suggestion stand.
+const ACCEPT_DEFAULT = 'default';
+const OPTION_LABELS = { snooze: 'Snooze', seen: 'Dismiss', reply: 'Reply', event: 'Event', task: 'Task' };
 const KEEP_LINE = { action: 'keep', destination: null, wording: null, priority: null, because: null, link: null };
 
 const [dayDirectory] = process.argv.slice(2);
@@ -81,6 +86,8 @@ const brief = await readJson(join(dayDirectory, 'brief.json'));
 const capture = await readJson(join(dayDirectory, '..', '..', 'bookmarks', 'capture.json'));
 const judgement = (await readJson(join(dayDirectory, JUDGEMENT_FILE))) ?? {};
 const clipsByText = (await readJson(join(dayDirectory, DOCUMENT_CLIPS_FILE))) ?? {};
+const news = await readJson(join(dayDirectory, NEWS_FILE));
+const newsDigest = await readJson(join(dayDirectory, NEWS_DIGEST_FILE));
 const vaultDirectory = process.env.MPX_OBSIDIAN_VAULT;
 const noteLineCache = new Map();
 const mailPeopleByItemId = new Map();
@@ -127,7 +134,7 @@ function clipOf(sentenceText) {
 
 // A chapter keeps its first sentences, each with its clip; the rest is reported.
 function narrationOf(chapterName) {
-  const sentences = judgedSentences(judgement, chapterName);
+  const sentences = documentSentences(judgement, newsDigest, chapterName);
   if (sentences.length > NARRATION_SENTENCE_LIMIT) {
     const cut = sentences.slice(NARRATION_SENTENCE_LIMIT).map((sentence) => `"${shorten(text(sentence?.text))}"`).join(', ');
     problems.push(`${chapterName} narration has ${sentences.length} sentences; kept the first two, cut ${cut}.`);
@@ -279,7 +286,6 @@ function mailMessage(mail, { options, ...message }) {
   }
   const messageId = text(mail.messageId) || null;
   const short = shorten(`${message.from}: ${message.subject}`);
-  if (!messageId) problems.push(`Mail "${short}" has no messageId; a saved draft would start a new mail instead of replying.`);
   return { id: briefItemId('mail', threadId), short, link: link(mail.url), options, threadId, messageId, ...message };
 }
 
@@ -561,6 +567,57 @@ async function captureChapter() {
   return { narration: narrationOf('capture'), notes, bookmarks, wishlists: judgement.wishlists ?? [] };
 }
 
+// Each news source as a document source: a dead one is a problem, one waiting for access is only listed.
+function newsSources() {
+  return (news?.sources ?? []).map(({ name, status, reason }) => {
+    if (status === 'dead') problems.push(`News source ${name} is dead: ${reason}.`);
+    return status === 'read'
+      ? { name: `AI news: ${name}`, status: 'read', reason: null }
+      : { name: `AI news: ${name}`, status: 'not-read', reason: text(reason) || 'Not read.' };
+  });
+}
+
+// The digest's picks, each a link with its summary; without a digest the top-scored story leads and each release
+// source's newest release follows, all without a summary.
+function newsPicks(candidates) {
+  if (newsDigest?.status === 'ok') return [[newsDigest.lead, 'lead'], ...(newsDigest.releases ?? []).map((pick) => [pick, 'release'])];
+  problems.push(`${newsDigest ? `The news digest failed (${newsDigest.reason})` : 'No news digest was written'}; the news chapter has its picks without summaries.`);
+  const lead = candidates.filter((candidate) => Number.isInteger(candidate.score)).sort((left, right) => right.score - left.score)[0];
+  const releaseSources = new Set();
+  const releases = candidates.filter((candidate) => candidate.kind === 'release' && !releaseSources.has(candidate.source) && releaseSources.add(candidate.source));
+  return [[lead, 'lead'], ...releases.map((candidate) => [candidate, 'release'])];
+}
+
+const countOrNull = (value) => (Number.isInteger(value) && value >= 0 ? value : null);
+
+function newsChapter() {
+  const candidates = Array.isArray(news.candidates) ? news.candidates : [];
+  const candidatesByLink = new Map(candidates.map((candidate) => [candidate.link, candidate]));
+  const items = [];
+  for (const [pick, kind] of newsPicks(candidates)) {
+    if (!pick) continue;
+    const candidate = candidatesByLink.get(pick.link);
+    if (!candidate) {
+      problems.push(`The news digest picks ${pick.link}, which is not a candidate; left out.`);
+      continue;
+    }
+    const id = briefItemId('news', candidate.link);
+    if (items.some((item) => item.id === id)) continue;
+    items.push({
+      id,
+      kind,
+      title: text(candidate.title),
+      summary: text(pick.summary) || null,
+      source: text(candidate.source),
+      link: candidate.link,
+      publishedAt: isInstant(candidate.publishedAt) ? candidate.publishedAt : null,
+      score: countOrNull(candidate.score),
+      commentCount: countOrNull(candidate.commentCount),
+    });
+  }
+  return { narration: narrationOf('news'), items };
+}
+
 function itemLists(document) {
   const chapters = document?.chapters ?? {};
   return [
@@ -676,9 +733,16 @@ function applyJudgement(document, destinations) {
     for (const item of items) {
       knownIds.add(item.id);
       const people = mailPeopleByItemId.get(item.id);
-      if (judgement.options?.[item.id]) item.options = judgement.options[item.id].map((option) => (people ? addressedReply(option, item, people) : option));
-      if (judgement.notes?.[item.id]) item.suggestion = judgement.notes[item.id];
+      const options = judgement.options?.[item.id];
+      if (Array.isArray(options)) item.options = options.map((option) => (people ? addressedReply(option, item, people) : option));
+      else if (options !== undefined && options !== ACCEPT_DEFAULT) problems.push(`The options of ${item.id} are neither a list nor "${ACCEPT_DEFAULT}"; its default stands.`);
+      const suggestion = judgement.notes?.[item.id];
+      if (suggestion && suggestion !== ACCEPT_DEFAULT) item.suggestion = suggestion;
       if (listName === 'capture notes') checkNoteSuggestion(item, destinations);
+      const offersReply = item.options?.some((option) => option.kind === 'reply');
+      if (listName.startsWith('mail') && offersReply && !item.messageId) {
+        problems.push(`Mail "${item.short}" has no messageId; its reply draft would start a new mail instead of replying.`);
+      }
     }
   }
   const unknownIds = [...Object.keys(judgement.options ?? {}), ...Object.keys(judgement.notes ?? {})].filter((id) => !knownIds.has(id));
@@ -690,6 +754,7 @@ function checkNarrationTargets(document) {
     ...itemLists(document).flatMap(([, items]) => items.map((item) => item.id)),
     ...document.chapters.mail.mailboxes.map((mailbox) => mailbox.id),
     ...document.chapters.calendar.days.map((calendarDay) => calendarDay.date),
+    ...(document.chapters.news?.items ?? []).map((item) => item.id),
   ]);
   for (const [chapterName, chapter] of Object.entries(document.chapters)) {
     if (UNCHECKED_TARGET_CHAPTERS.includes(chapterName)) continue;
@@ -730,6 +795,7 @@ const document = {
     briefChapterSource('Overnight runs', 'overnight'),
     briefChapterSource('Obsidian triage', 'triage'),
     captureSource(),
+    ...newsSources(),
   ],
   chapters: {
     calendar: calendarChapter(),
@@ -740,6 +806,7 @@ const document = {
     capture: await captureChapter(),
     projects: { narration: narrationOf('projects') },
     plan: { narration: narrationOf('plan'), reminders: judgement.reminders ?? [] },
+    ...(news ? { news: newsChapter() } : {}),
     health: { narration: narrationOf('health'), hints: healthHints(episodePaths) },
   },
 };
@@ -767,7 +834,12 @@ const unjudgedLists = itemLists(document).filter(([listName]) => listName !== 'c
   .map(([listName, items]) => [listName, items.filter((item) => !judgedIds.has(item.id))])
   .filter(([, items]) => items.length > 0);
 const unjudgedItemCount = unjudgedLists.reduce((count, [, items]) => count + items.length, 0);
-const unjudgedItemLines = unjudgedLists.flatMap(([listName, items]) => [`  ${listName}:`, ...items.map((item) => `    ${item.id}  ${itemLabel(item)}`)]);
+// What "default" in the judgement accepts: a capture's suggested action, or an item's options in order.
+function defaultLabel(item) {
+  if (item.suggestion) return item.suggestion.action;
+  return (item.options ?? []).map((option) => OPTION_LABELS[option.kind] ?? option.label ?? option.kind).join(', ');
+}
+const unjudgedItemLines = unjudgedLists.flatMap(([listName, items]) => [`  ${listName}:`, ...items.map((item) => `    ${item.id}  ${itemLabel(item)}  [default: ${defaultLabel(item)}]`)]);
 const documentBookmarkIds = new Set(document.chapters.capture.bookmarks.map((bookmark) => bookmark.bookmarkId));
 const keptArticleIds = new Set(idsIn(latest?.outcome.keptBookmarks).map(String));
 const unjudgedBookmarks = (capture?.bookmarks ?? [])
@@ -784,15 +856,16 @@ const report = [
   `Wrote ${documentPath}`,
   outcomeReport,
   `Items:\n${itemLines.join('\n') || '  none'}`,
-  `Items without judgement (judge each in daily-brief.judgement.json):\n${unjudgedItemLines.join('\n') || '  none'}`,
+  ...(document.chapters.news ? [`News:\n${document.chapters.news.items.map((item) => `  ${item.id}  ${item.kind}: ${item.title} (${item.source})`).join('\n') || '  none'}`] : []),
+  `Items without judgement (judge each in daily-brief.judgement.json, or "${ACCEPT_DEFAULT}" to accept the default shown):\n${unjudgedItemLines.join('\n') || '  none'}`,
   `Bookmarks without judgement:\n${unjudgedBookmarks.join('\n') || '  none'}`,
   `Move destinations (note: headings):\n${destinationLines.join('\n') || '  none'}`,
   `Open health episodes (read each note, one hint per path):\n${episodeLines.join('\n') || '  none'}`,
   `Problems:\n${problems.map((problem) => `  ${problem}`).join('\n') || '  none'}`,
   validation.report,
   `Summary: ${plural(unjudgedItemCount, 'item')} and ${plural(unjudgedBookmarks.length, 'bookmark')} without judgement; `
-    + `${plural(unnarratedChapters.length, 'chapter')} without narration${unnarratedChapters.length ? ` (${unnarratedChapters.join(', ')})` : ''}; `
-    + `${plural(unvoicedSentenceCount, 'narration sentence')} without a clip; the document is ${validation.valid ? 'valid' : 'not valid'}.`,
+    + `${plural(unvoicedSentenceCount, 'narration sentence')} without a clip; the document is ${validation.valid ? 'valid' : 'not valid'}.`
+    + (unnarratedChapters.length ? ` No narration: ${unnarratedChapters.join(', ')}.` : ''),
 ].join('\n');
 await writeFile(join(dayDirectory, 'daily-brief.log'), `${report}\n`);
 console.log(report);

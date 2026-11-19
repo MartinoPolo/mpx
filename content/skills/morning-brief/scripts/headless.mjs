@@ -1,4 +1,4 @@
-// The headless cheap-model recipe shared by gather.mjs and apply.mjs: one connector-enabled Claude session per
+// The headless cheap-model recipe shared by gather.mjs, apply.mjs and news-digest.mjs: one Claude session per
 // account, launched through mpx in print mode with only the listed tools allowed.
 import { spawn, spawnSync } from 'node:child_process';
 import { isAbsolute, join } from 'node:path';
@@ -27,10 +27,15 @@ export function extractJson(text) {
 /**
  * Runs one session with `prompt` on stdin and resolves when it ends: `{ error }` when it could not start, else
  * `{ code, timedOut }`, both with the output and the duration. `settingsPath` adds a settings file such as hooks.
+ * Without `tools` the session loads no tool, connector or MCP server and only answers; `systemPrompt` then replaces
+ * the default system prompt.
  */
-export async function runHeadless({ account, model = HEADLESS_MODEL, tools, prompt, cwd, timeoutMilliseconds, settingsPath }) {
-  const args = [join(contentRoot(), 'bin', ACCOUNT_LAUNCHERS[account]), '--connectors', '-p', '--output-format', 'json', '--model', model,
-    '--permission-mode', 'dontAsk', '--allowedTools', ['ToolSearch', ...tools].join(','), ...(settingsPath ? ['--settings', settingsPath] : [])];
+export async function runHeadless({ account, model = HEADLESS_MODEL, tools, prompt, cwd, timeoutMilliseconds, settingsPath, systemPrompt }) {
+  const toolArguments = tools.length > 0
+    ? ['--connectors', '--allowedTools', ['ToolSearch', ...tools].join(',')]
+    : ['--tools', '', '--strict-mcp-config'];
+  const args = [join(contentRoot(), 'bin', ACCOUNT_LAUNCHERS[account]), ...toolArguments, '-p', '--output-format', 'json', '--model', model,
+    '--permission-mode', 'dontAsk', ...(systemPrompt ? ['--system-prompt', systemPrompt] : []), ...(settingsPath ? ['--settings', settingsPath] : [])];
   // Orca closes an automation run's tab on the first `done` hook from its pane, so these sessions must not
   // report as that pane.
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('ORCA_')));

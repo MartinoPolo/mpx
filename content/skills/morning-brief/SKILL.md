@@ -52,13 +52,20 @@ foreground wait, never by ending the turn.
      `reason`. `--only personal|work` reruns one.
    - `node "<skill-dir>/scripts/repos.mjs" --since <since> --out <dayDirectory>/sources/repos.json`
    - `node "<skill-dir>/scripts/sessions.mjs" --since <since> --until <until> --out <dayDirectory>/sources/sessions.json`
+   - `node "<skill-dir>/scripts/news.mjs" <dayDirectory>`, then
+     `node "<skill-dir>/scripts/news-digest.mjs" <dayDirectory>`. The first reads the feeds of
+     [news-sources.json](news-sources.json) without a model into `sources/news.json`: the window's
+     candidates and each source as read, dead or not read; never work around a dead source. The
+     digest is one run of the cheapest tier without tools (`--model`, default `haiku`) that picks the lead
+     and the new model releases following `taste.md`, with summaries and at most one narration
+     sentence, into `sources/news-digest.json`. Exit code 2 from either: continue.
    - Reach the work Git hosts (GitLab, Gerrit; [provider routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md))
      with a ten-second timeout. When they time out and OpenVPN GUI is installed, connect
      `openvpn-gui --command connect <profile>` (profile `MORNING_BRIEF_VPN`, else the only one in
      `%USERPROFILE%/OpenVPN/config`) and retry for up to two minutes. Still unreachable: ask me to
      connect the VPN and wait up to five minutes, then go on with the work hosts unavailable.
-3. Launch one subagent per area below in parallel. Give each the window, the day folder, its input
-   files, the read-only rule, and a ten-minute budget; each writes `sources/<area>.json` and returns
+3. Launch one subagent per area below, except AI news, in parallel. Give each the window, the day
+   folder, its input files, the read-only rule, and a ten-minute budget; each writes `sources/<area>.json` and returns
    one line. Bound every command with a timeout. A failed area becomes an `unavailable` chapter.
    If subagents run in the background, wait in the foreground until every expected
    `sources/<area>.json` exists or the budget ends.
@@ -81,17 +88,18 @@ foreground wait, never by ending the turn.
    without both. `node "<skill-dir>/scripts/daily-brief.mjs" <dayDirectory>` writes
    `daily-brief.json`, lists its items with their ids, then **Items without judgement**,
    **Bookmarks without judgement**, the move destinations, the open health episode notes by path,
-   its problems, the app's validator and a summary line counting what is unjudged, the chapters
-   without narration and the narration sentences without a clip; it keeps the same report in
-   `daily-brief.log`. Write
+   its problems, the app's validator and a summary line counting what is unjudged and the narration
+   sentences without a clip, then naming the chapters without narration (information: none is right
+   where nothing is worth saying); it keeps the same report in `daily-brief.log`. Write
    `<dayDirectory>/daily-brief.judgement.json`, narration included, and rerun until both lists say
    none and every problem you can fix is fixed. Exit code 2 means a chapter is still invalid or the
    validator could not run.
 8. `node "<skill-dir>/scripts/narrate.mjs" <dayDirectory> --document` voices the sentences the
-   document keeps as step 5 voices the beats and records each clip by its text in
-   `daily-brief.clips.json`; exit code 2 leaves sentences without a clip: continue. Then the
-   document's last write: `daily-brief.mjs` once more, which puts each clip on its sentence. A
-   narration changed after this needs both again.
+   document keeps as step 5 voices the beats, records each clip by its text in
+   `daily-brief.clips.json` and keeps its result line in `narrate-document.log`; exit code 2 leaves
+   sentences without a clip: continue. Then the document's last write: `daily-brief.mjs` once more,
+   which puts each clip on its sentence; its summary then counts no narration sentence without a
+   clip, unless the backend failed. A narration changed after this needs both again.
 
 ## Areas
 
@@ -147,10 +155,9 @@ foreground wait, never by ending the turn.
   `scope`, `summary`, `url`); none when nothing matters. Everything else is a line in `counts`
   (`id`, `scope`, `text`, `url`), for example `prejemesi` with "5 new decisions, 2 stale removed"
   or `mpx-hitl` with "+7 lines replacing 3".
-- **AI news**: at most three items newer than the window, from different vendors: Claude Code,
-  Codex and Gemini releases, Anthropic, OpenAI and Google announcements, Hacker News front-page AI
-  stories. Each has a `summary`, two to four `points` with the concrete changes and a `why` sentence
-  on what it means for my setup.
+- **AI news**, without a subagent: the digest's lead and releases in order, each with its candidate's
+  `title`, `source`, `app`, `url` and date from `news.json` and the digest's `summary`; the beat says
+  the digest's narration sentence. A failed or missing digest makes the chapter quiet with the reason.
 
 `$MPX_AI_RETAINED/morning-brief/taste.md`, when present, holds my preferences (whose calendars are
 whose, news taste); the main session and every area follow it, and the processing session adds to it.
@@ -215,13 +222,16 @@ everything that comes from data: the calendar days and events from the gatherers
 connector account (each mail with the `messageId` a saved draft replies to), Slack items with their
 permalinks, Code from the merge request cards that are ready, in review or failing (merged ones as
 `merged`), Agents from the overnight runs, the triage captures whose line still stands in its note,
-the sources, and every item id, a hash of the item's source reference (`brief-id.mjs`; a pull
-request's with its state). From the app's latest outcome it
+News from `news.json` with the digest's picks and summaries (without a digest, the top-scored story
+and each release source's newest release, unsummarised), the sources, dead news sources as
+problems, and every item id, a hash of the item's source reference (`brief-id.mjs`; a pull
+request's with its state, a news item's link). Without `news.json` the document has no news
+chapter. From the app's latest outcome it
 leaves out the `dismissed` items, unless a mail's newest message arrived after the dismissal (a
 Slack message, a pull request's state and a run never change, so they stay out), and the kept
 lines; brings back what it marks snoozed or undecided; leaves the kept articles (`keptBookmarks`)
-unjudged; and prints its chapter feedback for you to follow. Issue boards, AI retro, instructions
-and AI news stay on the page only.
+unjudged; and prints its chapter feedback for you to follow. Issue boards, AI retro and instructions
+stay on the page only.
 
 `daily-brief.judgement.json` adds the judgement. `options`, `notes`, `bookmarks` and `narration`
 are required work, covering every item the script lists without judgement; the other keys as they
@@ -234,9 +244,12 @@ apply:
   server names the account, `label`, `provider`, `account`). They are written as not read: the
   headless run cannot unlock them.
 - `options`: every mail, Slack, Code and Agents item id to what it suggests, in order, as the
-  contract types them. The list replaces the default whole and needs one entry at least. The app
-  always shows Snooze and Dismiss (`seen`) and highlights the one listed, so list one only as the
-  suggestion, alone for an item that needs nothing else. A `reply` draft wherever the sender waits
+  contract types them. The list replaces the default whole and needs one entry at least; `"default"`
+  instead of a list, or of a capture's suggestion in `notes`, accepts the default the script prints
+  beside the item. The app always shows Snooze and Dismiss (`seen`) and highlights the one listed, so
+  a list with a reply, event, task or action never ends with them; list one only when it is the
+  suggestion itself, alone. A pull request whose state changed gets a new id, so a rebuild drops the
+  judgement written for its old id, which the script reports. A `reply` draft wherever the sender waits
   for an answer, in my voice and the thread's language (`subject` for mail, `where` for Slack); an
   `event` or `task` where the message asks for one; on Code and Agents an `action` (`label`,
   `icon` from the app's `ACTION_ICONS` in
@@ -268,7 +281,8 @@ apply:
 - `narration`: per document chapter (`calendar`, `mail`, `slack`, `code`, `agents`, `capture`,
   `projects`, `plan`, `health`) an overview of at most two short sentences (`text`, `targets`)
   saying what matters, such as the event that shapes the day or how many messages wait;
-  none where nothing is worth saying. `daily-brief.mjs` keeps the first two and reports the rest;
+  none where nothing is worth saying. `news` speaks the digest's sentence unless you write one.
+  `daily-brief.mjs` keeps the first two and reports the rest;
   each kept sentence carries the clip step 8 voiced for its exact text.
   Targets are item ids, mailbox ids or calendar days, and `[]` for a sentence about nothing shown,
   always on `plan` and `health`. On `projects` they are Orca's project names, exactly as the app's
