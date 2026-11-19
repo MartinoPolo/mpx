@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Records a session as unfinished in the Obsidian list the morning brief reads, so the session can be closed and
 // resumed later with one click (the `agent-launch:resume/<id>` link handler).
-// Usage: unfinished.mjs [note on what is left] [--done] [--session <id>] [--title <text>]
+// Usage: unfinished.mjs [note on what is left] [--done] [--session <id>] [--title <text>] [--project <name>]
 // The Claude prompt hook and the Pi `/unfinished` command import recordUnfinished and spend no model tokens.
 import { mkdir, open, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
@@ -11,6 +11,7 @@ import { parseArgs } from 'node:util';
 const LIST_PATH = join('_Tooling', 'Unfinished sessions.md');
 const LIST_HEADER = '# Unfinished sessions\n\nOpen `#unfinished` tasks are listed in the morning brief. Tick a task when the session is done.\n\n';
 const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const ENTRY_LABEL = / · ((?:(?! · ).)+) \[▶ resume\]/;
 
 /** The newest user-set title, else the harness-generated one, from a Claude transcript. */
 export async function claudeSessionTitle(transcriptPath) {
@@ -22,8 +23,14 @@ export async function claudeSessionTitle(transcriptPath) {
   return undefined;
 }
 
-/** Adds or refreshes this session's open entry, or ticks it when `done`; returns a one-line result. */
-export async function recordUnfinished({ vault, sessionId, cwd, title, note, done = false }) {
+/**
+ * Adds or refreshes this session's open entry, or ticks it when `done`; returns a one-line result. The entry ends with
+ * its project label: `project` when given, else the label the open entry already has, else the working folder's name.
+ */
+export async function recordUnfinished({ vault, sessionId, cwd, title, note, project, done = false }) {
+  const projectName = project?.trim() || undefined;
+  // The control center splits the description on ` · ` and the link starts at `[`.
+  if (projectName && /[·[\]\r\n]/.test(projectName)) return 'Project names cannot contain "·", "[", "]" or a line break; nothing was saved.';
   const listFile = join(vault, LIST_PATH);
   const existing = await readFile(listFile, 'utf8').catch(() => LIST_HEADER);
   const lines = existing.split('\n');
@@ -34,7 +41,9 @@ export async function recordUnfinished({ vault, sessionId, cwd, title, note, don
   } else {
     const today = new Date().toLocaleDateString('sv');
     const description = [title, note].filter(Boolean).join(' · ') || 'Unnamed session';
-    const task = `- [ ] #unfinished ${description} · ${basename(cwd)} [▶ resume](agent-launch:resume/${sessionId}) ➕ ${today}`;
+    const existingLabel = index === -1 ? undefined : lines[index].match(ENTRY_LABEL)?.[1];
+    const label = projectName ?? existingLabel ?? basename(cwd);
+    const task = `- [ ] #unfinished ${description} · ${label} [▶ resume](agent-launch:resume/${sessionId}) ➕ ${today}`;
     if (index === -1) lines.splice(lines.at(-1) === '' ? -1 : lines.length, 0, task);
     else lines[index] = task;
   }
@@ -79,11 +88,11 @@ async function newestPiSessionHere(config) {
 if (process.argv[1] && comparable(process.argv[1]) === comparable(fileURLToPath(import.meta.url))) {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
-    options: { title: { type: 'string' }, session: { type: 'string' }, done: { type: 'boolean' } },
+    options: { title: { type: 'string' }, session: { type: 'string' }, project: { type: 'string' }, done: { type: 'boolean' } },
   });
   const vault = process.env.MPX_OBSIDIAN_VAULT;
   if (!vault || !process.env.APPDATA) {
-    console.error('Usage: unfinished.mjs [note] [--done] [--session <id>] [--title <text>] (needs MPX_OBSIDIAN_VAULT and APPDATA)');
+    console.error('Usage: unfinished.mjs [note] [--done] [--session <id>] [--title <text>] [--project <name>] (needs MPX_OBSIDIAN_VAULT and APPDATA)');
     process.exit(1);
   }
   const config = JSON.parse(await readFile(join(process.env.APPDATA, 'mpx', 'config.json'), 'utf8'));
@@ -94,5 +103,5 @@ if (process.argv[1] && comparable(process.argv[1]) === comparable(fileURLToPath(
     process.exit(1);
   }
   const note = positionals.join(' ').trim() || undefined;
-  console.log(await recordUnfinished({ vault, sessionId, cwd: process.cwd(), title: values.title, note, done: values.done }));
+  console.log(await recordUnfinished({ vault, sessionId, cwd: process.cwd(), title: values.title, note, project: values.project, done: values.done }));
 }

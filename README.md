@@ -88,7 +88,7 @@ Run from Git Bash in your project:
 | `ccd` / `ccwd` | Same, in bypass-permissions mode (`--dangerously-skip-permissions`) |
 | `alfred` / `alf` | Start personal Claude Code with connectors in the Alfred assistant home (`C:\_ALFRED`) |
 | `mpx resume --list` | List resumable native sessions |
-| `/mpx-unfinished [note]` | Save the session as unfinished in the vault's `_Tooling/Unfinished sessions.md` with a one-click resume link, without a model turn (Pi: `/unfinished`); `done` ticks it |
+| `/mpx-unfinished [note] [--project <name>]` | Save the session as unfinished in the vault's `_Tooling/Unfinished sessions.md` with a one-click resume link, without a model turn (Pi: `/unfinished`); `--project` labels it with a project other than the working folder; `done` ticks it |
 | `mpx status` | Inspect MPX resources and conflicts |
 | `mpx sync --preview` | Preview account-resource synchronization |
 | `mpx project setup . --preview` | Preview optional project setup |
