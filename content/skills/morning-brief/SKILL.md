@@ -26,7 +26,7 @@ edit notes. The page proposes those actions, I decide each one, and a fresh sess
 send ([Process](#process)).
 
 `--no-state` builds without recording the brief as the last one (test runs). `--rebuild` only
-re-renders an existing `brief.json` and rewrites the document (step 7). `--apply <date>` processes
+re-renders an existing `brief.json` and rewrites the document (steps 7 and 8). `--apply <date>` processes
 the decisions sent from that day's page.
 
 ## Requirements
@@ -72,8 +72,7 @@ foreground wait, never by ending the turn.
    is a VoiceStudio profile id or name (`--voice`, `MORNING_BRIEF_VOICE`, default `Morning brief`)
    and `--language` (`MORNING_BRIEF_LANGUAGE`, default `en`) must match the language of the `say`
    sentences. Exit code 2 when the backend cannot start or a clip fails: continue, the page falls
-   back to the browser voice. Narration stays on the machine. Only the page's beats are voiced: the
-   document's narration has no clips.
+   back to the browser voice. Narration stays on the machine.
 6. `node "<skill-dir>/scripts/build.mjs" <dayDirectory> --commit-state` (omit the flag for
    `--no-state`) validates the brief, writes a `process.token` into it when missing, writes
    `process.json`, and renders `index.html`. Open the page in a browser and step through every beat
@@ -82,10 +81,16 @@ foreground wait, never by ending the turn.
    without both. `node "<skill-dir>/scripts/daily-brief.mjs" <dayDirectory>` writes
    `daily-brief.json`, lists its items with their ids, then **Items without judgement**,
    **Bookmarks without judgement**, the move destinations, its problems, the app's validator and a
-   summary line counting what is unjudged and the chapters without narration; it keeps the same
-   report in `daily-brief.log`. Write `<dayDirectory>/daily-brief.judgement.json` and rerun until
-   both lists say none and every problem you can fix is fixed. Exit code 2 means a chapter is
-   still invalid or the validator could not run.
+   summary line counting what is unjudged, the chapters without narration and the narration
+   sentences without a clip; it keeps the same report in `daily-brief.log`. Write
+   `<dayDirectory>/daily-brief.judgement.json`, narration included, and rerun until both lists say
+   none and every problem you can fix is fixed. Exit code 2 means a chapter is still invalid or the
+   validator could not run.
+8. `node "<skill-dir>/scripts/narrate.mjs" <dayDirectory> --document` voices the sentences the
+   document keeps as step 5 voices the beats and records each clip by its text in
+   `daily-brief.clips.json`; exit code 2 leaves sentences without a clip: continue. Then the
+   document's last write: `daily-brief.mjs` once more, which puts each clip on its sentence. A
+   narration changed after this needs both again.
 
 ## Areas
 
@@ -259,7 +264,8 @@ apply:
 - `narration`: per document chapter (`calendar`, `mail`, `slack`, `code`, `agents`, `capture`,
   `projects`, `plan`, `health`) an overview of at most two short sentences (`text`, `targets`)
   saying what matters, such as the event that shapes the day or how many messages wait;
-  none where nothing is worth saying. `daily-brief.mjs` keeps the first two and reports the rest.
+  none where nothing is worth saying. `daily-brief.mjs` keeps the first two and reports the rest;
+  each kept sentence carries the clip step 8 voiced for its exact text.
   Targets are item ids, mailbox ids or calendar days, and `[]` for a sentence about nothing shown,
   always on `plan` and `health`. On `projects` they are Orca's project names, exactly as the app's
   `GET /api/projects` lists them, letter case included, which `daily-brief.mjs` cannot check.

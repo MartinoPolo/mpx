@@ -258,7 +258,7 @@ test('the document maps gathered data to the contract before any judgement', asy
     assert.match(stdout, /Bookmarks without judgement:\n {2}1001 {2}Headlamp/);
     assert.match(stdout, new RegExp(`Items without judgement[^\\n]*:\\n {2}mail personal:\\n {4}${await idOf('mail', 'thread-vat')} {2}Accountant: VAT draft\\n {2}mail work:\\n`));
     assert.match(stdout, /\n {2}capture notes:\n {4}note-[0-9a-f]{12} {2}buy present sam 🔼\n/);
-    assert.match(stdout, /Summary: 10 items and 2 bookmarks without judgement; 9 chapters without narration \(calendar, mail, slack, code, agents, capture, projects, plan, health\); the document is not valid\.\n?$/);
+    assert.match(stdout, /Summary: 10 items and 2 bookmarks without judgement; 9 chapters without narration \(calendar, mail, slack, code, agents, capture, projects, plan, health\); 0 narration sentences without a clip; the document is not valid\.\n?$/);
     assert.ok(document.sources.every((source) => source.status === 'read'));
   });
 });
@@ -287,7 +287,7 @@ test('the judgement adds options, suggestions, bookmarks, mailboxes without a co
     assert.match(stdout, /calendar narration has 3 sentences; kept the first two, cut "Yesterday ended on the night train\."/);
     assert.match(stdout, /The judgement narrates chapters the document does not have: triage\./);
     assert.deepEqual(document.chapters.capture.notes.find((note: { id: string }) => note.id === weeklyId).suggestion.action, 'research');
-    assert.match(stdout, /Summary: 7 items and 1 bookmark without judgement; 6 chapters without narration \(code, agents, capture, projects, plan, health\);/);
+    assert.match(stdout, /Summary: 7 items and 1 bookmark without judgement; 6 chapters without narration \(code, agents, capture, projects, plan, health\); 5 narration sentences without a clip;/);
 
     assert.deepEqual(document.chapters.calendar.calendars.at(-1), { id: 'wife', name: 'Kája' });
     assert.deepEqual(document.chapters.calendar.days[2].allDay, [{ title: 'Name day', calendar: 'wife', link: null }]);
@@ -364,6 +364,33 @@ test('a judged mail reply goes to the sender and the named recipients, each with
       'Someone Unknown, Office <office@example.com>',
     ]);
     assert.match(stdout, /A reply to "Accountant: VAT draft" names "Someone Unknown" without an address/);
+  });
+});
+
+async function writeClip(fixture: Fixture, fileName: string): Promise<void> {
+  await mkdir(join(fixture.dayDirectory, 'audio'), { recursive: true });
+  await writeFile(join(fixture.dayDirectory, 'audio', fileName), 'RIFF');
+}
+
+test('a narration sentence carries the clip recorded for its exact text while the clip file exists', async () => {
+  await withFixture(async (fixture) => {
+    const voiced = { text: 'Today the stand-up, then the dentist.', targets: ['2026-11-18'] };
+    const clipGone = { text: 'Tomorrow is empty.', targets: ['2026-11-19'] };
+    const edited = { text: 'Approve the VAT draft today.', targets: [], audio: 'chosen-by-the-session.wav', audioSeconds: 2 };
+    await writeJson(join(fixture.dayDirectory, 'daily-brief.judgement.json'), { narration: { calendar: [voiced, clipGone], mail: [edited] } });
+    await writeJson(join(fixture.dayDirectory, 'daily-brief.clips.json'), {
+      [voiced.text]: { audio: '0a1b2c3d4e5f6a7b.wav', audioSeconds: 2.4 },
+      [clipGone.text]: { audio: 'ffffffffffffffff.wav', audioSeconds: 1.1 },
+      'Approve the VAT draft.': { audio: '1111111111111111.wav', audioSeconds: 1.8 },
+    });
+    await writeClip(fixture, '0a1b2c3d4e5f6a7b.wav');
+    await writeClip(fixture, '1111111111111111.wav');
+    await writeClip(fixture, 'chosen-by-the-session.wav');
+
+    const { stdout, document } = await runDocument(fixture);
+    assert.deepEqual(document.chapters.calendar.narration, [{ ...voiced, audio: '0a1b2c3d4e5f6a7b.wav', audioSeconds: 2.4 }, clipGone]);
+    assert.deepEqual(document.chapters.mail.narration, [{ text: edited.text, targets: [] }], 'clips come only from narrate.mjs, by the sentence as written');
+    assert.match(stdout, /; 2 narration sentences without a clip;/);
   });
 });
 
@@ -483,11 +510,15 @@ test('an outcome without chapter feedback prints no feedback line', async () => 
 
 const appSkip = !existsSync(join(APP_DIRECTORY, 'package.json')) && 'the alfred-control-center repository is not checked out';
 
-test('a judged document passes the app validator', { skip: appSkip }, async () => {
+test('a judged document with clips passes the app validator', { skip: appSkip }, async () => {
   await withFixture(async (fixture) => {
-    await writeJson(join(fixture.dayDirectory, 'daily-brief.judgement.json'), (await judgement()).judgement);
-    const { exitCode, stdout } = await runDocument(fixture, process.env.MPX_PROJECTS);
+    const sessionJudgement = (await judgement()).judgement;
+    await writeJson(join(fixture.dayDirectory, 'daily-brief.judgement.json'), sessionJudgement);
+    await writeJson(join(fixture.dayDirectory, 'daily-brief.clips.json'), { [sessionJudgement.narration.calendar[0]!.text]: { audio: '0a1b2c3d4e5f6a7b.wav', audioSeconds: 2.4 } });
+    await writeClip(fixture, '0a1b2c3d4e5f6a7b.wav');
+    const { exitCode, stdout, document } = await runDocument(fixture, process.env.MPX_PROJECTS);
     assert.equal(exitCode, 0, stdout);
+    assert.equal(document.chapters.calendar.narration[0].audio, '0a1b2c3d4e5f6a7b.wav');
     assert.match(stdout, /Valid: every chapter can be shown\./);
   });
 });

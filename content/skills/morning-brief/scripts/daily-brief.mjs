@@ -2,10 +2,11 @@
 // Writes <day>/daily-brief.json, the document the Alfred control center serves, and checks it with the app's
 // validator. Calendar, mail and Slack come from the gatherers' sources, Code, Agents and the capture lines from the
 // page's brief.json, bookmarks from the bookmarks bridge; <day>/daily-brief.judgement.json adds the session's
-// judgement. The latest outcome the app wrote leaves out dismissed items and kept lines and brings back snoozed and
-// undecided ones. Prints the items with their ids, every item and bookmark still without judgement, the move
-// destinations, and a summary line counting what is unjudged and the chapters without narration, and keeps the same
-// report in <day>/daily-brief.log. Exit code 2 when the document is invalid or could not be validated.
+// judgement and <day>/daily-brief.clips.json the narration's clips. The latest outcome the app wrote leaves out
+// dismissed items and kept lines and brings back snoozed and undecided ones. Prints the items with their ids, every
+// item and bookmark still without judgement, the move destinations, and a summary line counting what is unjudged, the
+// chapters without narration and the narration sentences without a clip, and keeps the same report in
+// <day>/daily-brief.log. Exit code 2 when the document is invalid or could not be validated.
 // Usage: daily-brief.mjs <day-directory>
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -13,6 +14,7 @@ import { readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, isAbsolute, join } from 'node:path';
 import { briefItemId } from './brief-id.mjs';
+import { DOCUMENT_CLIPS_FILE, JUDGEMENT_FILE, judgedSentences, NARRATION_SENTENCE_LIMIT } from './document-narration.mjs';
 import { localIso } from './local-time.mjs';
 
 const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -21,7 +23,6 @@ const INSTANT_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z
 const MAIL_ADDRESS_PATTERN = /^[^\s@<>,]+@[^\s@<>,]+$/;
 const END_OF_DAY = '24:00';
 const SHORT_LENGTH = 60;
-const NARRATION_SENTENCE_LIMIT = 2;
 const VALIDATOR_TIMEOUT_MILLISECONDS = 120_000;
 const CALENDAR_NAMES = { work: 'Work', personal: 'Personal', wife: 'Wife' };
 const FORGES = ['github', 'gitlab'];
@@ -75,7 +76,8 @@ const work = gathererResult(await readJson(join(dayDirectory, 'sources', 'work.j
 const brief = await readJson(join(dayDirectory, 'brief.json'));
 // The document sits in <home>/work/morning-brief/<day>; the bookmarks bridge writes <home>/work/bookmarks.
 const capture = await readJson(join(dayDirectory, '..', '..', 'bookmarks', 'capture.json'));
-const judgement = (await readJson(join(dayDirectory, 'daily-brief.judgement.json'))) ?? {};
+const judgement = (await readJson(join(dayDirectory, JUDGEMENT_FILE))) ?? {};
+const clipsByText = (await readJson(join(dayDirectory, DOCUMENT_CLIPS_FILE))) ?? {};
 const vaultDirectory = process.env.MPX_OBSIDIAN_VAULT;
 const noteLineCache = new Map();
 const mailPeopleByItemId = new Map();
@@ -113,14 +115,21 @@ function captureSource() {
   return { name, status: 'read', reason: null };
 }
 
-// The document's narration is an overview: a chapter keeps its first sentences, the rest is reported.
+// The clip narrate.mjs voiced for a sentence's exact text, while its file is still in audio/.
+function clipOf(sentenceText) {
+  const clip = typeof sentenceText === 'string' && Object.hasOwn(clipsByText, sentenceText) ? clipsByText[sentenceText] : undefined;
+  const isClip = typeof clip?.audio === 'string' && Number.isFinite(clip.audioSeconds) && clip.audioSeconds > 0;
+  return isClip && existsSync(join(dayDirectory, 'audio', clip.audio)) ? { audio: clip.audio, audioSeconds: clip.audioSeconds } : {};
+}
+
+// A chapter keeps its first sentences, each with its clip; the rest is reported.
 function narrationOf(chapterName) {
-  const sentences = Array.isArray(judgement.narration?.[chapterName]) ? judgement.narration[chapterName] : [];
+  const sentences = judgedSentences(judgement, chapterName);
   if (sentences.length > NARRATION_SENTENCE_LIMIT) {
     const cut = sentences.slice(NARRATION_SENTENCE_LIMIT).map((sentence) => `"${shorten(text(sentence?.text))}"`).join(', ');
     problems.push(`${chapterName} narration has ${sentences.length} sentences; kept the first two, cut ${cut}.`);
   }
-  return sentences.slice(0, NARRATION_SENTENCE_LIMIT);
+  return sentences.slice(0, NARRATION_SENTENCE_LIMIT).map((sentence) => ({ text: sentence?.text, targets: sentence?.targets, ...clipOf(sentence?.text) }));
 }
 
 const indentOf = (line) => line.match(/^\s*/)[0].length;
@@ -727,6 +736,7 @@ const unjudgedBookmarks = (capture?.bookmarks ?? [])
   .filter((bookmark) => !documentBookmarkIds.has(String(bookmark.id)) && !keptArticleIds.has(String(bookmark.id)))
   .map((bookmark) => `  ${bookmark.id}  ${bookmark.title}  ${bookmark.url}`);
 const unnarratedChapters = Object.entries(document.chapters).filter(([, chapter]) => chapter.narration.length === 0).map(([chapterName]) => chapterName);
+const unvoicedSentenceCount = Object.values(document.chapters).flatMap((chapter) => chapter.narration).filter((sentence) => !sentence.audio).length;
 const validation = validate(documentPath);
 const plural = (count, noun) => `${count} ${noun}${count === 1 ? '' : 's'}`;
 const destinationLines = destinations.map(({ notePath, headings }) => `  ${notePath}: ${headings.join(' | ') || 'no headings'}`);
@@ -741,7 +751,7 @@ const report = [
   validation.report,
   `Summary: ${plural(unjudgedItemCount, 'item')} and ${plural(unjudgedBookmarks.length, 'bookmark')} without judgement; `
     + `${plural(unnarratedChapters.length, 'chapter')} without narration${unnarratedChapters.length ? ` (${unnarratedChapters.join(', ')})` : ''}; `
-    + `the document is ${validation.valid ? 'valid' : 'not valid'}.`,
+    + `${plural(unvoicedSentenceCount, 'narration sentence')} without a clip; the document is ${validation.valid ? 'valid' : 'not valid'}.`,
 ].join('\n');
 await writeFile(join(dayDirectory, 'daily-brief.log'), `${report}\n`);
 console.log(report);
