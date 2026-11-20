@@ -211,7 +211,11 @@ apply:
 - `bookmarks`: every `capture.json` bookmark id to its `kind`, `suggestion` and `csfd`;
   `wishlists` lists the wishlists a shop find can move to.
 - `quietRuns`: automations that ran fine and sessions closed in the window.
-- `reminders`: Plan reminders, the home's additions such as deadlines and the monthly invoice.
+- `reminders`: Plan reminders (`title`, `reason`, `link`, `due`), the home's additions such as
+  deadlines and the monthly invoice. `link` points to the source whenever there is one: the Slack
+  thread, the mail, the pull request, the vault note as an `obsidian://` link, or the `file:///`
+  path of the home's `state/<case>.md`. `reason` begins with that source in two or three words, such
+  as `Flight claim case:` or `Slack, Jan:`.
 - `hints`: one per open health episode note the script lists, `conditionId` its path and `text`
   one short practical hint. Read each listed note yourself, without a subagent: what to try or watch
   given its check-ins, no diagnosis, and to see a doctor when it worsens over several days. Never

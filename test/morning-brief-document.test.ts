@@ -196,7 +196,11 @@ async function judgement() {
       },
       bookmarks: { 1001: { kind: 'shop', suggestion: { action: 'move', destination: 'mine', because: 'Looked at it twice' } } },
       wishlists: [{ id: 'mine', label: 'My wishlist' }],
-      reminders: [{ title: 'November invoice', reason: 'Monthly', due: '2026-11-25' }],
+      reminders: [
+        { title: 'November invoice', reason: 'Invoice case: due every month', link: 'file:///C:/home/state/invoice.md', due: '2026-11-25' },
+        { title: 'Answer the freeze question', reason: 'Slack, Tom: asked last night', link: PERMALINK, due: null },
+        { title: 'Plan the weekly brief', reason: 'Alfred note: open idea', link: 'obsidian://open?vault=Vault&file=_Projekty%2Falfred%2Falfred', due: null },
+      ],
       narration: {
         calendar: [{ text: 'Today the stand-up, then the dentist.', targets: ['2026-11-18'] }],
         mail: [{ text: 'Approve the VAT draft.', targets: [vatId] }, { text: 'Centrum was not read.', targets: ['centrum'] }],
