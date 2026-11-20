@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Digests <day>/sources/news.json in one headless session of the cheapest tier without tools, following the news taste in
-// <day>/../taste.md: the lead, the new model releases, a summary of each and at most one narration sentence, every
-// pick one of the candidates by its link. A refused answer is asked for once more. Writes
+// <day>/../taste.md: the lead, the new model releases (one per product, the newest), a summary of each and at most one
+// narration sentence, every pick one of the candidates by its link. A refused answer is asked for once more. Writes
 // <day>/sources/news-digest.json, `ok` with the picks or `failed` with the reason, and the session in news-digest.log.
 // Exit code 2 when the digest failed: the document then shows the candidates' picks without summaries.
 // Usage: news-digest.mjs <day-directory> [--model <model>] [--account personal|work]
@@ -20,7 +20,7 @@ const MAXIMUM_NARRATION_CHARACTERS = 200;
 const SYSTEM_PROMPT = `You pick the AI news for one reader's morning brief from candidates given as JSON. Answer with one JSON object and nothing else:
 {"lead": {"link": "...", "summary": "..."} or null, "releases": [{"link": "...", "summary": "..."}], "narration": {"text": "...", "links": ["..."]} or null}
 - lead: the one story that matters most today to someone who builds with AI coding agents such as Claude Code and Codex; null when none stands out.
-- releases: each AI model newly released or announced (a model, not a product feature), then a Claude Code, Codex or Gemini CLI release only when it changes how a daily user works; at most ${MAXIMUM_RELEASES}, newest first, never the lead again.
+- releases: each AI model newly released or announced (a model, not a product feature), then a Claude Code, Codex or Gemini CLI release only when it changes how a daily user works; at most ${MAXIMUM_RELEASES}, newest first, never the lead again; at most one release per product: of several versions pick the newest, whose summary may say it follows the earlier ones.
 - summary: one or two short sentences in plain words on what changed and why it matters, taken only from the candidates' titles and excerpts (one story may appear in several); at most ${MAXIMUM_SUMMARY_CHARACTERS} characters; null when they say no more than the title.
 - narration: at most one short spoken sentence for the whole chapter, without links or symbols, and the links of the picks it names; null when nothing is worth saying.
 - Every link is copied exactly from a candidate. Never add a story, number or fact the candidates do not contain.
@@ -64,6 +64,30 @@ function refusalOf(answer) {
   if (!isText(narration.text, MAXIMUM_NARRATION_CHARACTERS) || /https?:/.test(narration.text)) return `the narration must be one short sentence without links`;
   if (!Array.isArray(narration.links) || narration.links.some((link) => !pickedLinks.includes(link))) return 'the narration names a link that is not a pick';
   return null;
+}
+
+// One release per release source, its newest version; the narration names the version that stays.
+function oneReleasePerProduct(releases, narration) {
+  const candidatesByLink = new Map(news.candidates.map((candidate) => [candidate.link, candidate]));
+  const newestBySource = new Map();
+  for (const pick of releases) {
+    const candidate = candidatesByLink.get(pick.link);
+    if (candidate.kind !== 'release') continue;
+    const newest = newestBySource.get(candidate.source);
+    if (!newest || Date.parse(candidate.publishedAt) > Date.parse(candidatesByLink.get(newest.link).publishedAt)) newestBySource.set(candidate.source, pick);
+  }
+  const keptLinkByLink = new Map();
+  const kept = releases.filter((pick) => {
+    const candidate = candidatesByLink.get(pick.link);
+    const newest = candidate.kind === 'release' ? newestBySource.get(candidate.source) : pick;
+    if (newest === pick) return true;
+    keptLinkByLink.set(pick.link, newest.link);
+    console.log(`Left out ${candidate.title}, as ${candidatesByLink.get(newest.link).title} is newer.`);
+    return false;
+  });
+  if (narration === null) return { releases: kept, narration };
+  const links = [...new Set(narration.links.map((link) => keptLinkByLink.get(link) ?? link))];
+  return { releases: kept, narration: { ...narration, links } };
 }
 
 async function writeDigest(digest) {
@@ -111,7 +135,7 @@ for (let attempt = 1; attempt <= 2 && !digest; attempt++) {
     refusal = `the answer is not JSON: ${error.message}`;
   }
   if (!refusal) {
-    digest = { status: 'ok', reason: null, ...measured, lead: answer.lead ?? null, releases: answer.releases ?? [], narration: answer.narration ?? null };
+    digest = { status: 'ok', reason: null, ...measured, lead: answer.lead ?? null, ...oneReleasePerProduct(answer.releases ?? [], answer.narration ?? null) };
   } else if (attempt === 2) {
     digest = { status: 'failed', reason: `the answer was refused twice, last because ${refusal}`, ...measured };
   } else {

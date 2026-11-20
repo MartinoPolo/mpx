@@ -60,8 +60,9 @@ wait, never by ending the turn.
      [news-sources.json](news-sources.json) without a model into `sources/news.json`: the window's
      candidates and each source as read, dead or not read; never work around a dead source. The
      digest is one run of the cheapest tier without tools (`--model`, default `haiku`) that picks the
-     lead and the new model releases following `taste.md`, with summaries and at most one narration
-     sentence, into `sources/news-digest.json`. Exit code 2 from either: continue.
+     lead and the new model releases (one per product, the newest) following `taste.md`, with
+     summaries and at most one narration sentence, into `sources/news-digest.json`. Exit code 2 from
+     either: continue.
    - Reach the work Git hosts (GitLab, Gerrit; [provider routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md))
      with a ten-second timeout. When they time out and OpenVPN GUI is installed, connect
      `openvpn-gui --command connect <profile>` (profile `MORNING_BRIEF_VPN`, else the only one in

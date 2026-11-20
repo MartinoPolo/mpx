@@ -62,6 +62,7 @@ const FRONT_PAGE = {
 const LEAD_LINK = 'https://vendor.example/news/model-nine';
 const RELEASE_LINK = 'https://github.com/example/tool/releases/tag/v1.2.0';
 const SANDBOX_LINK = 'https://sandbox.example/';
+const NEWER_RELEASE_LINK = 'https://github.com/example/tool/releases/tag/v1.2.1';
 
 // Stands in for the headless session: it records its arguments and answers as FAKE_MODEL_SCENARIO says, attempt by attempt.
 const FAKE_MODEL = String.raw`
@@ -75,6 +76,7 @@ const answers = {
   valid: [valid],
   unknown: [{ ...valid, lead: { link: 'https://invented.example/', summary: 'Invented.' } }, { ...valid, lead: { link: 'https://invented.example/', summary: 'Invented.' } }],
   'malformed-then-valid': ['I could not decide.', valid],
+  'two-versions': [{ ...valid, releases: [{ link: '${RELEASE_LINK}', summary: 'Hooks run in parallel.' }, { link: '${NEWER_RELEASE_LINK}', summary: 'Fixes parallel hooks; follows 1.2.0.' }], narration: { text: 'Model Nine leads, and Tool shipped twice.', links: ['${LEAD_LINK}', '${RELEASE_LINK}'] } }],
 }[process.env.FAKE_MODEL_SCENARIO];
 const answer = answers[attempt - 1];
 process.stdout.write(JSON.stringify({ type: 'result', is_error: false, result: typeof answer === 'string' ? answer : JSON.stringify(answer), total_cost_usd: 0.002, usage: { input_tokens: 1200, cache_read_input_tokens: 0 } }));
@@ -266,6 +268,31 @@ test('a malformed answer is retried once', async () => {
     assert.equal(digest.exitCode, 0, digest.stdout);
     const record = await readJson(join(fixture.dayDirectory, 'sources', 'news-digest.json'));
     assert.deepEqual([record.status, record.attempts, record.lead.link], ['ok', 2, LEAD_LINK]);
+  });
+});
+
+test('the digest keeps one release per product, the newest', async () => {
+  await withFixture(async (fixture) => {
+    const release = (version: string, link: string, publishedAt: string) => ({
+      source: 'Tool', app: 'claude', kind: 'release', title: `Tool ${version}`, link, publishedAt, score: null, commentCount: null, excerpt: '',
+    });
+    await writeFile(join(fixture.dayDirectory, 'sources', 'news.json'), JSON.stringify({
+      window: { since: '2026-11-17T06:00:00Z', until: '2026-11-18T06:00:00Z' },
+      sources: [],
+      candidates: [
+        release('v1.2.1', NEWER_RELEASE_LINK, '2026-11-17T22:00:00.000Z'),
+        release('v1.2.0', RELEASE_LINK, '2026-11-17T18:00:00.000Z'),
+        { source: 'Vendor', app: 'openai', kind: 'news', title: 'Introducing Model Nine', link: LEAD_LINK, publishedAt: '2026-11-17T16:00:00.000Z', score: null, commentCount: null, excerpt: '' },
+      ],
+    }));
+    const digest = await digestNews(fixture, 'two-versions');
+    assert.equal(digest.exitCode, 0, digest.stdout);
+    const [run] = await modelRuns(fixture);
+    assert.match(run.args.join(' '), /at most one release per product/);
+    const record = await readJson(join(fixture.dayDirectory, 'sources', 'news-digest.json'));
+    assert.deepEqual(record.releases, [{ link: NEWER_RELEASE_LINK, summary: 'Fixes parallel hooks; follows 1.2.0.' }]);
+    assert.deepEqual(record.narration.links, [LEAD_LINK, NEWER_RELEASE_LINK], 'the sentence names the release that stays');
+    assert.match(digest.stdout, /Left out Tool v1\.2\.0, as Tool v1\.2\.1 is newer\./);
   });
 });
 
