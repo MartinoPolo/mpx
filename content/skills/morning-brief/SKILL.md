@@ -55,6 +55,12 @@ wait, never by ending the turn.
      control center's Projects page decides. One with local activity in the window carries its Git
      state.
    - `node "<skill-dir>/scripts/sessions.mjs" --since <since> --until <until> --out <dayDirectory>/sources/sessions.json`
+   - `node "<skill-dir>/scripts/triage.mjs" <dayDirectory>` writes `sources/triage.json`: every
+     capture of `Ideas.md` and of the daily notes from the window's first day to today, an open
+     bullet or task not nested under another list line, with its `id`, `notePath`, `line`,
+     `heading` path, `task`, `hasNested` and `nested` lines; the counts it left out (ticked,
+     started, empty, paragraphs, the sections Current Priorities and Token burn ideas); and the move
+     `destinations`.
    - `node "<skill-dir>/scripts/news.mjs" <dayDirectory>`, then
      `node "<skill-dir>/scripts/news-digest.mjs" <dayDirectory>`. The first reads the feeds of
      [news-sources.json](news-sources.json) without a model into `sources/news.json`: the window's
@@ -69,9 +75,10 @@ wait, never by ending the turn.
      `%USERPROFILE%/OpenVPN/config`) and retry for up to two minutes. Still unreachable: ask me to
      connect the VPN and wait up to five minutes, then go on with the work hosts unavailable.
 3. Launch one subagent per [area](#areas), in parallel. Give each the window, the day folder, its
-   input files, the read-only rule, and a ten-minute budget; each writes `sources/<area>.json` and
-   returns one line. Bound every command with a timeout. If subagents run in the background, wait in
-   the foreground until every expected `sources/<area>.json` exists or the budget ends.
+   input files, the read-only rule, and a ten-minute budget; each writes `sources/<area>.json` (the
+   triage area `sources/triage-judgement.json`) and returns one line. Bound every command with a
+   timeout. If subagents run in the background, wait in the foreground until every expected file
+   exists or the budget ends.
 4. When all are back, write `<dayDirectory>/brief.json` ([below](#briefjson)); a failed area is
    written as unavailable.
 5. `node "<skill-dir>/scripts/daily-brief.mjs" <dayDirectory>` writes the
@@ -118,22 +125,19 @@ wait, never by ending the turn.
   its `sessionId` and, from its `reportLinks`, the results worth opening (reports, clips, images,
   pull requests) as `links` with short plain labels. A result to look at, such as a render, a clip
   or screenshots, is always linked when the report links it.
-- **Obsidian triage**: daily notes in `$MPX_OBSIDIAN_VAULT/Daily/` from the window and today, and
-  changes to `Ideas.md`. Unchecked dump bullets and tasks not yet under a capture heading are
-  captures; only bullets and tasks: leave out plain paragraphs and started `[/]` lines. Each keeps
-  its whole `line`, copied character for character (emoji, tags and links included) without list
-  marker or checkbox; `daily-brief.mjs` leaves out a capture whose line it cannot find. Before
-  listing a capture, check the vault for it: one already filed, done or superseded gets
-  `resolved: true` and a `resolution` of a few words with the evidence.
+- **Obsidian triage** (`triage.json`): judgement only, the script chose the captures. Give every
+  capture a suggestion as [`notes`](#daily-briefjson) takes it, in `sources/triage-judgement.json`
+  (capture id to suggestion). Before suggesting work, check the vault and the active repositories:
+  one already filed, done, built or superseded is resolved, with the evidence as `because`.
 
 `$MPX_AI_RETAINED/morning-brief/taste.md`, when present, holds my preferences (whose calendars are
 whose, news taste); the main session, every area and the news digest follow it.
 
 ## brief.json
 
-The session's data file for Code, Agents and the capture lines; [brief.sample.json](brief.sample.json)
-shows its shape. `projects` lists `id` and `name` of the projects the runs name. `chapters` holds
-one entry per area, its `type` `work`, `overnight` or `triage` and its `data`; an area that failed
+The session's data file for Code and Agents; [brief.sample.json](brief.sample.json) shows its shape.
+`projects` lists `id` and `name` of the projects the runs name. `chapters` holds one entry per
+area, its `type` `work` or `overnight` and its `data`; an area that failed
 has `status: "unavailable"` and its reason as `detail` instead, which the document lists as a source
 not read.
 
@@ -152,8 +156,6 @@ not read.
   without a label or a valid address is left out with a problem), `startedAt` and `endedAt` (ISO
   with offset; no end while it runs) and `logTail`, the last lines of its log or report. A run
   without `startedAt` is left out.
-- `triage`: `data.groups`, each with `note`, the vault path of the note, and `items`: `line`, and
-  `resolved` with `resolution` for a capture already done.
 
 ## daily-brief.json
 
@@ -161,9 +163,9 @@ The document the Alfred control center serves. Its contract, validator and sampl
 `packages/core/src/brief/` in `$MPX_PROJECTS/alfred-control-center`. `daily-brief.mjs` writes
 everything that comes from data: the calendar days and events from the gatherers, one mailbox per
 connector account (each mail with the `messageId` a saved draft replies to), Slack items with their
-permalinks, Code from the merge request cards, Agents from the overnight runs, the triage captures
-whose line still stands in its note, News from `news.json` with the digest's picks and summaries
-(without a digest, the top-scored story and each release source's newest release, unsummarised), the
+permalinks, Code from the merge request cards, Agents from the overnight runs, the captures of
+`triage.json` whose line still stands in its note, each with its `heading` path and `nested` lines,
+News from `news.json` with the digest's picks and summaries (without a digest, the top-scored story and each release source's newest release, unsummarised), the
 sources, dead news sources as problems, and every item id, a hash of the item's source reference
 (`brief-id.mjs`; a pull request's with its state, a news item's link). Without `news.json` the
 document has no news chapter. From the app's latest outcome it leaves out the `dismissed` items,
@@ -202,14 +204,23 @@ apply:
   a mail ask snoozed, other messages and runs dismissed, a card Merge, Rerun or Review today.
   Judge and narrate only what was read: a thread the gatherer could not read in full is said to be
   not read in full, never filled in.
-- `notes`: every capture id to its suggestion: `move` with `destination` (`notePath`, `heading`:
-  one of the move destinations the script lists), `priority` (1 to 5) and optional new `wording`;
-  `research` with the question as `wording`, for a line that reads as brainstorming or a question;
-  `done`, `progress` (with the `link` of the issue or pull request that tracks it), `delete` or
-  `keep`. Only a move carries `destination` and `priority`, and only a move or research `wording`;
-  any may say `because`. The app refuses to move or delete a line with lines nested under it and to
-  tick a plain bullet; the script marks both, and refused suggestions are problems. An unjudged
-  capture is kept, or done when resolved (deleted when a plain bullet).
+- `notes`: every capture id to a decisive suggestion I can accept with one click, read with its
+  `heading` path and `nested` lines, and a `because` of a few words; `"default"` only when nothing
+  better fits. `sources/triage-judgement.json` gives them first; an entry here replaces one there.
+  - `move` with `destination` (`notePath`, `heading`: one of the move destinations), `priority` (1
+    lowest to 5 highest) and optional new `wording`: normally, for a line under a project heading,
+    into that project's note under its best heading.
+  - `research` with the question as `wording`, for a question or a brainstorm.
+  - Already built, merged or done: `done` on a task, `delete` on a plain bullet, with the evidence
+    in `because`; superseded: `delete`. `progress` with the `link` of the issue or pull request
+    that tracks it.
+  - A large token-heavy job (crawling, harvesting, bulk parsing): `because` starts with `Token burn
+    candidate`, and it moves to `Ideas.md` under its token burn heading when that is a destination.
+  - `keep` only when the line should stay where it is.
+
+  Only a move carries `destination` and `priority`, and only a move or research `wording`. The app
+  refuses to move or delete a line with lines nested under it and to tick a plain bullet; the script
+  marks both, and refused suggestions are problems. An unjudged capture is kept.
 - `bookmarks`: every `capture.json` bookmark id to its `kind`, `suggestion` and `csfd`;
   `wishlists` lists the wishlists a shop find can move to.
 - `quietRuns`: automations that ran fine and sessions closed in the window.
