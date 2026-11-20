@@ -11,6 +11,7 @@ import { fakeVoiceStudio, narrate } from './morning-brief-voice-studio.js';
 const exec = promisify(execFile);
 const documentScript = resolve('content/skills/morning-brief/scripts/daily-brief.mjs');
 const startScript = resolve('content/skills/morning-brief/scripts/start.mjs');
+const triageScript = resolve('content/skills/morning-brief/scripts/triage.mjs');
 const idScript = resolve('content/skills/morning-brief/scripts/brief-id.mjs');
 const DAY = '2026-11-18';
 const PERMALINK = 'https://example.slack.com/archives/C1/p1794779220000100?thread_ts=1794779220.000100&cid=C1';
@@ -96,15 +97,6 @@ function sessionBrief() {
         ] },
         { id: 'platform', name: 'platform', app: 'gerrit', cards: [{ ref: '4711', title: 'Fix', state: 'review', url: 'https://gerrit.example/c/4711' }] },
       ] } },
-      { type: 'triage', data: { groups: [
-        { note: 'Daily/2026-11-18', items: [
-          { line: 'buy present sam 🔼' },
-          { line: 'Book the winter tyres', resolved: true, resolution: 'Booked for Saturday' },
-          { line: 'Removed line' },
-          { line: 'what would a weekly brief need?' },
-          { line: 'Started already' },
-        ] },
-      ] } },
     ],
   };
 }
@@ -151,10 +143,15 @@ async function withFixture<Result>(use: (fixture: Fixture) => Promise<Result>): 
     await mkdir(join(fixture.vault, '_Projekty', 'alfred'), { recursive: true });
     await writeFile(join(fixture.vault, '_Projekty', 'alfred', 'alfred.md'), '# alfred\n\n## Ideas\n\n## Tasks\n- [ ] an existing task\n');
     await mkdir(fixture.data);
+    await runTriage(fixture);
     return await use(fixture);
   } finally {
     await rm(home, { recursive: true, force: true });
   }
+}
+
+async function runTriage(fixture: Fixture): Promise<void> {
+  await exec(process.execPath, [triageScript, fixture.dayDirectory], { env: { ...process.env, MPX_OBSIDIAN_VAULT: fixture.vault }, timeout: 20_000 });
 }
 
 async function runDocument(fixture: Fixture, projectsRoot = join(fixture.home, 'projects'), ...flags: string[]): Promise<DocumentRun> {
@@ -278,19 +275,16 @@ test('the document maps gathered data to the contract before any judgement', asy
     assert.match(stdout, /Overnight run "No start time" has no known outcome or no startedAt instant; left out\./);
 
     const capture = document.chapters.capture;
-    assert.deepEqual(capture.notes.map((note: { id: string; lineText: string; suggestion: { action: string; because: string | null } }) => [note.id, note.lineText, note.suggestion.action, note.suggestion.because]), [
-      [await idOf('note', 'Daily/2026-11-18.md', 'buy present sam 🔼'), 'buy present sam 🔼', 'keep', null],
-      [await idOf('note', 'Daily/2026-11-18.md', 'Book the winter tyres'), 'Book the winter tyres', 'done', 'Booked for Saturday'],
-      [await idOf('note', 'Daily/2026-11-18.md', 'what would a weekly brief need?'), 'what would a weekly brief need?', 'keep', null],
-    ]);
-    assert.match(stdout, /"Removed line" is not a list line of Daily\/2026-11-18\.md/);
-    assert.match(stdout, /"Started already" is started \(\[\/\]\) in Daily\/2026-11-18\.md; left out/);
+    assert.deepEqual(capture.notes, await Promise.all(['buy present sam 🔼', 'what would a weekly brief need?', 'call the plumber'].map(async (lineText) => ({
+      id: await idOf('note', 'Daily/2026-11-18.md', lineText), notePath: 'Daily/2026-11-18.md', lineText, heading: ['Dump'], nested: [],
+      suggestion: { action: 'keep', destination: null, wording: null, priority: null, because: null, link: null },
+    }))), 'every open line triage.mjs lists, without the ticked and started ones');
     assert.doesNotMatch(stdout, /has no messageId/, 'a mail without a reply needs no messageId');
     assert.deepEqual(capture.bookmarks, []);
     assert.match(stdout, /Bookmarks without judgement:\n {2}1001 {2}Headlamp/);
     assert.match(stdout, new RegExp(`Items without judgement[^\\n]*:\\n {2}mail personal:\\n {4}${await idOf('mail', 'thread-vat')} {2}Accountant: VAT draft {2}\\[default: Snooze\\]\\n {2}mail work:\\n {4}mail-[0-9a-f]{12} {2}Sentry: TypeError in checkout {2}\\[default: Dismiss\\]\\n`));
     assert.match(stdout, / {4}code-[0-9a-f]{12} {2}mpx #218 Skill palette aliases {2}\[default: Merge\]\n/);
-    assert.match(stdout, /\n {2}capture notes:\n {4}note-[0-9a-f]{12} {2}buy present sam 🔼 {2}\[default: keep\]\n/);
+    assert.match(stdout, /\n {2}capture notes:\n {4}note-[0-9a-f]{12} {2}buy present sam 🔼 {2}\[under Dump\] {2}\[default: keep\]\n/);
     assert.match(stdout, /Summary: 10 items and 2 bookmarks without judgement; 0 narration sentences without a clip; the document is not valid\. No narration: calendar, mail, slack, code, agents, capture, projects, plan, health\.\n?$/);
     assert.ok(document.sources.every((source) => source.status === 'read'));
   });
@@ -347,16 +341,17 @@ test('the judgement adds options, suggestions, bookmarks, mailboxes without a co
 test('the report lists move destinations and the capture suggestions the app would refuse, and is kept in the log', async () => {
   await withFixture(async (fixture) => {
     await writeFile(join(fixture.vault, 'Daily', '2026-11-18.md'),
-      '# Dump\n\n- [ ] buy present sam 🔼\n- idea with details\n  - a detail\n- plain and resolved\n- plain and judged done\n');
-    const brief = sessionBrief();
-    (brief.chapters[2]!.data as { groups: unknown[] }).groups = [{ note: 'Daily/2026-11-18', items: [
-      { line: 'buy present sam 🔼' },
-      { line: 'idea with details' },
-      { line: 'plain and resolved', resolved: true, resolution: 'Done yesterday' },
-      { line: 'plain and judged done' },
-    ] }];
-    await writeJson(join(fixture.dayDirectory, 'brief.json'), brief);
+      '# Dump\n\n- [ ] buy present sam 🔼\n- idea with details\n\t- a detail\n- plain and resolved\n- plain and judged done\n- crawl every receipt\n');
+    await writeFile(join(fixture.vault, 'Ideas.md'), '## Token burn ideas\n- harvest the old photos\n');
+    await runTriage(fixture);
     const noteId = (line: string) => idOf('note', 'Daily/2026-11-18.md', line);
+    const resolvedSuggestion = { action: 'delete', because: 'Done yesterday' };
+    const tokenBurnMove = { action: 'move', destination: { notePath: 'Ideas.md', heading: 'Token burn ideas' }, priority: 2, because: 'Token burn candidate: crawls every mailbox' };
+    await writeJson(join(fixture.dayDirectory, 'sources', 'triage-judgement.json'), {
+      [await noteId('plain and resolved')]: resolvedSuggestion,
+      [await noteId('crawl every receipt')]: tokenBurnMove,
+      [await noteId('plain and judged done')]: { action: 'delete', because: 'Replaced by the judgement' },
+    });
     await writeJson(join(fixture.dayDirectory, 'daily-brief.judgement.json'), {
       notes: {
         [await noteId('buy present sam 🔼')]: { action: 'move', destination: { notePath: '_Projekty/alfred/alfred.md', heading: 'Someday' }, priority: 3 },
@@ -367,15 +362,41 @@ test('the report lists move destinations and the capture suggestions the app wou
     });
     const { stdout, document } = await runDocument(fixture);
 
-    assert.match(stdout, /Move destinations \(note: headings\):\n {2}_Projekty\/alfred\/alfred\.md: Ideas \| Tasks\n/);
+    assert.match(stdout, /Move destinations \(note: headings\):\n {2}_Projekty\/alfred\/alfred\.md: Ideas \| Tasks\n {2}Ideas\.md: Token burn ideas\n/);
     assert.match(stdout, /"buy present sam 🔼" moves to _Projekty\/alfred\/alfred\.md under "Someday", which is not among the move destinations/);
-    assert.match(stdout, /note-[0-9a-f]{12} {2}capture notes: idea with details {2}\[lines nested under it: keep\] {2}\[plain bullet: no done or progress\]/);
+    assert.doesNotMatch(stdout, /"crawl every receipt" moves to/, 'Ideas.md\'s token burn heading is a move destination');
+    assert.match(stdout, /note-[0-9a-f]{12} {2}capture notes: idea with details {2}\[under Dump\] {2}\[lines nested under it: keep\] {2}\[plain bullet: no done or progress\]/);
     assert.match(stdout, /"idea with details" has lines nested under it; the app refuses to delete it, so suggest keep\./);
     assert.match(stdout, /"plain and judged done" has no checkbox; the app refuses done on it/);
-    const resolved = document.chapters.capture.notes.find((note: { lineText: string }) => note.lineText === 'plain and resolved');
-    assert.deepEqual([resolved.suggestion.action, resolved.suggestion.because], ['delete', 'Done yesterday'], 'a resolved plain bullet is removed, as it has no box to tick');
+    const noteOf = (lineText: string) => document.chapters.capture.notes.find((note: { lineText: string }) => note.lineText === lineText);
+    assert.deepEqual(noteOf('idea with details').nested, [{ depth: 1, text: 'a detail' }]);
+    assert.deepEqual(noteOf('plain and resolved').suggestion, resolvedSuggestion, 'the triage area\'s suggestion stands');
+    assert.deepEqual(noteOf('crawl every receipt').suggestion, tokenBurnMove);
+    assert.equal(noteOf('plain and judged done').suggestion.action, 'done', 'the session\'s judgement replaces the triage area\'s');
+    assert.equal(noteOf('harvest the old photos'), undefined, 'the token burn ideas are not triaged');
+    assert.match(stdout, /Summary: 7 items and 2 bookmarks without judgement;/);
     assert.match(stdout, /plan narration targets nothing on the page: invoice \(its sentences target \[\]\)/);
     assert.equal(await readFile(join(fixture.dayDirectory, 'daily-brief.log'), 'utf8'), stdout);
+  });
+});
+
+test('a capture started or removed after triage.mjs ran is left out', async () => {
+  await withFixture(async (fixture) => {
+    await writeFile(join(fixture.vault, 'Daily', '2026-11-18.md'), '# Dump\n\n- [ ] buy present sam 🔼\n- [/] call the plumber\n');
+    const { stdout, document } = await runDocument(fixture);
+    assert.deepEqual(document.chapters.capture.notes.map((note: { lineText: string }) => note.lineText), ['buy present sam 🔼']);
+    assert.match(stdout, /"what would a weekly brief need\?" is no longer a list line of Daily\/2026-11-18\.md; left out\./);
+    assert.match(stdout, /"call the plumber" was started \(\[\/\]\) in Daily\/2026-11-18\.md after triage\.mjs ran; left out\./);
+  });
+});
+
+test('without sources/triage.json the Obsidian triage source is not read', async () => {
+  await withFixture(async (fixture) => {
+    await rm(join(fixture.dayDirectory, 'sources', 'triage.json'));
+    const { stdout, document } = await runDocument(fixture);
+    assert.deepEqual(document.chapters.capture.notes, []);
+    assert.deepEqual(document.sources.find((source) => source.name === 'Obsidian triage')?.status, 'not-read');
+    assert.match(stdout, /Move destinations \(note: headings\):\n {2}none\n/);
   });
 });
 
@@ -506,7 +527,7 @@ test('a gatherer that failed leaves its mailbox and source not read', async () =
 test('an outcome without dismissals leaves out the day\'s seen items and kept lines and brings back snoozed and undecided ones', async () => {
   await withFixture(async (fixture) => {
     const vatId = await idOf('mail', 'thread-vat');
-    const tyresId = await idOf('note', 'Daily/2026-11-18.md', 'Book the winter tyres');
+    const plumberId = await idOf('note', 'Daily/2026-11-18.md', 'call the plumber');
     const goneNoteId = await idOf('note', 'Ideas.md', 'An idea deleted since');
     const earlierSlackItem = {
       id: 'slack-earlier', short: 'Ann: lunch?', link: 'https://example.slack.com/archives/D2/p1', options: [{ kind: 'snooze' }],
@@ -520,7 +541,7 @@ test('an outcome without dismissals leaves out the day\'s seen items and kept li
       },
     });
     await writeJson(join(fixture.data, 'brief', '2026-11-17', 'outcome.json'), {
-      seen: [vatId], kept: [tyresId], snoozed: ['slack-earlier'], undecided: [goneNoteId],
+      seen: [vatId], kept: [plumberId], snoozed: ['slack-earlier'], undecided: [goneNoteId],
       feedback: [{ chapter: 'mail', text: 'Fewer notifications' }],
     });
     await writeJson(join(fixture.data, 'brief', '2026-11-19', 'outcome.json'), { seen: [await idOf('slack', PERMALINK)] });
@@ -610,16 +631,17 @@ test('Code shows only changes of active repositories and reviews requested from 
   });
 });
 
-test('a snoozed line and a snoozed bookmark return, and kept articles are not judged again', async () => {
+test('a snoozed line of a note before the window and a snoozed bookmark return, and kept articles are not judged again', async () => {
   await withFixture(async (fixture) => {
-    const plumberId = await idOf('note', 'Daily/2026-11-18.md', 'call the plumber');
+    await writeFile(join(fixture.vault, 'Daily', '2026-11-10.md'), '- call the plumber\n');
+    const plumberId = await idOf('note', 'Daily/2026-11-10.md', 'call the plumber');
     const calmId = await idOf('bookmark', '1002');
     const calmBookmark = { id: calmId, bookmarkId: '1002', kind: 'article', suggestion: { action: 'keep', destination: null, because: null }, csfd: null };
     await writeJson(join(fixture.home, 'work', 'morning-brief', '2026-11-17', 'daily-brief.json'), {
       chapters: {
         capture: {
           narration: [],
-          notes: [{ id: plumberId, notePath: 'Daily/2026-11-18.md', lineText: 'call the plumber', suggestion: { action: 'keep' } }],
+          notes: [{ id: plumberId, notePath: 'Daily/2026-11-10.md', lineText: 'call the plumber', suggestion: { action: 'keep' } }],
           bookmarks: [calmBookmark],
           wishlists: [],
         },
@@ -644,7 +666,7 @@ test('an outcome without chapter feedback prints no feedback line', async () => 
   });
 });
 
-test('the sample brief.json gives Code, Agents and the capture lines', async () => {
+test('the sample brief.json gives Code and Agents', async () => {
   await withFixture(async (fixture) => {
     await writeFile(join(fixture.dayDirectory, 'brief.json'), await readFile(resolve('content/skills/morning-brief/brief.sample.json')));
     const { stdout, document } = await runDocument(fixture);
@@ -652,7 +674,6 @@ test('the sample brief.json gives Code, Agents and the capture lines', async () 
     assert.deepEqual(document.chapters.code.merged.map((change: { reference: { label: string } }) => change.reference.label), ['!316']);
     assert.deepEqual(document.chapters.agents.items.map((run: { projectName: string; outcome: string; sessionId: string; links: unknown[] }) => [run.projectName, run.outcome, run.sessionId, run.links.length]),
       [['videoLab', 'failed', RENDER_SESSION_ID, 2]]);
-    assert.deepEqual(document.chapters.capture.notes.map((note: { lineText: string }) => note.lineText), ['buy present sam 🔼']);
     assert.doesNotMatch(stdout, /Overnight run .* left out/);
   });
 });
@@ -708,6 +729,8 @@ test('a --no-state run gives a valid document with clips and writes no page and 
 test('a judged document with clips and a health hint passes the app validator', { skip: appSkip }, async () => {
   await withFixture(async (fixture) => {
     const sessionJudgement = (await judgement()).judgement;
+    await writeFile(join(fixture.vault, 'Daily', '2026-11-18.md'), '# Dump\n\n- [ ] buy present sam 🔼\n- what would a weekly brief need?\n\t- [ ] book a slot\n');
+    await runTriage(fixture);
     await writeEpisodeNotes(fixture);
     await writeJson(join(fixture.dayDirectory, 'daily-brief.judgement.json'), { ...sessionJudgement, hints: [{ conditionId: OPEN_EPISODE, text: 'Keep walking.' }] });
     await writeJson(join(fixture.dayDirectory, 'daily-brief.clips.json'), { [sessionJudgement.narration.calendar[0]!.text]: { audio: '0a1b2c3d4e5f6a7b.wav', audioSeconds: 2.4 } });
@@ -716,6 +739,8 @@ test('a judged document with clips and a health hint passes the app validator', 
     assert.equal(exitCode, 0, stdout);
     assert.equal(document.chapters.calendar.narration[0].audio, '0a1b2c3d4e5f6a7b.wav');
     assert.equal(document.chapters.health.hints.length, 1);
+    const weekly = document.chapters.capture.notes.find((note: { lineText: string }) => note.lineText === 'what would a weekly brief need?');
+    assert.deepEqual([weekly.heading, weekly.nested], [['Dump'], [{ depth: 1, text: '[ ] book a slot' }]]);
     assert.match(stdout, /Valid: every chapter can be shown\./);
   });
 });

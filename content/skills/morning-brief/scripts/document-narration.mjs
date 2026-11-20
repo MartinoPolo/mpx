@@ -8,6 +8,9 @@ export const JUDGEMENT_FILE = 'daily-brief.judgement.json';
 export const DOCUMENT_CLIPS_FILE = 'daily-brief.clips.json';
 export const NEWS_FILE = join('sources', 'news.json');
 export const NEWS_DIGEST_FILE = join('sources', 'news-digest.json');
+export const TRIAGE_FILE = join('sources', 'triage.json');
+// The triage area's suggestion for each capture id, as the judgement's `notes` takes it.
+export const TRIAGE_JUDGEMENT_FILE = join('sources', 'triage-judgement.json');
 // The document's narration is an overview: a chapter keeps its first sentences, the rest is cut and never voiced.
 export const NARRATION_SENTENCE_LIMIT = 2;
 

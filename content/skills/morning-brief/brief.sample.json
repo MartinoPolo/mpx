@@ -33,17 +33,6 @@
           }
         ]
       }
-    },
-    {
-      "type": "triage",
-      "data": {
-        "groups": [
-          { "note": "Daily/2026-11-18", "items": [
-            { "line": "buy present sam 🔼" },
-            { "line": "Book the car service", "resolved": true, "resolution": "Booked for 22 Nov in the personal calendar" }
-          ] }
-        ]
-      }
     }
   ]
 }

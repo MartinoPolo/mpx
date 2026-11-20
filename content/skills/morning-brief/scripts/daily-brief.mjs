@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 // Writes <day>/daily-brief.json, the document the Alfred control center serves, and checks it with the app's
-// validator. Calendar, mail and Slack come from the gatherers' sources, Code, Agents and the capture lines from the
-// session's brief.json (Code only for the active repositories of sources/repos.json and the reviews requested from me,
-// naming each change left out), bookmarks from the bookmarks bridge, AI news from sources/news.json with the picks and
-// summaries of sources/news-digest.json; <day>/daily-brief.judgement.json adds the session's judgement and
-// <day>/daily-brief.clips.json the narration's clips. The latest outcome the app wrote leaves out dismissed items and
-// kept lines and brings back snoozed and undecided ones. Prints the items with their ids, every item and bookmark still
+// validator. Calendar, mail and Slack come from the gatherers' sources, Code and Agents from the session's brief.json
+// (Code only for the active repositories of sources/repos.json and the reviews requested from me, naming each change
+// left out), the capture lines and move destinations from sources/triage.json, bookmarks from the bookmarks bridge, AI
+// news from sources/news.json with the picks and summaries of sources/news-digest.json; sources/triage-judgement.json
+// and <day>/daily-brief.judgement.json add the judgement and <day>/daily-brief.clips.json the narration's clips. The
+// latest outcome the app wrote leaves out dismissed items and kept lines and brings back snoozed and undecided ones. Prints the items with their ids, every item and bookmark still
 // without judgement with its default, the move destinations, the open health episode notes by path (never their
 // contents), and a summary line counting what is unjudged and the narration sentences without a clip and naming the
 // chapters without narration, and keeps the same report in <day>/daily-brief.log. Unless --no-state, records the brief
@@ -19,8 +19,11 @@ import { homedir } from 'node:os';
 import { basename, isAbsolute, join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { briefItemId } from './brief-id.mjs';
-import { DOCUMENT_CLIPS_FILE, documentSentences, JUDGEMENT_FILE, NARRATION_SENTENCE_LIMIT, NEWS_DIGEST_FILE, NEWS_FILE } from './document-narration.mjs';
+import {
+  DOCUMENT_CLIPS_FILE, documentSentences, JUDGEMENT_FILE, NARRATION_SENTENCE_LIMIT, NEWS_DIGEST_FILE, NEWS_FILE, TRIAGE_FILE, TRIAGE_JUDGEMENT_FILE,
+} from './document-narration.mjs';
 import { localIso } from './local-time.mjs';
+import { nestedLines, readNote } from './note-lines.mjs';
 import { sessionIdOfTranscript } from './session-id.mjs';
 
 const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -40,7 +43,6 @@ const IMAP_REASON = 'Not read yet: its password needs your Windows Hello approva
 // Projects targets are Orca's project names, which only the app reads; Plan and Health sentences target nothing.
 const UNCHECKED_TARGET_CHAPTERS = ['projects'];
 const UNTARGETED_CHAPTERS = ['plan', 'health'];
-const PROJECTS_FOLDER = '_Projekty';
 const MEDICAL_RECORDS_FOLDER = 'Medical records';
 const FRONTMATTER_FENCE = /^---\s*$/;
 // The app's vault writers: a move or delete takes the line out, refused while lines are nested under it; done and
@@ -91,6 +93,9 @@ const repositories = await readJson(join(dayDirectory, 'sources', 'repos.json'))
 // The document sits in <home>/work/morning-brief/<day>; the bookmarks bridge writes <home>/work/bookmarks.
 const capture = await readJson(join(dayDirectory, '..', '..', 'bookmarks', 'capture.json'));
 const judgement = (await readJson(join(dayDirectory, JUDGEMENT_FILE))) ?? {};
+const triage = await readJson(join(dayDirectory, TRIAGE_FILE));
+// The session's judgement may replace a suggestion of the triage area.
+const noteSuggestions = { ...(await readJson(join(dayDirectory, TRIAGE_JUDGEMENT_FILE))), ...judgement.notes };
 const clipsByText = (await readJson(join(dayDirectory, DOCUMENT_CLIPS_FILE))) ?? {};
 const news = await readJson(join(dayDirectory, NEWS_FILE));
 const newsDigest = await readJson(join(dayDirectory, NEWS_DIGEST_FILE));
@@ -126,6 +131,12 @@ function briefChapterSource(name, type) {
   return { name, status: 'read', reason: null };
 }
 
+function triageSource() {
+  const name = 'Obsidian triage';
+  if (!Array.isArray(triage?.captures)) return { name, status: 'not-read', reason: 'No readable sources/triage.json; triage.mjs did not run or found no vault.' };
+  return { name, status: 'read', reason: null };
+}
+
 function captureSource() {
   const name = 'Bookmarks bridge';
   if (!capture) return { name, status: 'not-read', reason: 'The bridge has written no capture.json.' };
@@ -150,46 +161,25 @@ function narrationOf(chapterName) {
   return sentences.slice(0, NARRATION_SENTENCE_LIMIT).map((sentence) => ({ text: sentence?.text, targets: sentence?.targets, ...clipOf(sentence?.text) }));
 }
 
-const indentOf = (line) => line.match(/^\s*/)[0].length;
-
 // The text of every list line of a vault note, as the app finds a task: without its marker and checkbox. A started
 // line (`[/]`) is no capture: it is work in progress or a line handed to research. The app refuses to move, tick or
 // delete a line with lines nested under it.
 async function noteLines(notePath) {
   if (!noteLineCache.has(notePath)) {
-    const noteText = await readFile(join(vaultDirectory, notePath), 'utf8').catch(() => '');
-    const lines = noteText.split(/\r?\n/);
+    const entries = readNote(await readFile(join(vaultDirectory, notePath), 'utf8').catch(() => ''));
     const open = new Set();
     const started = new Set();
     const nested = new Set();
     const plain = new Set();
-    lines.forEach((line, index) => {
-      const match = line.match(/^\s*(?:[-*+]|\d+[.)])\s+(?:\[(.)\]\s+)?(.*\S)\s*$/);
-      if (!match) return;
-      (match[1] === '/' ? started : open).add(match[2]);
-      if (match[1] === undefined) plain.add(match[2]);
-      const nextLine = lines[index + 1] ?? '';
-      if (nextLine.trim() && indentOf(nextLine) > indentOf(line)) nested.add(match[2]);
+    entries.forEach((entry, index) => {
+      if (entry.kind !== 'list' || !entry.text) return;
+      (entry.box === '/' ? started : open).add(entry.text);
+      if (entry.box === null) plain.add(entry.text);
+      if (nestedLines(entries, index).length > 0) nested.add(entry.text);
     });
     noteLineCache.set(notePath, { open, started, nested, plain });
   }
   return noteLineCache.get(notePath);
-}
-
-// The headings below each project note's title, the places the app offers a capture to move under.
-async function moveDestinations() {
-  if (!vaultDirectory) return [];
-  const projectFolders = (await readdir(join(vaultDirectory, PROJECTS_FOLDER), { withFileTypes: true }).catch(() => []))
-    .filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
-  const destinations = [];
-  for (const folder of projectFolders) {
-    const notePath = `${PROJECTS_FOLDER}/${folder}/${folder}.md`;
-    const noteText = await readFile(join(vaultDirectory, notePath), 'utf8').catch(() => undefined);
-    if (noteText === undefined) continue;
-    const headings = noteText.split('\n').map((line) => line.match(/^﻿?(#{2,6})\s+(.*?)\s*$/)?.[2]).filter(Boolean);
-    destinations.push({ notePath, headings });
-  }
-  return destinations;
 }
 
 // As the app reads an episode note: open while its frontmatter has `illness` and `ended` is empty or missing.
@@ -550,27 +540,24 @@ function agentsChapter() {
   return { narration: narrationOf('agents'), items, quiet: judgement.quietRuns ?? [] };
 }
 
+// The captures triage.mjs listed whose line still stands in its note, each with its heading path and nested lines.
 async function captureChapter() {
   const notes = [];
-  for (const group of briefChapter('triage')?.data?.groups ?? []) {
-    const note = text(group.note).replaceAll('\\', '/');
-    if (!note) continue;
-    const notePath = note.endsWith('.md') ? note : `${note}.md`;
-    for (const item of group.items ?? []) {
-      const lineText = text(item.line);
-      if (!lineText) continue;
-      if (!(await isNoteLineOpen(notePath, lineText))) {
-        problems.push((await noteLines(notePath)).started.has(lineText)
-          ? `"${shorten(lineText)}" is started ([/]) in ${notePath}; left out.`
-          : `"${shorten(lineText)}" is not a list line of ${notePath}; left out (a triage item's line is a whole bullet or task, exactly as it stands without marker and checkbox).`);
-        continue;
-      }
-      // A resolved task is ticked; a resolved plain bullet is removed, unless lines nested under it keep it.
-      const { nested, plain } = lineShapeOf({ notePath, lineText });
-      const resolvedAction = plain ? (nested ? 'keep' : 'delete') : 'done';
-      const suggestion = item.resolved ? { ...KEEP_LINE, action: resolvedAction, because: text(item.resolution) || null } : KEEP_LINE;
-      notes.push({ id: briefItemId('note', notePath, lineText), notePath, lineText, suggestion });
+  for (const capture of triage?.captures ?? []) {
+    const notePath = text(capture.notePath);
+    const lineText = text(capture.line);
+    if (!notePath || !lineText) continue;
+    if (!(await isNoteLineOpen(notePath, lineText))) {
+      problems.push((await noteLines(notePath)).started.has(lineText)
+        ? `"${shorten(lineText)}" was started ([/]) in ${notePath} after triage.mjs ran; left out.`
+        : `"${shorten(lineText)}" is no longer a list line of ${notePath}; left out.`);
+      continue;
     }
+    const heading = texts(capture.heading);
+    const nested = (Array.isArray(capture.nested) ? capture.nested : [])
+      .filter((line) => Number.isInteger(line?.depth) && line.depth > 0 && text(line.text))
+      .map((line) => ({ depth: line.depth, text: text(line.text) }));
+    notes.push({ id: briefItemId('note', notePath, lineText), notePath, lineText, heading, nested, suggestion: KEEP_LINE });
   }
   const bookmarks = [];
   for (const bookmark of capture?.bookmarks ?? []) {
@@ -741,7 +728,7 @@ function checkNoteSuggestion(note, destinations) {
   const label = `"${shorten(note.lineText)}"`;
   if (nested && REMOVING_ACTIONS.includes(action)) problems.push(`${label} has lines nested under it; the app refuses to ${action} it, so suggest keep.`);
   if (plain && CHECKBOX_ACTIONS.includes(action)) problems.push(`${label} has no checkbox; the app refuses ${action} on it, so suggest delete or keep.`);
-  if (action !== 'move' || !vaultDirectory) return;
+  if (action !== 'move' || !vaultDirectory || !triage) return;
   const offered = destinations.find((candidate) => candidate.notePath === destination?.notePath);
   if (!offered?.headings.includes(destination?.heading)) {
     problems.push(`${label} moves to ${destination?.notePath} under "${destination?.heading}", which is not among the move destinations.`);
@@ -757,7 +744,7 @@ function applyJudgement(document, destinations) {
       const options = judgement.options?.[item.id];
       if (Array.isArray(options)) item.options = options.map((option) => (people ? addressedReply(option, item, people) : option));
       else if (options !== undefined && options !== ACCEPT_DEFAULT) problems.push(`The options of ${item.id} are neither a list nor "${ACCEPT_DEFAULT}"; its default stands.`);
-      const suggestion = judgement.notes?.[item.id];
+      const suggestion = noteSuggestions[item.id];
       if (suggestion && suggestion !== ACCEPT_DEFAULT) item.suggestion = suggestion;
       if (listName === 'capture notes') checkNoteSuggestion(item, destinations);
       const offersReply = item.options?.some((option) => option.kind === 'reply');
@@ -766,7 +753,7 @@ function applyJudgement(document, destinations) {
       }
     }
   }
-  const unknownIds = [...Object.keys(judgement.options ?? {}), ...Object.keys(judgement.notes ?? {})].filter((id) => !knownIds.has(id));
+  const unknownIds = [...Object.keys(judgement.options ?? {}), ...Object.keys(noteSuggestions)].filter((id) => !knownIds.has(id));
   if (unknownIds.length) problems.push(`The judgement names items the document does not have: ${unknownIds.join(', ')}.`);
 }
 
@@ -814,7 +801,7 @@ const document = {
     ...imapMailboxes.map((mailbox) => ({ name: `${mailbox.label} mail`, status: mailbox.status, reason: mailbox.reason })),
     briefChapterSource('Merge requests', 'work'),
     briefChapterSource('Overnight runs', 'overnight'),
-    briefChapterSource('Obsidian triage', 'triage'),
+    triageSource(),
     captureSource(),
     ...newsSources(),
   ],
@@ -834,7 +821,7 @@ const document = {
 dropRepeatedItems(document);
 const latest = await latestOutcome();
 const { report: outcomeReport, returnedIds } = latest ? await applyOutcome(document, latest) : { report: 'No outcome from the app yet.', returnedIds: new Set() };
-const destinations = await moveDestinations();
+const destinations = Array.isArray(triage?.destinations) ? triage.destinations : [];
 applyJudgement(document, destinations);
 checkNarrationTargets(document);
 
@@ -855,11 +842,12 @@ async function recordLastBrief() {
 function itemLabel(item) {
   if (!item.lineText) return item.short ?? item.bookmarkId;
   const { nested, plain } = lineShapeOf(item);
-  return `${item.lineText}${nested ? '  [lines nested under it: keep]' : ''}${plain ? '  [plain bullet: no done or progress]' : ''}`;
+  const heading = item.heading?.length ? `  [under ${item.heading.join(' > ')}]` : '';
+  return `${item.lineText}${heading}${nested ? '  [lines nested under it: keep]' : ''}${plain ? '  [plain bullet: no done or progress]' : ''}`;
 }
 const itemLines = itemLists(document).flatMap(([listName, items]) => items.map((item) => `  ${item.id}  ${listName}: ${itemLabel(item)}`));
 // A bookmark is judged once it is in the document; a returned item keeps the judgement of the day it came from.
-const judgedIds = new Set([...Object.keys(judgement.options ?? {}), ...Object.keys(judgement.notes ?? {}), ...returnedIds]);
+const judgedIds = new Set([...Object.keys(judgement.options ?? {}), ...Object.keys(noteSuggestions), ...returnedIds]);
 const unjudgedLists = itemLists(document).filter(([listName]) => listName !== 'capture bookmarks')
   .map(([listName, items]) => [listName, items.filter((item) => !judgedIds.has(item.id))])
   .filter(([, items]) => items.length > 0);
