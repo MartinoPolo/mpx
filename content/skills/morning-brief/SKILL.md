@@ -113,7 +113,10 @@ wait, never by ending the turn.
   to my first of the morning (`sessions.json` `away`), even when the window spans several days.
   Sessions with `activeWhileAway` (long implementations, renders, AFK executions) and Orca automation
   runs that did work in that gap; read their final reports for results. Routines are not reported:
-  skipped or scheduled runs that did nothing, and the brief's own runs.
+  skipped or scheduled runs that did nothing, and the brief's own runs. A run from a session carries
+  its `sessionId` and, from its `reportLinks`, the results worth opening (reports, clips, images,
+  pull requests) as `links` with short plain labels. A result to look at, such as a render, a clip
+  or screenshots, is always linked when the report links it.
 - **Obsidian triage**: daily notes in `$MPX_OBSIDIAN_VAULT/Daily/` from the window and today, and
   changes to `Ideas.md`. Unchecked dump bullets and tasks not yet under a capture heading are
   captures; only bullets and tasks: leave out plain paragraphs and started `[/]` lines. Each keeps
@@ -142,7 +145,9 @@ not read.
   review; it names each card it leaves out.
 - `overnight`: `data.runs`, each with `project` (a `projects` id), `outcome` (`ok`, `fail`,
   `partial`, `check`), a terse `title` without the project name, `session` (its transcript `file`
-  from `sessions.json`, or the automation run's id), `url` of the result, `startedAt` and `endedAt`
+  from `sessions.json`, or the automation run's id), `sessionId` from `sessions.json` for a session's
+  run, `url` of the single most useful result, `links` (`[{ "label", "link" }]`, every result worth
+  opening), `startedAt` and `endedAt`
   (ISO with offset; no end while it runs) and `logTail`, the last lines of its log or report. A run
   without `startedAt` is left out.
 - `triage`: `data.groups`, each with `note`, the vault path of the note, and `items`: `line`, and
