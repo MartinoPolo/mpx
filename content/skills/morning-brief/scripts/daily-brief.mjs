@@ -21,6 +21,7 @@ import { parseArgs } from 'node:util';
 import { briefItemId } from './brief-id.mjs';
 import { DOCUMENT_CLIPS_FILE, documentSentences, JUDGEMENT_FILE, NARRATION_SENTENCE_LIMIT, NEWS_DIGEST_FILE, NEWS_FILE } from './document-narration.mjs';
 import { localIso } from './local-time.mjs';
+import { sessionIdOfTranscript } from './session-id.mjs';
 
 const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
@@ -103,7 +104,8 @@ const text = (value) => (typeof value === 'string' ? value.trim() : '');
 const link = (value) => (typeof value === 'string' && URL.canParse(value) ? value : null);
 const isInstant = (value) => typeof value === 'string' && INSTANT_PATTERN.test(value) && !Number.isNaN(Date.parse(value));
 const shorten = (value) => (value.length > SHORT_LENGTH ? `${value.slice(0, SHORT_LENGTH - 1)}…` : value);
-const texts = (values) => (Array.isArray(values) ? values.map(text).filter(Boolean) : []);
+const plural = (count, noun) => `${count} ${noun}${count === 1 ? '' : 's'}`;
+const texts = (values) =>(Array.isArray(values) ? values.map(text).filter(Boolean) : []);
 const idsIn = (list) => (Array.isArray(list) ? list : []).map((entry) => (typeof entry === 'string' ? entry : entry?.id)).filter(Boolean);
 
 function gathererResult(record, name) {
@@ -524,6 +526,11 @@ function agentsChapter() {
     }
     const logTail = Array.isArray(run.logTail) ? run.logTail.filter((line) => typeof line === 'string') : [];
     const sourceReference = text(run.session) || text(run.url) || `${projectName} ${new Date(startedAt).toISOString()} ${title}`;
+    const links = (Array.isArray(run.links) ? run.links : [])
+      .map((entry) => ({ label: text(entry?.label), link: link(entry?.link) }))
+      .filter((entry) => entry.label && entry.link);
+    const droppedLinkCount = (Array.isArray(run.links) ? run.links.length : 0) - links.length;
+    if (droppedLinkCount > 0) problems.push(`Overnight run "${title}" has ${plural(droppedLinkCount, 'link')} without a label or a valid address; left out.`);
     items.push({
       id: briefItemId('agent', sourceReference),
       short: shorten(`${projectName}: ${title}`),
@@ -535,6 +542,9 @@ function agentsChapter() {
       startedAt,
       endedAt: outcome !== 'running' && isInstant(run.endedAt) ? run.endedAt : null,
       logTail,
+      // A run names its session by sessionId; a run written before carries only the transcript path as `session`.
+      sessionId: text(run.sessionId) || sessionIdOfTranscript(text(run.session)) || null,
+      links,
     });
   }
   return { narration: narrationOf('agents'), items, quiet: judgement.quietRuns ?? [] };
@@ -868,7 +878,6 @@ const unjudgedBookmarks = (capture?.bookmarks ?? [])
 const unnarratedChapters = Object.entries(document.chapters).filter(([, chapter]) => chapter.narration.length === 0).map(([chapterName]) => chapterName);
 const unvoicedSentenceCount = Object.values(document.chapters).flatMap((chapter) => chapter.narration).filter((sentence) => !sentence.audio).length;
 const validation = validate(documentPath);
-const plural = (count, noun) => `${count} ${noun}${count === 1 ? '' : 's'}`;
 const destinationLines = destinations.map(({ notePath, headings }) => `  ${notePath}: ${headings.join(' | ') || 'no headings'}`);
 const hintedPaths = new Set(document.chapters.health.hints.map((hint) => hint.conditionId));
 const episodeLines = episodePaths.map((notePath) => `  ${notePath}${hintedPaths.has(notePath) ? '' : '  [no hint]'}`);

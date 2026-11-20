@@ -15,6 +15,9 @@ const idScript = resolve('content/skills/morning-brief/scripts/brief-id.mjs');
 const DAY = '2026-11-18';
 const PERMALINK = 'https://example.slack.com/archives/C1/p1794779220000100?thread_ts=1794779220.000100&cid=C1';
 const APP_DIRECTORY = process.env.MPX_PROJECTS ? join(process.env.MPX_PROJECTS, 'alfred-control-center') : '';
+const RENDER_SESSION_ID = '6f1c2a9e-0b3d-4c7e-9a41-2d6f8e7b1c90';
+const RENDER_LOG_LINK = { label: 'Render log', link: 'file:///C:/render.log' };
+const RENDER_FRAME_LINK = { label: 'Last frame', link: 'file:///C:/out/frame 6.png' };
 
 type BriefDocument = { sources: { name: string; status: string; reason: string | null }[]; chapters: Record<string, any> };
 type Fixture = { home: string; dayDirectory: string; vault: string; data: string };
@@ -79,9 +82,10 @@ function sessionBrief() {
     projects: [{ id: 'videolab', name: 'videoLab' }],
     chapters: [
       { type: 'overnight', data: { runs: [
-        { project: 'videolab', outcome: 'fail', title: 'Proxy render', startedAt: '2026-11-18T03:10:00+01:00', endedAt: '2026-11-18T04:15:00+01:00', logTail: ['Disk D is full'], url: 'file:///C:/render.log' },
-        { project: 'videolab', outcome: 'partial', title: 'Staging', startedAt: '2026-11-17T23:30:00+01:00', session: 'C:/sessions/staging.jsonl' },
-        { project: 'videolab', outcome: 'partial', title: 'Migration', startedAt: '2026-11-18T01:00:00+01:00', endedAt: '2026-11-18T02:40:00+01:00', session: 'C:/sessions/migration.jsonl' },
+        { project: 'videolab', outcome: 'fail', title: 'Proxy render', startedAt: '2026-11-18T03:10:00+01:00', endedAt: '2026-11-18T04:15:00+01:00', logTail: ['Disk D is full'], url: 'file:///C:/render.log',
+          sessionId: RENDER_SESSION_ID, links: [RENDER_LOG_LINK, { label: ' ', link: 'https://example.com/unlabelled' }, { label: 'Frames', link: 'not a link' }, 'file:///C:/bare.png', RENDER_FRAME_LINK] },
+        { project: 'videolab', outcome: 'partial', title: 'Staging', startedAt: '2026-11-17T23:30:00+01:00', session: 'C:/sessions/2026-11-17T22-00-00-000Z_staging-session.jsonl' },
+        { project: 'videolab', outcome: 'partial', title: 'Migration', startedAt: '2026-11-18T01:00:00+01:00', endedAt: '2026-11-18T02:40:00+01:00', session: 'orca-automation-run-17' },
         { project: 'videolab', outcome: 'ok', title: 'No start time' },
       ] } },
       { type: 'work', data: { projects: [
@@ -263,7 +267,11 @@ test('the document maps gathered data to the contract before any judgement', asy
     const [render, staging, migration] = document.chapters.agents.items;
     assert.deepEqual([render.id, render.projectName, render.outcome, render.logTail], [await idOf('agent', 'file:///C:/render.log'), 'videoLab', 'failed', ['Disk D is full']]);
     assert.deepEqual([render.startedAt, render.endedAt], ['2026-11-18T03:10:00+01:00', '2026-11-18T04:15:00+01:00']);
-    assert.equal(staging.id, await idOf('agent', 'C:/sessions/staging.jsonl'));
+    assert.deepEqual([render.link, render.sessionId, render.links], ['file:///C:/render.log', RENDER_SESSION_ID, [RENDER_LOG_LINK, RENDER_FRAME_LINK]]);
+    assert.match(stdout, /Overnight run "Proxy render" has 3 links without a label or a valid address; left out\./);
+    assert.equal(staging.id, await idOf('agent', 'C:/sessions/2026-11-17T22-00-00-000Z_staging-session.jsonl'));
+    assert.deepEqual([staging.sessionId, staging.links], ['staging-session', []], 'without a sessionId, the id comes from the transcript name');
+    assert.deepEqual([migration.sessionId, migration.links], [null, []], 'an automation run has no session id');
     assert.deepEqual([staging.outcome, staging.endedAt], ['running', null], 'a partial run without an end is still running');
     assert.deepEqual([migration.outcome, migration.endedAt], ['blocked', '2026-11-18T02:40:00+01:00'], 'a partial run that ended stopped short');
     assert.equal(document.chapters.agents.items.length, 3);
@@ -642,7 +650,8 @@ test('the sample brief.json gives Code, Agents and the capture lines', async () 
     const { stdout, document } = await runDocument(fixture);
     assert.deepEqual(document.chapters.code.items.map((item: { reference: { label: string } }) => item.reference.label), ['!318', '!321', '!320']);
     assert.deepEqual(document.chapters.code.merged.map((change: { reference: { label: string } }) => change.reference.label), ['!316']);
-    assert.deepEqual(document.chapters.agents.items.map((run: { projectName: string; outcome: string }) => [run.projectName, run.outcome]), [['videoLab', 'failed']]);
+    assert.deepEqual(document.chapters.agents.items.map((run: { projectName: string; outcome: string; sessionId: string; links: unknown[] }) => [run.projectName, run.outcome, run.sessionId, run.links.length]),
+      [['videoLab', 'failed', RENDER_SESSION_ID, 2]]);
     assert.deepEqual(document.chapters.capture.notes.map((note: { lineText: string }) => note.lineText), ['buy present sam 🔼']);
     assert.doesNotMatch(stdout, /Overnight run .* left out/);
   });

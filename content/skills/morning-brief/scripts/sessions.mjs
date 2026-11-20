@@ -4,8 +4,9 @@
 // kept working in it and carry `reportLinks`, the https and file links of their last report.
 // Usage: sessions.mjs --since <iso> [--until <iso>] [--out <file>]
 import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { join } from 'node:path';
 import { parseArgs } from 'node:util';
+import { sessionIdOfTranscript } from './session-id.mjs';
 
 const TITLE_LENGTH = 160;
 const DAY_MILLISECONDS = 24 * 60 * 60 * 1000;
@@ -77,9 +78,6 @@ function reportLinksOf(report) {
   return [...linksByAddress.values()].slice(0, MAXIMUM_REPORT_LINKS);
 }
 
-// A Claude transcript is named by its session id; a Pi transcript by its start time, an underscore and the id.
-const sessionIdOf = (file) => basename(file, '.jsonl').split('_').at(-1);
-
 async function sessionsIn(account, harness, projectsDirectory) {
   const found = [];
   for (const project of await readdir(projectsDirectory, { withFileTypes: true }).catch(() => [])) {
@@ -96,7 +94,7 @@ async function sessionsIn(account, harness, projectsDirectory) {
       const { entries, lastReport } = readEntries(lines);
       const prompts = entries.filter((entry) => entry.prompt && entry.time >= since);
       found.push({
-        account, harness, project: project.name, file: path, sessionId: sessionIdOf(path), modified: info.mtime.toISOString(),
+        account, harness, project: project.name, file: path, sessionId: sessionIdOfTranscript(path), modified: info.mtime.toISOString(),
         sizeKilobytes: Math.round(info.size / 1024), lines: lines.length,
         title: (entries.find((entry) => entry.prompt)?.prompt ?? '').slice(0, TITLE_LENGTH),
         lastPrompt: prompts.at(-1)?.time.toISOString(),
