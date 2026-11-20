@@ -105,6 +105,22 @@ function sessionBrief() {
   };
 }
 
+function repository(name: string, active: boolean, host: string, fullName: string) {
+  return { name, domain: 'personal', active, changedInWindow: false, remote: { forge: host === 'github.com' ? 'github' : 'gitlab', host, fullName, web: `https://${host}/${fullName}` } };
+}
+
+function repositoriesSource() {
+  return {
+    since: new Date(2026, 10, 17, 6).toISOString(),
+    activeSince: new Date(2026, 9, 19, 6).toISOString(),
+    repositories: [
+      repository('mpx', true, 'github.com', 'owner/mpx'),
+      repository('ui-components', true, 'gitlab.example.com', 'ui'),
+      repository('grovekeeper', false, 'github.com', 'owner/grovekeeper'),
+    ],
+  };
+}
+
 async function withFixture<Result>(use: (fixture: Fixture) => Promise<Result>): Promise<Result> {
   const home = await mkdtemp(join(tmpdir(), 'mpx-daily-brief-'));
   const fixture: Fixture = { home, dayDirectory: join(home, 'work', 'morning-brief', DAY), vault: join(home, 'vault'), data: join(home, 'data') };
@@ -117,6 +133,7 @@ async function withFixture<Result>(use: (fixture: Fixture) => Promise<Result>): 
     });
     await writeJson(join(fixture.dayDirectory, 'sources', 'personal.json'), personalSource());
     await writeJson(join(fixture.dayDirectory, 'sources', 'work.json'), workSource());
+    await writeJson(join(fixture.dayDirectory, 'sources', 'repos.json'), repositoriesSource());
     await writeJson(join(fixture.dayDirectory, 'brief.json'), sessionBrief());
     await writeJson(join(home, 'work', 'bookmarks', 'capture.json'), {
       syncedAt: '2026-11-18T05:00:00Z',
@@ -540,6 +557,44 @@ test('a dismissed pull request returns when its state changes', async () => {
     assert.deepEqual((await runDocument(fixture)).document.chapters.code.items.map((item: { id: string }) => item.id), [await idOf('code', pullRequest, 'ready')]);
     await writeDismissed(await idOf('code', pullRequest, 'ready'));
     assert.deepEqual((await runDocument(fixture)).document.chapters.code.items, []);
+  });
+});
+
+test('Code shows only changes of active repositories and reviews requested from me', async () => {
+  await withFixture(async (fixture) => {
+    const brief = sessionBrief();
+    (brief.chapters[1]!.data as { projects: unknown[] }).projects = [
+      { id: 'mpx', name: 'mpx', app: 'github', cards: [
+        { ref: '#218', title: 'Skill palette aliases', state: 'ready', url: 'https://github.com/owner/mpx/pull/218' },
+        { ref: '#216', title: 'Changelog skips merge commits', state: 'merged', url: 'https://github.com/owner/mpx/pull/216' },
+      ] },
+      { id: 'claude-queue', name: 'claude-queue', app: 'github', cards: [
+        { ref: '#3', title: 'cqueue: queue prompts for timed delivery', state: 'review', url: 'https://github.com/owner/claude-queue/pull/3' },
+      ] },
+      { id: 'grovekeeper', name: 'Grovekeeper', app: 'github', cards: [
+        { ref: '#425', title: 'Seasonal planting', state: 'review', url: 'https://github.com/owner/Grovekeeper/pull/425' },
+        { ref: '#424', title: 'Old merge', state: 'merged', url: 'https://github.com/owner/grovekeeper/pull/424' },
+      ] },
+      { id: 'grovekeeper-e2e-testing', name: 'grovekeeper-e2e-testing', app: 'github', cards: [
+        { ref: '#17', title: 'Smoke suite', state: 'failing', url: 'https://github.com/owner/grovekeeper-e2e-testing/pull/17' },
+      ] },
+      { id: 'design-system', name: 'design-system', app: 'gitlab', cards: [
+        { ref: '!88', title: 'Tokens for dark mode', state: 'review', author: 'Alex', reviewRequested: true, url: 'https://gitlab.example.com/design/system/-/merge_requests/88' },
+      ] },
+    ];
+    await writeJson(join(fixture.dayDirectory, 'brief.json'), brief);
+    const { stdout, document } = await runDocument(fixture);
+
+    assert.deepEqual(document.chapters.code.items.map((item: { projectName: string; reference: { label: string } }) => [item.projectName, item.reference.label]),
+      [['mpx', '#218'], ['design-system', '!88']]);
+    assert.deepEqual(document.chapters.code.merged.map((change: { reference: { label: string } }) => change.reference.label), ['#216']);
+    assert.match(stdout, /Left out of Code \(not an active repository in sources\/repos\.json\):\n {2}claude-queue #3 https:\/\/github\.com\/owner\/claude-queue\/pull\/3\n {2}Grovekeeper #425 https:\/\/github\.com\/owner\/Grovekeeper\/pull\/425\n {2}Grovekeeper #424 https:\/\/github\.com\/owner\/grovekeeper\/pull\/424\n {2}grovekeeper-e2e-testing #17 https:\/\/github\.com\/owner\/grovekeeper-e2e-testing\/pull\/17\n/);
+    assert.doesNotMatch(stdout.slice(stdout.indexOf('Problems:')), /claude-queue/, 'a change left out is a note, not a problem');
+
+    await rm(join(fixture.dayDirectory, 'sources', 'repos.json'));
+    const withoutRepositories = await runDocument(fixture);
+    assert.deepEqual(withoutRepositories.document.chapters.code.items.map((item: { reference: { label: string } }) => item.reference.label), ['!88']);
+    assert.match(withoutRepositories.stdout, /No readable sources\/repos\.json, so Code shows only the reviews requested from you; run repos\.mjs\./);
   });
 });
 

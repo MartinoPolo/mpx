@@ -50,6 +50,10 @@ wait, never by ending the turn.
      `sources/personal.json` and `sources/work.json`, each `ok` with `data` or `unavailable` with
      `reason`. `--only personal|work` reruns one.
    - `node "<skill-dir>/scripts/repos.mjs" --since <since> --out <dayDirectory>/sources/repos.json`
+     lists every repository folder under the roots with its `remote` (`forge`, `host`, `fullName`,
+     `web`) and `active`: a commit in the last month or an open task in its vault project note, as the
+     control center's Projects page decides. One with local activity in the window carries its Git
+     state.
    - `node "<skill-dir>/scripts/sessions.mjs" --since <since> --until <until> --out <dayDirectory>/sources/sessions.json`
    - `node "<skill-dir>/scripts/news.mjs" <dayDirectory>`, then
      `node "<skill-dir>/scripts/news-digest.mjs" <dayDirectory>`. The first reads the feeds of
@@ -96,13 +100,15 @@ wait, never by ending the turn.
 
 ## Areas
 
-- **Merge requests** (`repos.json`, `work.json` alerts). Every MR, PR, Gerrit change and local
-  branch with activity in the window or open items, work and personal, becomes a card whose `state`
-  says where it stands. Resolve providers per
-  [provider routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md): open and recently changed
-  MRs/PRs/Gerrit changes with review and pipeline state, Orca worktrees, uncommitted or unpushed
-  work. Approved and green MRs are `ready`; an unaddressed failed pipeline makes its MR `failing`.
-  Long-untouched dirty checkouts are no cards.
+- **Merge requests** (`repos.json`, `work.json` alerts). Query only the repositories `repos.json`
+  lists as `active`, each by its `remote` (for example `gh pr list --repo <fullName>`), and the open
+  changes in any repository that request my review, marked `reviewRequested`. Never search all of an
+  owner's or group's changes. Resolve each provider, Gerrit included, per
+  [provider routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md). Every MR, PR, Gerrit change
+  and local branch of those with activity in the window or open items, work and personal, becomes a
+  card whose `state` says where it stands: open and recently changed changes with review and pipeline
+  state, Orca worktrees, uncommitted or unpushed work. Approved and green MRs are `ready`; an
+  unaddressed failed pipeline makes its MR `failing`. Long-untouched dirty checkouts are no cards.
 - **Overnight runs**: work that kept running last night only, from my last prompt of the evening
   to my first of the morning (`sessions.json` `away`), even when the window spans several days.
   Sessions with `activeWhileAway` (long implementations, renders, AFK executions) and Orca automation
@@ -129,9 +135,11 @@ not read.
 
 - `work`: `data.projects`, each with `id`, `name`, `app` (`github` or `gitlab`; the document leaves
   out other forges with a problem) and `cards`: `ref`, `title`, `state` (`local`, `draft`, `review`,
-  `ready`, `failing`, `merged`), `url`, `author` of a review, and `pipeline` (`status` `success`,
-  `failed` or `running`, and the failed `job`). The document shows the ready, review, failing and
-  merged cards.
+  `ready`, `failing`, `merged`), `url` (the change's web address), `reviewRequested: true` on a
+  change that requests my review, `author` of a review, and `pipeline` (`status` `success`, `failed`
+  or `running`, and the failed `job`). The document shows the ready, review, failing and merged
+  cards whose `url` host and path name an active repository of `repos.json`, or that request my
+  review; it names each card it leaves out.
 - `overnight`: `data.runs`, each with `project` (a `projects` id), `outcome` (`ok`, `fail`,
   `partial`, `check`), a terse `title` without the project name, `session` (its transcript `file`
   from `sessions.json`, or the automation run's id), `url` of the result, `startedAt` and `endedAt`

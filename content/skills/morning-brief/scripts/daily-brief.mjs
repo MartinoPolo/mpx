@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Writes <day>/daily-brief.json, the document the Alfred control center serves, and checks it with the app's
 // validator. Calendar, mail and Slack come from the gatherers' sources, Code, Agents and the capture lines from the
-// session's brief.json, bookmarks from the bookmarks bridge, AI news from sources/news.json with the picks and
+// session's brief.json (Code only for the active repositories of sources/repos.json and the reviews requested from me,
+// naming each change left out), bookmarks from the bookmarks bridge, AI news from sources/news.json with the picks and
 // summaries of sources/news-digest.json; <day>/daily-brief.judgement.json adds the session's judgement and
 // <day>/daily-brief.clips.json the narration's clips. The latest outcome the app wrote leaves out dismissed items and
 // kept lines and brings back snoozed and undecided ones. Prints the items with their ids, every item and bookmark still
@@ -85,6 +86,7 @@ if (!DAY_PATTERN.test(day) || !Array.isArray(start?.calendarDays)) {
 const personal = gathererResult(await readJson(join(dayDirectory, 'sources', 'personal.json')), 'personal');
 const work = gathererResult(await readJson(join(dayDirectory, 'sources', 'work.json')), 'work');
 const brief = await readJson(join(dayDirectory, 'brief.json'));
+const repositories = await readJson(join(dayDirectory, 'sources', 'repos.json'));
 // The document sits in <home>/work/morning-brief/<day>; the bookmarks bridge writes <home>/work/bookmarks.
 const capture = await readJson(join(dayDirectory, '..', '..', 'bookmarks', 'capture.json'));
 const judgement = (await readJson(join(dayDirectory, JUDGEMENT_FILE))) ?? {};
@@ -94,6 +96,7 @@ const newsDigest = await readJson(join(dayDirectory, NEWS_DIGEST_FILE));
 const vaultDirectory = process.env.MPX_OBSIDIAN_VAULT;
 const noteLineCache = new Map();
 const mailPeopleByItemId = new Map();
+const codeLeftOut = [];
 const capturedBookmarkIds = new Set((capture?.bookmarks ?? []).map((bookmark) => String(bookmark.id)));
 
 const text = (value) => (typeof value === 'string' ? value.trim() : '');
@@ -448,9 +451,29 @@ function codeChips(card) {
   return chips;
 }
 
+const repositoryKey = (host, fullName) => `${host}/${fullName}`.toLowerCase();
+
+// The repository of a pull or merge request, read from its address: the host and the path before /pull/ or
+// /-/merge_requests/.
+function changeRepositoryKey(address) {
+  const url = URL.canParse(address) ? new URL(address) : undefined;
+  const fullName = url?.pathname.match(/^\/(.+?)\/(?:pull|-\/merge_requests)\/\d+/)?.[1];
+  return fullName ? repositoryKey(url.hostname, fullName) : undefined;
+}
+
+function activeRepositoryKeys() {
+  if (!Array.isArray(repositories?.repositories)) {
+    problems.push('No readable sources/repos.json, so Code shows only the reviews requested from you; run repos.mjs.');
+    return new Set();
+  }
+  return new Set(repositories.repositories.filter((repository) => repository.active === true && repository.remote)
+    .map((repository) => repositoryKey(repository.remote.host, repository.remote.fullName)));
+}
+
 function codeChapter() {
   const items = [];
   const merged = [];
+  const activeKeys = activeRepositoryKeys();
   for (const project of briefChapter('work')?.data?.projects ?? []) {
     const projectName = text(project.name) || text(project.id);
     const cards = (project.cards ?? []).filter((card) => card.state === 'merged' || CODE_STATE_OPTIONS[card.state]);
@@ -461,6 +484,10 @@ function codeChapter() {
     for (const card of cards) {
       const reference = { label: text(card.ref), link: link(card.url) };
       if (!reference.label || !reference.link) continue;
+      if (card.reviewRequested !== true && !activeKeys.has(changeRepositoryKey(reference.link))) {
+        codeLeftOut.push(`${projectName} ${reference.label} ${reference.link}`);
+        continue;
+      }
       const title = text(card.title) || reference.label;
       if (card.state === 'merged') {
         merged.push({ forge: project.app, projectName, reference, title });
@@ -849,6 +876,7 @@ const report = [
   `Wrote ${documentPath}`,
   outcomeReport,
   `Items:\n${itemLines.join('\n') || '  none'}`,
+  `Left out of Code (not an active repository in sources/repos.json):\n${codeLeftOut.map((change) => `  ${change}`).join('\n') || '  none'}`,
   ...(document.chapters.news ? [`News:\n${document.chapters.news.items.map((item) => `  ${item.id}  ${item.kind}: ${item.title} (${item.source})`).join('\n') || '  none'}`] : []),
   `Items without judgement (judge each in daily-brief.judgement.json, or "${ACCEPT_DEFAULT}" to accept the default shown):\n${unjudgedItemLines.join('\n') || '  none'}`,
   `Bookmarks without judgement:\n${unjudgedBookmarks.join('\n') || '  none'}`,
