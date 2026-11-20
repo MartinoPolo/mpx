@@ -147,9 +147,10 @@ not read.
 - `overnight`: `data.runs`, each with `project` (a `projects` id), `outcome` (`ok`, `fail`,
   `partial`, `check`), a terse `title` without the project name, `session` (its transcript `file`
   from `sessions.json`, or the automation run's id), `sessionId` from `sessions.json` for a session's
-  run, `url` of the single most useful result, `links` (`[{ "label", "link" }]`, every result worth
-  opening), `startedAt` and `endedAt`
-  (ISO with offset; no end while it runs) and `logTail`, the last lines of its log or report. A run
+  run only (without it the document reads the id from the `session` transcript's name), `url` of
+  the single most useful result, `links` (`[{ "label", "link" }]`, every result worth opening; one
+  without a label or a valid address is left out with a problem), `startedAt` and `endedAt` (ISO
+  with offset; no end while it runs) and `logTail`, the last lines of its log or report. A run
   without `startedAt` is left out.
 - `triage`: `data.groups`, each with `note`, the vault path of the note, and `items`: `line`, and
   `resolved` with `resolution` for a capture already done.
