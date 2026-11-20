@@ -1,14 +1,19 @@
 #!/usr/bin/env node
-// Lists Claude and Pi sessions of both accounts that changed in the window, with their first and last prompt, plus
+// Lists Claude and Pi sessions of both accounts that changed in the window, with their id, first and last prompt, plus
 // `away`: last night, the longest gap between my prompts in the day before `until`. Sessions with `activeWhileAway`
-// kept working in it.
+// kept working in it and carry `reportLinks`, the https and file links of their last report.
 // Usage: sessions.mjs --since <iso> [--until <iso>] [--out <file>]
 import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { parseArgs } from 'node:util';
 
 const TITLE_LENGTH = 160;
 const DAY_MILLISECONDS = 24 * 60 * 60 * 1000;
+const MAXIMUM_REPORT_LINKS = 8;
+const LINK_TARGET = String.raw`(?:https://|file:///)`;
+// A Markdown link, its target in angle brackets when it holds spaces.
+const MARKDOWN_LINK = new RegExp(String.raw`\[([^\]\n]+)\]\((?:<(${LINK_TARGET}[^>\n]+)>|(${LINK_TARGET}[^\s)]+))\)`, 'g');
+const BARE_LINK = new RegExp(String.raw`${LINK_TARGET}[^\s<>()\[\]"'\x60]+`, 'g');
 const { values } = parseArgs({ options: { since: { type: 'string' }, until: { type: 'string' }, out: { type: 'string' } } });
 const since = new Date(values.since ?? '');
 const until = new Date(values.until ?? Date.now());
@@ -33,19 +38,47 @@ function humanPromptText(entry) {
   return text;
 }
 
+function assistantText(entry) {
+  const message = entry.message ?? entry;
+  return message?.role === 'assistant' && !entry.isSidechain ? textOf(message.content).trim() : '';
+}
+
+// The entries' times and prompts, and the text of the last assistant message that has text: the session's report.
 function readEntries(lines) {
   const entries = [];
+  let lastReport = '';
   for (const line of lines) {
     try {
       const entry = JSON.parse(line);
       const time = new Date(entry.timestamp ?? entry.message?.timestamp ?? '');
       if (!Number.isNaN(time.getTime())) entries.push({ time, prompt: humanPromptText(entry) });
+      lastReport = assistantText(entry) || lastReport;
     } catch {
       continue;
     }
   }
-  return entries;
+  return { entries, lastReport };
 }
+
+// A report's https and file links in order, each once with its link text as label (a bare link is its own label).
+function reportLinksOf(report) {
+  const markdownLinks = [...report.matchAll(MARKDOWN_LINK)]
+    .map((match) => ({ index: match.index, label: match[1].trim(), link: match[2] ?? match[3] }));
+  // Blanking the Markdown links keeps the other links' positions, so the result follows the report's order.
+  const withoutMarkdownLinks = report.replace(MARKDOWN_LINK, (match) => ' '.repeat(match.length));
+  const bareLinks = [...withoutMarkdownLinks.matchAll(BARE_LINK)].map((match) => {
+    const link = match[0].replace(/[.,;:!?]+$/, '');
+    return { index: match.index, label: link, link };
+  });
+  const linksByAddress = new Map();
+  for (const { label, link } of [...markdownLinks, ...bareLinks].sort((left, right) => left.index - right.index)) {
+    if (!linksByAddress.has(link)) linksByAddress.set(link, { label, link });
+  }
+  return [...linksByAddress.values()].slice(0, MAXIMUM_REPORT_LINKS);
+}
+
+// A Claude transcript is named by its session id; a Pi transcript by its start time, an underscore and the id.
+const sessionIdOf = (file) => basename(file, '.jsonl').split('_').at(-1);
 
 async function sessionsIn(account, harness, projectsDirectory) {
   const found = [];
@@ -60,15 +93,16 @@ async function sessionsIn(account, harness, projectsDirectory) {
       if (!info || info.mtime < since) continue;
       const text = await readFile(path, 'utf8').catch(() => '');
       const lines = text.split('\n');
-      const entries = readEntries(lines);
+      const { entries, lastReport } = readEntries(lines);
       const prompts = entries.filter((entry) => entry.prompt && entry.time >= since);
       found.push({
-        account, harness, project: project.name, file: path, modified: info.mtime.toISOString(),
+        account, harness, project: project.name, file: path, sessionId: sessionIdOf(path), modified: info.mtime.toISOString(),
         sizeKilobytes: Math.round(info.size / 1024), lines: lines.length,
         title: (entries.find((entry) => entry.prompt)?.prompt ?? '').slice(0, TITLE_LENGTH),
         lastPrompt: prompts.at(-1)?.time.toISOString(),
         promptTimes: prompts.map((entry) => entry.time),
         entryTimes: entries.map((entry) => entry.time),
+        reportLinks: reportLinksOf(lastReport),
       });
     }
   }
@@ -95,6 +129,7 @@ for (let index = 1; index < marks.length; index++) {
 for (const session of sessions) {
   const whileAway = away ? session.entryTimes.filter((time) => time > away.from && time < away.to) : [];
   if (whileAway.length) session.activeWhileAway = { entries: whileAway.length, from: whileAway[0].toISOString(), until: whileAway.at(-1).toISOString() };
+  else delete session.reportLinks;
   delete session.promptTimes;
   delete session.entryTimes;
 }

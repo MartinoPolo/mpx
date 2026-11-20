@@ -50,14 +50,19 @@ wait, never by ending the turn.
      `sources/personal.json` and `sources/work.json`, each `ok` with `data` or `unavailable` with
      `reason`. `--only personal|work` reruns one.
    - `node "<skill-dir>/scripts/repos.mjs" --since <since> --out <dayDirectory>/sources/repos.json`
+     lists every repository folder under the roots with its `remote` (`forge`, `host`, `fullName`,
+     `web`) and `active`: a commit in the last month or an open task in its vault project note, as the
+     control center's Projects page decides. One with local activity in the window carries its Git
+     state.
    - `node "<skill-dir>/scripts/sessions.mjs" --since <since> --until <until> --out <dayDirectory>/sources/sessions.json`
    - `node "<skill-dir>/scripts/news.mjs" <dayDirectory>`, then
      `node "<skill-dir>/scripts/news-digest.mjs" <dayDirectory>`. The first reads the feeds of
      [news-sources.json](news-sources.json) without a model into `sources/news.json`: the window's
      candidates and each source as read, dead or not read; never work around a dead source. The
      digest is one run of the cheapest tier without tools (`--model`, default `haiku`) that picks the
-     lead and the new model releases following `taste.md`, with summaries and at most one narration
-     sentence, into `sources/news-digest.json`. Exit code 2 from either: continue.
+     lead and the new model releases (one per product, the newest) following `taste.md`, with
+     summaries and at most one narration sentence, into `sources/news-digest.json`. Exit code 2 from
+     either: continue.
    - Reach the work Git hosts (GitLab, Gerrit; [provider routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md))
      with a ten-second timeout. When they time out and OpenVPN GUI is installed, connect
      `openvpn-gui --command connect <profile>` (profile `MORNING_BRIEF_VPN`, else the only one in
@@ -96,18 +101,23 @@ wait, never by ending the turn.
 
 ## Areas
 
-- **Merge requests** (`repos.json`, `work.json` alerts). Every MR, PR, Gerrit change and local
-  branch with activity in the window or open items, work and personal, becomes a card whose `state`
-  says where it stands. Resolve providers per
-  [provider routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md): open and recently changed
-  MRs/PRs/Gerrit changes with review and pipeline state, Orca worktrees, uncommitted or unpushed
-  work. Approved and green MRs are `ready`; an unaddressed failed pipeline makes its MR `failing`.
-  Long-untouched dirty checkouts are no cards.
+- **Merge requests** (`repos.json`, `work.json` alerts). Query only the repositories `repos.json`
+  lists as `active`, each by its `remote` (for example `gh pr list --repo <fullName>`), and the open
+  changes in any repository that request my review, marked `reviewRequested`. Never search all of an
+  owner's or group's changes. Resolve each provider, Gerrit included, per
+  [provider routing]({{MPX_SHARED_INSTRUCTIONS}}/PROVIDER_ROUTING.md). Every MR, PR, Gerrit change
+  and local branch of those with activity in the window or open items, work and personal, becomes a
+  card whose `state` says where it stands: open and recently changed changes with review and pipeline
+  state, Orca worktrees, uncommitted or unpushed work. Approved and green MRs are `ready`; an
+  unaddressed failed pipeline makes its MR `failing`. Long-untouched dirty checkouts are no cards.
 - **Overnight runs**: work that kept running last night only, from my last prompt of the evening
   to my first of the morning (`sessions.json` `away`), even when the window spans several days.
   Sessions with `activeWhileAway` (long implementations, renders, AFK executions) and Orca automation
   runs that did work in that gap; read their final reports for results. Routines are not reported:
-  skipped or scheduled runs that did nothing, and the brief's own runs.
+  skipped or scheduled runs that did nothing, and the brief's own runs. A run from a session carries
+  its `sessionId` and, from its `reportLinks`, the results worth opening (reports, clips, images,
+  pull requests) as `links` with short plain labels. A result to look at, such as a render, a clip
+  or screenshots, is always linked when the report links it.
 - **Obsidian triage**: daily notes in `$MPX_OBSIDIAN_VAULT/Daily/` from the window and today, and
   changes to `Ideas.md`. Unchecked dump bullets and tasks not yet under a capture heading are
   captures; only bullets and tasks: leave out plain paragraphs and started `[/]` lines. Each keeps
@@ -129,12 +139,16 @@ not read.
 
 - `work`: `data.projects`, each with `id`, `name`, `app` (`github` or `gitlab`; the document leaves
   out other forges with a problem) and `cards`: `ref`, `title`, `state` (`local`, `draft`, `review`,
-  `ready`, `failing`, `merged`), `url`, `author` of a review, and `pipeline` (`status` `success`,
-  `failed` or `running`, and the failed `job`). The document shows the ready, review, failing and
-  merged cards.
+  `ready`, `failing`, `merged`), `url` (the change's web address), `reviewRequested: true` on a
+  change that requests my review, `author` of a review, and `pipeline` (`status` `success`, `failed`
+  or `running`, and the failed `job`). The document shows the ready, review, failing and merged
+  cards whose `url` host and path name an active repository of `repos.json`, or that request my
+  review; it names each card it leaves out.
 - `overnight`: `data.runs`, each with `project` (a `projects` id), `outcome` (`ok`, `fail`,
   `partial`, `check`), a terse `title` without the project name, `session` (its transcript `file`
-  from `sessions.json`, or the automation run's id), `url` of the result, `startedAt` and `endedAt`
+  from `sessions.json`, or the automation run's id), `sessionId` from `sessions.json` for a session's
+  run, `url` of the single most useful result, `links` (`[{ "label", "link" }]`, every result worth
+  opening), `startedAt` and `endedAt`
   (ISO with offset; no end while it runs) and `logTail`, the last lines of its log or report. A run
   without `startedAt` is left out.
 - `triage`: `data.groups`, each with `note`, the vault path of the note, and `items`: `line`, and
@@ -198,7 +212,11 @@ apply:
 - `bookmarks`: every `capture.json` bookmark id to its `kind`, `suggestion` and `csfd`;
   `wishlists` lists the wishlists a shop find can move to.
 - `quietRuns`: automations that ran fine and sessions closed in the window.
-- `reminders`: Plan reminders, the home's additions such as deadlines and the monthly invoice.
+- `reminders`: Plan reminders (`title`, `reason`, `link`, `due`), the home's additions such as
+  deadlines and the monthly invoice. `link` points to the source whenever there is one: the Slack
+  thread, the mail, the pull request, the vault note as an `obsidian://` link, or the `file:///`
+  path of the home's `state/<case>.md`. `reason` begins with that source in two or three words, such
+  as `Flight claim case:` or `Slack, Jan:`.
 - `hints`: one per open health episode note the script lists, `conditionId` its path and `text`
   one short practical hint. Read each listed note yourself, without a subagent: what to try or watch
   given its check-ins, no diagnosis, and to see a doctor when it worsens over several days. Never

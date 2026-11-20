@@ -24,7 +24,13 @@
       "type": "overnight",
       "data": {
         "runs": [
-          { "project": "videolab", "outcome": "fail", "title": "4K render", "session": "C:/Users/me/.claude/projects/C---videoLab/render.jsonl", "url": "file:///C:/videoLab/render.log", "startedAt": "2026-11-17T23:10:00+01:00", "endedAt": "2026-11-18T02:14:00+01:00", "logTail": ["scene 7: render timed out after 3 h"] }
+          {
+            "project": "videolab", "outcome": "fail", "title": "4K render",
+            "session": "C:/Users/me/.claude/projects/C---videoLab/6f1c2a9e-0b3d-4c7e-9a41-2d6f8e7b1c90.jsonl", "sessionId": "6f1c2a9e-0b3d-4c7e-9a41-2d6f8e7b1c90",
+            "url": "file:///C:/videoLab/render.log",
+            "links": [{ "label": "Render log", "link": "file:///C:/videoLab/render.log" }, { "label": "Scenes 1 to 6", "link": "file:///C:/videoLab/out/scenes-1-6.mp4" }],
+            "startedAt": "2026-11-17T23:10:00+01:00", "endedAt": "2026-11-18T02:14:00+01:00", "logTail": ["scene 7: render timed out after 3 h"]
+          }
         ]
       }
     },
