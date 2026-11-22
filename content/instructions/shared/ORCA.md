@@ -23,6 +23,7 @@ workflow asks, and leave terminals and worktrees you did not start alone.
 
 | Goal | Command |
 |---|---|
+| Check the app and runtime are up | `orca status` |
 | See what runs where | `orca worktree ps`; `orca terminal list [--worktree <selector>] --json` |
 | New worktree, optionally with an agent | `orca worktree create --name <name> --repo path:<repo> [--base-branch <ref>] [--agent <id> --prompt '<text>']` |
 | Agent in an existing checkout | `orca agent launch --agent <id> --worktree path:<dir> [--prompt '<text>'] [--model <id> --effort <level>]` |
