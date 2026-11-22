@@ -37,8 +37,8 @@ workflow asks, and leave terminals and worktrees you did not start alone.
 
 - `terminal create` and `agent launch` return the terminal handle; neither takes focus without
   `--focus`.
-- In `--command`, start agents through the MPX launchers so MPX content and the right account load;
-  raw `claude` or `pi` skips them.
+- In `--command`, use the MPX launchers (`cc`, `ccw`, `pi`, `piw`, `alfred`) to load MPX content and
+  select the account; native commands `claude` and `xpi` bypass MPX.
 - A project without `mpxconfig.json` stops the MPX launcher at a confirmation prompt: add the file
   before launching an unattended agent there.
 - `terminal send` reports whether the prompt was submitted. On silence never send it again; after a
