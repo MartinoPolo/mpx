@@ -657,6 +657,21 @@ test('a snoozed line of a note before the window and a snoozed bookmark return, 
   });
 });
 
+test('a judged bookmark the outcome kept stays out without counting as unjudged', async () => {
+  await withFixture(async (fixture) => {
+    const keep = { action: 'keep', destination: null, because: 'Still deciding' };
+    await writeJson(join(fixture.dayDirectory, 'daily-brief.judgement.json'), {
+      bookmarks: { 1001: { kind: 'shop', suggestion: keep }, 1002: { kind: 'article', suggestion: keep } },
+    });
+    await writeJson(join(fixture.data, 'brief', '2026-11-17', 'outcome.json'), {
+      snoozed: [], undecided: [], kept: [await idOf('bookmark', '1001'), await idOf('bookmark', '1002')], seen: [], dismissed: [], keptBookmarks: [], feedback: {},
+    });
+    const { stdout, document } = await runDocument(fixture);
+    assert.deepEqual(document.chapters.capture.bookmarks, []);
+    assert.match(stdout, /Bookmarks without judgement:\n {2}none\n/);
+  });
+});
+
 test('an outcome without chapter feedback prints no feedback line', async () => {
   await withFixture(async (fixture) => {
     await writeJson(join(fixture.data, 'brief', '2026-11-17', 'outcome.json'), { snoozed: [], undecided: [], kept: [], seen: [], feedback: {} });
