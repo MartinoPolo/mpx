@@ -860,8 +860,10 @@ function defaultLabel(item) {
 const unjudgedItemLines = unjudgedLists.flatMap(([listName, items]) => [`  ${listName}:`, ...items.map((item) => `    ${item.id}  ${itemLabel(item)}  [default: ${defaultLabel(item)}]`)]);
 const documentBookmarkIds = new Set(document.chapters.capture.bookmarks.map((bookmark) => bookmark.bookmarkId));
 const keptArticleIds = new Set(idsIn(latest?.outcome.keptBookmarks).map(String));
+// A judged bookmark the outcome left out (kept or dismissed earlier) is not missing its judgement.
 const unjudgedBookmarks = (capture?.bookmarks ?? [])
-  .filter((bookmark) => !documentBookmarkIds.has(String(bookmark.id)) && !keptArticleIds.has(String(bookmark.id)))
+  .filter((bookmark) => !documentBookmarkIds.has(String(bookmark.id)) && !keptArticleIds.has(String(bookmark.id))
+    && !judgement.bookmarks?.[String(bookmark.id)])
   .map((bookmark) => `  ${bookmark.id}  ${bookmark.title}  ${bookmark.url}`);
 const unnarratedChapters = Object.entries(document.chapters).filter(([, chapter]) => chapter.narration.length === 0).map(([chapterName]) => chapterName);
 const unvoicedSentenceCount = Object.values(document.chapters).flatMap((chapter) => chapter.narration).filter((sentence) => !sentence.audio).length;
