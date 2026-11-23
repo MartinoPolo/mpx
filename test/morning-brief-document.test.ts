@@ -49,7 +49,7 @@ function personalSource() {
         { id: 'later', calendarId: 'me@example.com', day: '2026-11-25', start: '10:00', end: '11:00', title: 'Outside the calendar days' },
       ],
       mail: [
-        { id: 'thread-vat', messageId: 'message-vat-2', class: 'act', from: 'Accountant', fromAddress: 'accountant@example.com', otherRecipients: ['Partner Name <partner@example.com>'], subject: 'VAT draft', snippet: 'Please approve by Friday', received: '2026-11-17T20:12:00+01:00', url: 'https://mail.google.com/mail/u/me@example.com/#all/thread-vat' },
+        { id: 'thread-vat', messageId: 'message-vat-2', class: 'act', from: 'Accountant', fromAddress: 'accountant@example.com', otherRecipients: ['Partner Name <partner@example.com>'], subject: 'VAT draft', snippet: 'Please approve by Friday', received: '2026-11-17T20:12:00+01:00', url: 'https://mail.google.com/mail/?authuser=me@example.com#all/thread-vat' },
         { id: 'thread-parcel', class: 'fyi', from: 'Shop', subject: 'Your parcel shipped', received: '2026-11-17T10:00:00+01:00' },
       ],
       quiet: [{ from: 'Strava', subject: 'Weekly summary', received: '2026-11-17T19:00:00+01:00' }],
@@ -71,7 +71,7 @@ function workSource() {
         skipped: 12,
       },
       mail: [],
-      alerts: [{ kind: 'sentry', project: 'web', title: 'TypeError in checkout', count: 2, first: '2026-11-17T02:56:02+01:00', last: '2026-11-18T03:11:08+01:00', resolved: false, url: 'https://mail.google.com/mail/u/me@work.example/#all/alert-1' }],
+      alerts: [{ kind: 'sentry', project: 'web', title: 'TypeError in checkout', count: 2, first: '2026-11-17T02:56:02+01:00', last: '2026-11-18T03:11:08+01:00', resolved: false, url: 'https://mail.google.com/mail/?authuser=me@work.example#all/alert-1' }],
       calendars: [{ id: 'work@example.com', name: 'work', access: 'owner', primary: true }],
       events: [{ id: 'standup', calendarId: 'work@example.com', day: '2026-11-18', start: '09:50', end: '10:00', allDay: false, title: 'Standup', place: 'Zoom', url: 'https://calendar.example/standup', attendees: 3 }],
     },
@@ -322,7 +322,7 @@ test('the judgement adds options, suggestions, bookmarks, mailboxes without a co
     assert.deepEqual(mailbox(document, 'personal').items[0].options, [{ ...vatReply, to: 'Accountant <accountant@example.com>' }, vatSnooze]);
     assert.deepEqual(mailbox(document, 'centrum'), {
       id: 'centrum', label: 'Centrum', provider: 'centrum', account: 'me@centrum.example', transport: 'imap', canSend: false,
-      status: 'not-read', reason: 'Not read yet: its password needs your Windows Hello approval, so Start reads it at the desk.', items: [], quiet: [],
+      status: 'not-read', reason: 'Not read yet: its password needs your Windows Hello approval, so Unlock reads it at the desk.', items: [], quiet: [],
     });
     assert.ok(document.sources.some((source) => source.name === 'Centrum mail' && source.status === 'not-read'));
     const presentNote = document.chapters.capture.notes.find((note: { id: string }) => note.id === presentId);

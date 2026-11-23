@@ -63,7 +63,7 @@ async function writeResult(results) {
 /** The time a step may take: its own limit within what is left of the run. */
 function stepTimeout(limitMilliseconds, step) {
   const left = deadline - Date.now();
-  if (left < MINIMUM_STEP_MILLISECONDS) throw new Error(`Start ran out of time before ${step}. Press Start again.`);
+  if (left < MINIMUM_STEP_MILLISECONDS) throw new Error(`Unlock ran out of time before ${step}. Press Unlock again.`);
   return Math.min(limitMilliseconds, left);
 }
 
@@ -85,10 +85,10 @@ function runMailCommand(commandArguments, timeoutMilliseconds) {
 // The mail command's last stderr line is one sentence; the known ones are put in words that say what to do.
 function readFailureReason(line, mailbox) {
   if (/^Secret '.*' is unavailable/.test(line)) {
-    return `Windows Hello was not approved, or the ${mailbox.label} password is not stored on this computer. Press Start again and approve the prompt.`;
+    return `Windows Hello was not approved, or the ${mailbox.label} password is not stored on this computer. Press Unlock again and approve the prompt.`;
   }
   const waited = line.match(/^Secret '.*' timed out after (\d+) seconds/);
-  if (waited) return `Windows Hello was not approved within ${waited[1]} seconds. Press Start again and approve the prompt.`;
+  if (waited) return `Windows Hello was not approved within ${waited[1]} seconds. Press Unlock again and approve the prompt.`;
   if (/^Login to .* failed/.test(line)) return `The ${mailbox.label} mail server refused the login; check the password stored for it. (${line})`;
   if (/^Unknown account/.test(line)) return `Alfred's mail command does not know the ${mailbox.label} mailbox. (${line})`;
   return line;
@@ -100,7 +100,7 @@ async function readMessages(mailbox) {
   const outcome = await runMailCommand(['read', mailbox.id, '--since', run.window.start, '--until', run.window.end], timeoutMilliseconds);
   if (outcome.error) throw new Error(`Alfred's mail command could not start: ${outcome.error}`);
   if (outcome.timedOut) {
-    throw new Error(`Reading ${mailbox.label} took over ${Math.round(timeoutMilliseconds / 60000)} minutes, so Start stopped it. Press Start again and approve the Windows Hello prompt.`);
+    throw new Error(`Reading ${mailbox.label} took over ${Math.round(timeoutMilliseconds / 60000)} minutes, so Unlock stopped it. Press Unlock again and approve the Windows Hello prompt.`);
   }
   if (outcome.code !== 0) {
     const line = lastLine(outcome.stderr);
@@ -220,7 +220,7 @@ async function judge(mailbox, threads) {
       prompt = `${input}\n\nYour previous answer was refused because ${refusal}. Answer again with the JSON object only.`;
     }
   } catch (error) {
-    throw new Error(`${mailbox.label} was read, but sorting its mail failed: ${error.message.replace(/\.?$/, '.')} Press Start to try again.`);
+    throw new Error(`${mailbox.label} was read, but sorting its mail failed: ${error.message.replace(/\.?$/, '.')} Press Unlock to try again.`);
   } finally {
     await writeFile(join(runDirectory, `judge-${mailbox.id}.log`), logs.join('\n'));
   }
@@ -284,7 +284,7 @@ async function readMailbox(mailbox) {
   console.log(`${id}: read, ${items.length} to act on, ${quiet.length} quiet, ${messages.length - threads.reduce((count, thread) => count + thread.messages.length, 0)} dismissed messages left out.`);
 }
 
-const preflightReason = contentRoot() ? null : 'Start cannot sort mail: MPX_ACTIVE_CONTENT_ROOT does not point to the mpx checkout.';
+const preflightReason = contentRoot() ? null : 'Unlock cannot sort mail: MPX_ACTIVE_CONTENT_ROOT does not point to the mpx checkout.';
 const results = [];
 await mkdir(run.partsDirectory, { recursive: true });
 for (const mailbox of run.mailboxes) {

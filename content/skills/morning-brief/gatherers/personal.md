@@ -31,7 +31,7 @@ Answer with one JSON object and nothing else:
   "mail": [{ "id": "thread id", "messageId": "", "class": "act|fyi", "from": "sender's name",
     "fromAddress": "sender's address", "otherRecipients": ["Name <address>"], "subject": "", "snippet": "Gmail's snippet",
     "summary": "one line, what I must do", "received": "ISO with offset",
-    "url": "https://mail.google.com/mail/u/<my address>/#all/<threadId>", "due": "" }],
+    "url": "https://mail.google.com/mail/?authuser=<my address>#all/<threadId>", "due": "" }],
   "notifications": [{ "sender": "", "count": 0 }],
   "quiet": [{ "from": "", "subject": "", "received": "ISO with offset" }],
   "problems": ["anything you could not read, with the tool error"]
