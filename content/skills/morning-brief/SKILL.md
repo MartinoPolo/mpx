@@ -183,8 +183,8 @@ apply:
   `calendarNames` names a target, for example `{ "wife": "<her name>" }`.
 - `mailboxes`: every mailbox without a connector that the home's instructions name (`id` as its mail
   server names the account, `label`, `provider`, `account` its address). They are written as not
-  read yet: their passwords need my Windows Hello approval, so they are read when I press Start in
-  the brief at the desk ([Start run](#start-run)).
+  read yet: their passwords need my Windows Hello approval, so they are read when I press Unlock in
+  the brief at the desk ([Unlock run](#unlock-run)).
 - `options`: every mail, Slack, Code and Agents item id to what it suggests, in order, as the
   contract types them. The list replaces the default whole and needs one entry at least; `"default"`
   instead of a list, or of a capture's suggestion in `notes`, accepts the default the script prints
@@ -265,9 +265,9 @@ differs from an approved one in a single character, or repeats one, and records 
 with a reason, or `unknown` when a call started and its answer never came. Exit code 2 unless every
 operation is done.
 
-## Start run
+## Unlock run
 
-Pressing Start in the brief at the desk reads the IMAP mailboxes through
+Pressing Unlock in the brief at the desk reads the IMAP mailboxes through
 `node "<skill-dir>/scripts/mailboxes.mjs" <run directory>`, never through this skill's session.
 `run.json` there names the window, the `model`, Alfred's `mailCommand`, the `partsDirectory`, the
 mailboxes and the dismissed items. One mailbox at a time, so only one Windows Hello prompt shows,

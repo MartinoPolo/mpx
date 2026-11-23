@@ -39,7 +39,7 @@ const AGENT_OUTCOMES = { ok: 'succeeded', fail: 'failed', check: 'blocked', part
 // A partial run that ended stopped short of its goal; only its own end time says so, as a running one has a duration.
 const ENDED_PARTIAL_OUTCOME = 'blocked';
 const ALERT_SENDERS = { sentry: 'Sentry', pipeline: 'Pipeline', monitoring: 'Monitoring' };
-const IMAP_REASON = 'Not read yet: its password needs your Windows Hello approval, so Start reads it at the desk.';
+const IMAP_REASON = 'Not read yet: its password needs your Windows Hello approval, so Unlock reads it at the desk.';
 // Projects targets are Orca's project names, which only the app reads; Plan and Health sentences target nothing.
 const UNCHECKED_TARGET_CHAPTERS = ['projects'];
 const UNTARGETED_CHAPTERS = ['plan', 'health'];

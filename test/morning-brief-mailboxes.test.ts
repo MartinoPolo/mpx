@@ -204,7 +204,7 @@ test('a failed read gives its reason in plain words, and the next mailbox is sti
     assert.equal(exitCode, 2);
     const result = await readJson(join(fixture.runDirectory, 'result.json'));
     assert.deepEqual(result.mailboxes, [
-      { id: 'centrum', state: 'failed', reason: 'Windows Hello was not approved, or the Centrum password is not stored on this computer. Press Start again and approve the prompt.' },
+      { id: 'centrum', state: 'failed', reason: 'Windows Hello was not approved, or the Centrum password is not stored on this computer. Press Unlock again and approve the prompt.' },
       { id: 'snapyy11', state: 'read', reason: null },
     ]);
     assert.ok(!existsSync(partPath(fixture, 'centrum')));
@@ -222,7 +222,7 @@ test('an answer the judging run gets wrong twice fails that mailbox without a pa
     assert.equal(exitCode, 2);
     const [centrum, second] = (await readJson(join(fixture.runDirectory, 'result.json'))).mailboxes;
     assert.equal(centrum.state, 'failed');
-    assert.match(centrum.reason, /^Centrum was read, but sorting its mail failed: .+ Press Start to try again\.$/);
+    assert.match(centrum.reason, /^Centrum was read, but sorting its mail failed: .+ Press Unlock to try again\.$/);
     assert.equal(second.state, 'read');
     assert.ok(!existsSync(partPath(fixture, 'centrum')));
     assert.equal((await readLog(fixture.modelLog)).length, 2, 'a refused answer is asked for once more');
