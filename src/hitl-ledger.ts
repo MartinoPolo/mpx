@@ -118,11 +118,14 @@ async function readLedger(file: string): Promise<HitlLedger> {
   } catch { return EMPTY_LEDGER; }
 }
 
-function renderItems(items: HitlItem[], inFull: boolean): string {
+// Markdown viewers number a list from its first item, so 4 and 6 would show as 4 and 5; a comment ends the list and each item keeps its number.
+const LIST_BREAK = '\n\n<!-- -->\n\n';
+
+function renderItems(items: HitlItem[], inFull: boolean, itemSeparator = inFull ? '\n\n' : '\n'): string {
   const part = (heading: string, kind: HitlItemKind) => {
     const ofKind = items.filter(item => item.kind === kind);
     const rendered = ofKind.map(item => (inFull ? item.body : undefined) ?? `${item.number}. **${item.title}**`);
-    return ofKind.length ? [`## ${heading}`, rendered.join(inFull ? '\n\n' : '\n')] : [];
+    return ofKind.length ? [`## ${heading}`, rendered.join(itemSeparator)] : [];
   };
   return [...part('❓ Questions', HITL_ITEM_KIND.question), ...part('🛠️ To do', HITL_ITEM_KIND.toDo)].join('\n\n');
 }
@@ -134,7 +137,7 @@ async function syncQuestionsFile(event: ClaudeRunEvent, ledger: HitlLedger): Pro
   try {
     if (!ledger.openItems.length) { await rm(file, { force: true }); return undefined; }
     await mkdir(path.dirname(file), { recursive: true });
-    await writeFile(file, `# Waiting for you\n\n${renderItems(ledger.openItems, true)}\n`);
+    await writeFile(file, `# Waiting for you\n\n${renderItems(ledger.openItems, true, LIST_BREAK)}\n`);
     return pathToFileURL(file).href;
   } catch { return undefined; }
 }

@@ -70,12 +70,12 @@ test('the user is shown every open item in full without the agent restating it',
   const carried = await stopOutput(directory, 'Scope kept.\n\n# HITL\n\n## ❓ Questions\n\n4. **Voice:** which one?\n\n## ⏳ Still open\n\n2. **Name** (question)\n3. **Sign in** (to do)\n\nClosed: 1 (A)');
   assert.equal(carried.reason, undefined);
   assert.match(carried.systemMessage ?? '', /^Still waiting for you \(file:\/\/\/.*questions\.md\):\n\n## ❓ Questions\n\n2\. \*\*Name:\*\* which one\?\n\n## 🛠️ To do\n\n3\. \*\*Sign in:\*\* open the page\.$/);
-  assert.equal(await readFile(questionsFile, 'utf8'), '# Waiting for you\n\n## ❓ Questions\n\n2. **Name:** which one?\n\n4. **Voice:** which one?\n\n## 🛠️ To do\n\n3. **Sign in:** open the page.\n');
+  assert.equal(await readFile(questionsFile, 'utf8'), '# Waiting for you\n\n## ❓ Questions\n\n2. **Name:** which one?\n\n<!-- -->\n\n4. **Voice:** which one?\n\n## 🛠️ To do\n\n3. **Sign in:** open the page.\n');
 
   const reworded = await stopOutput(directory, '# HITL\n\n## ❓ Questions\n\n2. **Name:** Alfred or Jarvis?\n\n   - **A.** Alfred.\n\n## ⏳ Still open\n\n3. **Sign in** (to do)\n4. **Voice** (question)');
   assert.match(reworded.systemMessage ?? '', /4\. \*\*Voice:\*\* which one\?\n\n## 🛠️ To do\n\n3\. \*\*Sign in:\*\*/);
   assert.doesNotMatch(reworded.systemMessage ?? '', /Alfred/);
-  assert.match(await readFile(questionsFile, 'utf8'), /2\. \*\*Name:\*\* Alfred or Jarvis\?\n\n   - \*\*A\.\*\* Alfred\.\n\n4\./);
+  assert.match(await readFile(questionsFile, 'utf8'), /2\. \*\*Name:\*\* Alfred or Jarvis\?\n\n   - \*\*A\.\*\* Alfred\.\n\n<!-- -->\n\n4\./);
   assert.match(await promptContext(directory, 'next'), /restate one only when its wording changes\. Their full wording is in .*questions\.md\. New HITL items take numbers from 5 up\./);
 
   assert.deepEqual(await stopOutput(directory, 'All answered.\n\n# HITL\n\nClosed: 2 (Alfred), 3 (signed in), 4 (calm)'), {});
