@@ -48,7 +48,7 @@ export const speak = async ({ text, style, voice, model, outputPath }) => {
 	const json = await post(apiKey, {
 		model,
 		input: [{ type: 'user_input', content: [content] }],
-		response_format: { type: 'audio', mime_type: 'audio/wav', sample_rate: 48000 },
+		response_format: { type: 'audio', mime_type: 'audio/wav' },
 		generation_config: { speech_config: [{ voice }] },
 	});
 	const audio = findAudio(json);
