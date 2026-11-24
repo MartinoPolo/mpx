@@ -112,7 +112,9 @@ ask them to diagnose root causes, evaluate correctness, recommend changes, or ma
 decisions. The parent or a reasoning-capable specialist synthesizes their findings. Give delegates
 the task scope, relevant constraints, stopping condition, and required evidence. The parent evaluates
 findings and owns decisions. Prefer declared agent model and effort defaults; use supported overrides
-only when needed. For external-tool implementation questions, check a relevant clone under
+only when needed. Native sub-agents stay on your own provider: for another provider's model
+(Claude ↔ Codex), start an Orca cross-provider worker as `ORCA.md` describes. Run Astra models at
+medium effort or lower. For external-tool implementation questions, check a relevant clone under
 `MPX_CLONED`, then public documentation.
 
 ## Preferences
