@@ -124,3 +124,6 @@ Commands suggested for manual execution use Bash; use PowerShell for Windows-nat
 global `core.sshCommand` (Windows OpenSSH) reaches the Windows ssh-agent. Use conventional commits. When a
 workflow step fails and you find a working solution, record that solution in the most specific
 durable place (the project's docs or AGENTS.md, or memory for machine-specific setup) and report it.
+
+For Sentry, use the `sentry` CLI (`sentry-cli` skill). It is read-only unless the user approves a
+change; redact tokens and personal data from anything reported.

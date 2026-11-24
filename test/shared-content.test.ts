@@ -47,7 +47,6 @@ test('shared instruction, provider, rule, output-style, and helper closure is ca
     'shared/PROJECT_INBOX.md',
     'shared/PROVIDER_ROUTING.md',
     'shared/RESULT_LINE.md',
-    'shared/SENTRY.md',
     'shared/WRITING_FOR_AGENTS.md',
     'shared/detect-check-scripts.mjs',
     'shared/providers/GERRIT.md',
