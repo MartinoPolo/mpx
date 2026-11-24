@@ -317,6 +317,9 @@ const chapters = script.scenes.map(({ beats, ...scene }) => {
 				steps.push(main);
 				if (beat.then) steps.push(resolveStep(round, beat.then, main));
 			}
+			/* The player only marks files open in the chapter's panes, so any other file would never be shown. */
+			const hidden = steps.find((step) => !panes.includes(step.file));
+			if (hidden) throw new Error(`"${scene.title}" marks ${hidden.file}, which is not in its panes: ${beat.say}`);
 			/* A demo beat without a clip of its own keeps showing where the previous clip ended. */
 			const video = beat.video ? { ...clipRange(recording, beat.video.clip), at: phraseAt(beat, timing, beat.video.at) } : heldFrame;
 			if (video) heldFrame = { from: video.to, to: video.to, at: 0 };
