@@ -1,12 +1,14 @@
 # Sentry Diagnosis Contract
 
-Sentry uses only MCP tools already loaded by the native account, not a standalone exposed skill.
+Sentry diagnosis uses the `sentry` CLI or loaded Sentry MCP tools; it is not a standalone exposed skill.
 
 ## Route and identity
 
-Use only the Sentry capability already available in the native session. Native account settings own
-the server and authentication. Never request, display, copy, exchange, route, or persist a Sentry
-token. If the native route is unavailable, stop with the structured handoff below.
+Prefer the `sentry` CLI when it is authenticated for the target instance: it reaches self-hosted
+servers and returns JSON. Otherwise use the Sentry MCP tools loaded in the session. The CLI binds one
+config directory to one host, so with several accounts select one with `SENTRY_CONFIG_DIR` and confirm
+it with `sentry auth whoami`. Never request, display, copy, exchange, or persist a Sentry token. If
+neither route is authenticated, stop with the structured handoff below.
 
 Select organization and project explicitly from the native tool's authorized inventory. When more than
 one authorized match exists, ask the user; do not infer from repository names, remotes, URLs, or
@@ -36,11 +38,11 @@ raw event JSON into issues, reviews, logs, prompts, or committed files.
 
 ## Unsupported/manual handoff
 
-When the native route, organization/project selection, capability, or authorization is unavailable, return:
+When the CLI and MCP routes, organization/project selection, capability, or authorization is unavailable, return:
 
 ```text
 status: unsupported | manual-required
-native route: <available or unavailable>
+route: <cli, mcp, or unavailable>
 organization/project: <opaque selected IDs or ambiguous>
 requested operation: <read or mutation>
 reason: <structured adapter/error code>
@@ -48,5 +50,5 @@ redactions applied: <categories>
 manual next step: <specific user action>
 ```
 
-Never bypass the route with a direct API call or provider CLI. Never expose this contract as an
+Never bypass the CLI or MCP route with a direct API call. Never expose this contract as an
 independently invocable skill; workflows link to it only when Sentry diagnosis is required.
