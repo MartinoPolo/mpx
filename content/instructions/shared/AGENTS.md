@@ -10,7 +10,8 @@ than treating it as settled. Recommend a better alternative when warranted, with
 ## Code
 
 DRY. Full descriptive names, no abbreviations. Code comments are extremely rare and explain why —
-the intent or the constraint. Update documentation when behavior changes.
+the intent or the constraint. Update documentation when behavior changes. Never add a dependency
+only to enable a test; use a built-in or an existing dependency.
 
 Avoid numeric values describing repository state in comments, docs, skills, and references. These
 drift over time. Describe the general shape or point to the authoritative source instead.
@@ -119,6 +120,7 @@ medium effort or lower. For external-tool implementation questions, check a rele
 
 ## Preferences
 
-Commands suggested for manual execution use Bash; use PowerShell for Windows-native tooling. In Bash, redirect to `/dev/null`, never `nul`. Use conventional commits. When a
+Commands suggested for manual execution use Bash; use PowerShell for Windows-native tooling. In Bash, redirect to `/dev/null`, never `nul`. In Git Bash, never set `GIT_SSH_COMMAND`: only the
+global `core.sshCommand` (Windows OpenSSH) reaches the Windows ssh-agent. Use conventional commits. When a
 workflow step fails and you find a working solution, record that solution in the most specific
 durable place (the project's docs or AGENTS.md, or memory for machine-specific setup) and report it.

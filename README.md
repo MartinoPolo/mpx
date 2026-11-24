@@ -203,6 +203,18 @@ slot not used by any checkout's port file wins; slot 0 stays with the root check
 `MPX_PORT_OFFSET` per machine, such as 1000 in a sandbox, so forwarded ports never collide with host
 ones; `--port-offset` overrides it. A file that already sets one of the ports is left unchanged.
 
+A repository's setup script can also copy gitignored files a worktree needs, such as
+yoursafe-components' dev-server certificates (`config/ssh/local/{key,cert}.pem`) from
+`$ORCA_ROOT_PATH`. In a sandbox, the root checkout holds a host-issued leaf certificate for
+`localhost`, so no CA key enters the VM. Installed Orca and Orca Lab each keep their own copy of
+every hook (`repos[]` and `projectHostSetups[]` in `profiles/local-default/orca-data.json`); keep
+them identical. Change the running Orca through its `repo.update` RPC, and Orca Lab's file only
+while it is closed.
+
+On Windows, ESET quarantines Orca's launcher and `Orca.exe` as `Win64/Kryptik_AGen.ALF`. Only
+path-scoped "any detection" exclusions on those exact paths keep them; name-scoped exclusions do
+not. Add them before installing or copying a new launcher.
+
 ### Machine-local configuration
 
 `$APPDATA/mpx/config.json` holds account roots, account domains, default packs, and local overrides.

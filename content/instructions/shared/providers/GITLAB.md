@@ -10,6 +10,10 @@ Installed `glab 1.107.0 --help` verifies `--repo`, JSON issue output, API `--fie
 pagination, milestone JSON, and the CI commands below. Check subcommand help before optional
 version-sensitive flags.
 
+`glab` resolves a remote's SSH host through `~/.ssh/config`. When it reports the wrong host, such
+as gitlab.com for a self-hosted remote, check that `ssh -G <host>` returns that host's own
+`hostname`.
+
 ## Issues
 
 The Issue target is the repository's validated project when `repository.provider` is also
