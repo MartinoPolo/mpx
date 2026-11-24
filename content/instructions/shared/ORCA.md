@@ -70,6 +70,10 @@ orca orchestration worker-start --environment local --worktree current --agent <
 - Take model ids from `content/runtime-profiles.json` roles: a Claude alias, or a Pi `provider/id`.
 - The worker opens as a background tab and closes when it finishes. End your turn: Orca wakes you
   with `worker_done`; read more with `orca orchestration worker-read --source auto`.
+- Until [orca#24](https://github.com/MartinoPolo/orca/issues/24) is fixed, a `pi` worker started
+  with a launch profile leaves its spec unsubmitted: send `orca terminal send --terminal <handle>
+  --enter` once after the start. Until [orca#25](https://github.com/MartinoPolo/orca/issues/25) is
+  fixed, close its terminal with `orca terminal close` after `worker_done`.
 
 ## Beyond this file
 
