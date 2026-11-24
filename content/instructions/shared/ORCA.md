@@ -40,7 +40,8 @@ workflow asks, and leave terminals and worktrees you did not start alone.
 - `terminal create` and `agent launch` return the terminal handle; neither takes focus without
   `--focus`.
 - In `--command`, use the MPX launchers (`cc`, `ccw`, `pi`, `piw`, `alfred`) to load MPX content and
-  select the account; native commands `claude` and `xpi` bypass MPX.
+  select the account; native commands `claude` and `xpi` bypass MPX. The `w` launchers are the work
+  account, required under `MPX_WORK`; the plain ones are personal.
 - A project without `mpxconfig.json` stops the MPX launcher at a confirmation prompt: add the file
   before launching an unattended agent there.
 - `terminal send` reports whether the prompt was submitted. On silence never send it again; after a
@@ -52,6 +53,23 @@ workflow asks, and leave terminals and worktrees you did not start alone.
   terminal before deciding.
 - `worktree rm` stops the worktree's sessions and deregisters it; `--delete-branch` deletes the branch
   only when it is provably merged.
+
+## Cross-provider workers
+
+A role that needs another provider's model (Claude ↔ Codex through Pi) runs as a supervised worker,
+never as a brief typed into a raw terminal:
+
+```bash
+orca orchestration worker-start --environment local --worktree current --agent <claude|pi> \
+  --launch-profile <profile> --model <id> --effort <level> --task-title '<title>' --spec-file <brief>
+```
+
+- Always pass `--launch-profile`: `ccw` or `piw` under `MPX_WORK`, otherwise the personal profile.
+  Without one, a worker of a different agent than yours runs the built-in personal account without MPX.
+  Profiles are in Orca Settings; a missing one fails the start with the configured names.
+- Take model ids from `content/runtime-profiles.json` roles: a Claude alias, or a Pi `provider/id`.
+- The worker opens as a background tab and closes when it finishes. End your turn: Orca wakes you
+  with `worker_done`; read more with `orca orchestration worker-read --source auto`.
 
 ## Beyond this file
 
