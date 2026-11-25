@@ -239,11 +239,11 @@ test('the document maps gathered data to the contract before any judgement', asy
     const personal = mailbox(document, 'personal');
     assert.equal(personal.account, 'me@example.com');
     assert.equal(personal.transport, 'connector');
-    assert.deepEqual(personal.items.map((item: { id: string; threadId: string; messageId: string | null; snippet: string; options: unknown }) => [item.id, item.threadId, item.messageId, item.snippet, item.options]),
-      [[await idOf('mail', 'thread-vat'), 'thread-vat', 'message-vat-2', 'Please approve by Friday', [{ kind: 'snooze' }]]]);
+    assert.deepEqual(personal.items.map((item: { id: string; threadId: string; messageId: string | null; snippet: string; alert: unknown; options: unknown }) => [item.id, item.threadId, item.messageId, item.snippet, item.alert, item.options]),
+      [[await idOf('mail', 'thread-vat'), 'thread-vat', 'message-vat-2', 'Please approve by Friday', null, [{ kind: 'snooze' }]]]);
     assert.deepEqual(personal.quiet.map((message: { from: string }) => message.from), ['Shop', 'Strava']);
     const [alert] = mailbox(document, 'work').items;
-    assert.deepEqual([alert.id, alert.from, alert.subject, alert.receivedAt, alert.messageId, alert.options], [await idOf('mail', 'alert-1'), 'Sentry', 'TypeError in checkout', '2026-11-18T03:11:08+01:00', null, [{ kind: 'seen' }]]);
+    assert.deepEqual([alert.id, alert.from, alert.subject, alert.receivedAt, alert.messageId, alert.alert, alert.options], [await idOf('mail', 'alert-1'), 'Sentry', 'TypeError in checkout', '2026-11-18T03:11:08+01:00', null, { kind: 'sentry', project: 'web' }, [{ kind: 'seen' }]]);
 
     const slack = document.chapters.slack;
     assert.equal(slack.items.length, 1);

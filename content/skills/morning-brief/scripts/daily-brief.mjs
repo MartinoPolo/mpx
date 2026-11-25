@@ -328,6 +328,12 @@ function quietMail({ from, received, subject }) {
   return { from: text(from) || 'Unknown sender', receivedAt: received, subject: text(subject) || '(no subject)' };
 }
 
+// The app names the affected repository and offers a fix session from the alert's kind and project.
+function alertOf(alert) {
+  const project = text(alert.project);
+  return Object.hasOwn(ALERT_SENDERS, alert.kind) && project ? { kind: alert.kind, project } : null;
+}
+
 function connectorMailbox(id, label, result) {
   const data = result.data ?? {};
   const primaryCalendar = (data.calendars ?? []).find((calendar) => calendar.primary)?.id;
@@ -341,7 +347,7 @@ function connectorMailbox(id, label, result) {
     const from = text(mail.from) || 'Unknown sender';
     const subject = text(mail.subject) || '(no subject)';
     const snippet = text(mail.snippet) || text(mail.summary) || subject;
-    const item = mailMessage(mail, { from, receivedAt: text(mail.received), subject, snippet, options: [SNOOZE] });
+    const item = mailMessage(mail, { from, receivedAt: text(mail.received), subject, snippet, alert: null, options: [SNOOZE] });
     if (item) mailPeopleByItemId.set(item.id, mailPeople(mail));
     items.push(item);
   }
@@ -354,7 +360,7 @@ function connectorMailbox(id, label, result) {
       continue;
     }
     const snippet = [text(alert.project), alert.count > 1 ? `${alert.count} times` : ''].filter(Boolean).join(', ') || subject;
-    items.push(mailMessage(alert, { from, receivedAt, subject, snippet, options: [SEEN] }));
+    items.push(mailMessage(alert, { from, receivedAt, subject, snippet, alert: alertOf(alert), options: [SEEN] }));
   }
   quiet.push(...(data.quiet ?? []).map(quietMail));
   return {
