@@ -9,8 +9,9 @@ Window: %SINCE% to %UNTIL%. Today is %TODAY%.
      that ask the team something. For each, read the thread and decide whether I already answered
      or acted (my reply, my reaction, or a later message that resolves it).
    - Interesting: up to five threads from `#d-ai`, `#general`, `#devel`, `#devel-news` and other
-     channels I am in, chosen for decisions, releases, incidents, outages, useful AI or tooling
-     tips. Skip bots, joins, routine stand-up and alert traffic; count what you skipped.
+     channels I am in, chosen for decisions, releases, useful AI or tooling tips. Skip bots, joins,
+     routine stand-up and alert traffic, and service operations: maintenance, upgrades, migrations,
+     downtime and outage or status notices, unless one asks me to act. Count what you skipped.
    - Permalinks come from the tools; never build one yourself. Only search results carry them: for
      a message found by reading a channel or thread, search for its words in that channel and take
      the permalink of the matching result.
