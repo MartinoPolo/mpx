@@ -146,6 +146,16 @@ const readJson = async (path: string) => JSON.parse(await readFile(path, 'utf8')
 const readLog = async (path: string) => (await readFile(path, 'utf8')).split('\n').filter(Boolean).map((line) => JSON.parse(line));
 const partPath = (fixture: Fixture, mailboxId: string) => join(fixture.partsDirectory, `mail-${mailboxId}.json`);
 
+test('on Windows the judging session starts through Git Bash even when only WSL bash is on PATH', { skip: process.platform !== 'win32' }, async () => {
+  await withFixture({ centrum: { messages: CENTRUM_MESSAGES } }, [CENTRUM], async (fixture) => {
+    const pathWithoutGit = (process.env.PATH ?? '').split(';').filter((entry) => !/\\Git\\/iu.test(entry)).join(';');
+    const { exitCode, output } = await runMailboxes(fixture, { MPX_ACTIVE_CONTENT_ROOT: fixture.contentRoot, PATH: pathWithoutGit, Path: pathWithoutGit });
+    assert.equal(exitCode, 0, output);
+    const result = await readJson(join(fixture.runDirectory, 'result.json'));
+    assert.deepEqual(result.mailboxes, [{ id: 'centrum', state: 'read', reason: null }]);
+  });
+});
+
 test('each mailbox is read in turn and judged into a whole part, leaving dismissed threads out', async () => {
   await withFixture({ centrum: { messages: CENTRUM_MESSAGES }, snapyy11: { messages: [] } }, [CENTRUM, SECOND], async (fixture) => {
     const { exitCode, output } = await runMailboxes(fixture);
