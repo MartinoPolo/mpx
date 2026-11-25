@@ -37,8 +37,8 @@ shows.
   day.
 - The brief only reports and suggests; the control center collects the decisions and carries them
   out.
-- Narration uses a local VoiceStudio backend (OmniVoice, 600+ languages including Czech) through
-  `scripts/narrate.mjs`.
+- Narration is text in the document; the control center voices a sentence through its local
+  VoiceStudio read-aloud only when the user plays it.
 - Out of this brief: Figma and the warm-up puzzles (separate skills and routines), component of the
   day and other improvement loops (separate automations, reported under overnight runs), and the
   issue boards, AI retro and instruction changes, which belong to a weekly brief.

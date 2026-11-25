@@ -1,17 +1,14 @@
-// The daily brief document's narration as narrate.mjs voices it and daily-brief.mjs writes it.
+// The daily brief document's narration as daily-brief.mjs writes it.
 import { join } from 'node:path';
 import { briefItemId } from './brief-id.mjs';
 
 export const JUDGEMENT_FILE = 'daily-brief.judgement.json';
-// narrate.mjs keeps here each sentence's clip by its exact text, so a rerun of daily-brief.mjs or a rewritten
-// judgement keeps the clips of unchanged sentences.
-export const DOCUMENT_CLIPS_FILE = 'daily-brief.clips.json';
 export const NEWS_FILE = join('sources', 'news.json');
 export const NEWS_DIGEST_FILE = join('sources', 'news-digest.json');
 export const TRIAGE_FILE = join('sources', 'triage.json');
 // The triage area's suggestion for each capture id, as the judgement's `notes` takes it.
 export const TRIAGE_JUDGEMENT_FILE = join('sources', 'triage-judgement.json');
-// The document's narration is an overview: a chapter keeps its first sentences, the rest is cut and never voiced.
+// The document's narration is an overview: a chapter keeps its first sentences, the rest is cut.
 export const NARRATION_SENTENCE_LIMIT = 2;
 
 export function judgedSentences(judgement, chapterName) {

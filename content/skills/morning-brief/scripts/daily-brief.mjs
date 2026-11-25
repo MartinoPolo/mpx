@@ -4,10 +4,10 @@
 // (Code only for the active repositories of sources/repos.json and the reviews requested from me, naming each change
 // left out), the capture lines and move destinations from sources/triage.json, bookmarks from the bookmarks bridge, AI
 // news from sources/news.json with the picks and summaries of sources/news-digest.json; sources/triage-judgement.json
-// and <day>/daily-brief.judgement.json add the judgement and <day>/daily-brief.clips.json the narration's clips. The
+// and <day>/daily-brief.judgement.json add the judgement; the app voices the narration on demand. The
 // latest outcome the app wrote leaves out dismissed items and kept lines and brings back snoozed and undecided ones. Prints the items with their ids, every item and bookmark still
 // without judgement with its default, the move destinations, the open health episode notes by path (never their
-// contents), and a summary line counting what is unjudged and the narration sentences without a clip and naming the
+// contents), and a summary line counting what is unjudged and naming the
 // chapters without narration, and keeps the same report in <day>/daily-brief.log. Unless --no-state, records the brief
 // in <home>/state.json as the last one, so start.mjs begins the next window where this one ended. Exit code 2 when the
 // document is invalid or could not be validated.
@@ -20,7 +20,7 @@ import { basename, isAbsolute, join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { briefItemId } from './brief-id.mjs';
 import {
-  DOCUMENT_CLIPS_FILE, documentSentences, JUDGEMENT_FILE, NARRATION_SENTENCE_LIMIT, NEWS_DIGEST_FILE, NEWS_FILE, TRIAGE_FILE, TRIAGE_JUDGEMENT_FILE,
+  documentSentences, JUDGEMENT_FILE, NARRATION_SENTENCE_LIMIT, NEWS_DIGEST_FILE, NEWS_FILE, TRIAGE_FILE, TRIAGE_JUDGEMENT_FILE,
 } from './document-narration.mjs';
 import { localIso } from './local-time.mjs';
 import { nestedLines, readNote } from './note-lines.mjs';
@@ -96,7 +96,6 @@ const judgement = (await readJson(join(dayDirectory, JUDGEMENT_FILE))) ?? {};
 const triage = await readJson(join(dayDirectory, TRIAGE_FILE));
 // The session's judgement may replace a suggestion of the triage area.
 const noteSuggestions = { ...(await readJson(join(dayDirectory, TRIAGE_JUDGEMENT_FILE))), ...judgement.notes };
-const clipsByText = (await readJson(join(dayDirectory, DOCUMENT_CLIPS_FILE))) ?? {};
 const news = await readJson(join(dayDirectory, NEWS_FILE));
 const newsDigest = await readJson(join(dayDirectory, NEWS_DIGEST_FILE));
 const vaultDirectory = process.env.MPX_OBSIDIAN_VAULT;
@@ -144,13 +143,6 @@ function captureSource() {
   return { name, status: 'read', reason: null };
 }
 
-// The clip narrate.mjs voiced for a sentence's exact text, while its file is still in audio/.
-function clipOf(sentenceText) {
-  const clip = typeof sentenceText === 'string' && Object.hasOwn(clipsByText, sentenceText) ? clipsByText[sentenceText] : undefined;
-  const isClip = typeof clip?.audio === 'string' && Number.isFinite(clip.audioSeconds) && clip.audioSeconds > 0;
-  return isClip && existsSync(join(dayDirectory, 'audio', clip.audio)) ? { audio: clip.audio, audioSeconds: clip.audioSeconds } : {};
-}
-
 // A chapter keeps its first sentences, each with its clip; the rest is reported.
 function narrationOf(chapterName) {
   const sentences = documentSentences(judgement, newsDigest, chapterName);
@@ -158,7 +150,7 @@ function narrationOf(chapterName) {
     const cut = sentences.slice(NARRATION_SENTENCE_LIMIT).map((sentence) => `"${shorten(text(sentence?.text))}"`).join(', ');
     problems.push(`${chapterName} narration has ${sentences.length} sentences; kept the first two, cut ${cut}.`);
   }
-  return sentences.slice(0, NARRATION_SENTENCE_LIMIT).map((sentence) => ({ text: sentence?.text, targets: sentence?.targets, ...clipOf(sentence?.text) }));
+  return sentences.slice(0, NARRATION_SENTENCE_LIMIT).map((sentence) => ({ text: sentence?.text, targets: sentence?.targets }));
 }
 
 // The text of every list line of a vault note, as the app finds a task: without its marker and checkbox. A started
@@ -872,7 +864,6 @@ const unjudgedBookmarks = (capture?.bookmarks ?? [])
     && !judgement.bookmarks?.[String(bookmark.id)])
   .map((bookmark) => `  ${bookmark.id}  ${bookmark.title}  ${bookmark.url}`);
 const unnarratedChapters = Object.entries(document.chapters).filter(([, chapter]) => chapter.narration.length === 0).map(([chapterName]) => chapterName);
-const unvoicedSentenceCount = Object.values(document.chapters).flatMap((chapter) => chapter.narration).filter((sentence) => !sentence.audio).length;
 const validation = validate(documentPath);
 const destinationLines = destinations.map(({ notePath, headings }) => `  ${notePath}: ${headings.join(' | ') || 'no headings'}`);
 const hintedPaths = new Set(document.chapters.health.hints.map((hint) => hint.conditionId));
@@ -890,7 +881,7 @@ const report = [
   `Problems:\n${problems.map((problem) => `  ${problem}`).join('\n') || '  none'}`,
   validation.report,
   `Summary: ${plural(unjudgedItemCount, 'item')} and ${plural(unjudgedBookmarks.length, 'bookmark')} without judgement; `
-    + `${plural(unvoicedSentenceCount, 'narration sentence')} without a clip; the document is ${validation.valid ? 'valid' : 'not valid'}.`
+    + `the document is ${validation.valid ? 'valid' : 'not valid'}.`
     + (unnarratedChapters.length ? ` No narration: ${unnarratedChapters.join(', ')}.` : ''),
 ].join('\n');
 await writeFile(join(dayDirectory, 'daily-brief.log'), `${report}\n`);
