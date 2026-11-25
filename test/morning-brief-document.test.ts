@@ -6,7 +6,6 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
-import { fakeVoiceStudio, narrate } from './morning-brief-voice-studio.js';
 
 const exec = promisify(execFile);
 const documentScript = resolve('content/skills/morning-brief/scripts/daily-brief.mjs');
@@ -285,7 +284,7 @@ test('the document maps gathered data to the contract before any judgement', asy
     assert.match(stdout, new RegExp(`Items without judgement[^\\n]*:\\n {2}mail personal:\\n {4}${await idOf('mail', 'thread-vat')} {2}Accountant: VAT draft {2}\\[default: Snooze\\]\\n {2}mail work:\\n {4}mail-[0-9a-f]{12} {2}Sentry: TypeError in checkout {2}\\[default: Dismiss\\]\\n`));
     assert.match(stdout, / {4}code-[0-9a-f]{12} {2}mpx #218 Skill palette aliases {2}\[default: Merge\]\n/);
     assert.match(stdout, /\n {2}capture notes:\n {4}note-[0-9a-f]{12} {2}buy present sam 🔼 {2}\[under Dump\] {2}\[default: keep\]\n/);
-    assert.match(stdout, /Summary: 10 items and 2 bookmarks without judgement; 0 narration sentences without a clip; the document is not valid\. No narration: calendar, mail, slack, code, agents, capture, projects, plan, health\.\n?$/);
+    assert.match(stdout, /Summary: 10 items and 2 bookmarks without judgement; the document is not valid\. No narration: calendar, mail, slack, code, agents, capture, projects, plan, health\.\n?$/);
     assert.ok(document.sources.every((source) => source.status === 'read'));
   });
 });
@@ -314,7 +313,7 @@ test('the judgement adds options, suggestions, bookmarks, mailboxes without a co
     assert.match(stdout, /calendar narration has 3 sentences; kept the first two, cut "Yesterday ended on the night train\."/);
     assert.match(stdout, /The judgement narrates chapters the document does not have: triage\./);
     assert.deepEqual(document.chapters.capture.notes.find((note: { id: string }) => note.id === weeklyId).suggestion.action, 'research');
-    assert.match(stdout, /Summary: 7 items and 1 bookmark without judgement; 5 narration sentences without a clip; the document is not valid\. No narration: code, agents, capture, projects, plan, health\./);
+    assert.match(stdout, /Summary: 7 items and 1 bookmark without judgement; the document is not valid\. No narration: code, agents, capture, projects, plan, health\./);
 
     assert.deepEqual(document.chapters.calendar.calendars.at(-1), { id: 'wife', name: 'Kája' });
     assert.deepEqual(document.chapters.calendar.days[2].allDay, [{ title: 'Name day', calendar: 'wife', link: null }]);
@@ -442,30 +441,12 @@ test('a judged mail reply goes to the sender and the named recipients, each with
   });
 });
 
-async function writeClip(fixture: Fixture, fileName: string): Promise<void> {
-  await mkdir(join(fixture.dayDirectory, 'audio'), { recursive: true });
-  await writeFile(join(fixture.dayDirectory, 'audio', fileName), 'RIFF');
-}
-
-test('a narration sentence carries the clip recorded for its exact text while the clip file exists', async () => {
+test('a narration sentence keeps only its text and targets, for the app voices it on demand', async () => {
   await withFixture(async (fixture) => {
-    const voiced = { text: 'Today the stand-up, then the dentist.', targets: ['2026-11-18'] };
-    const clipGone = { text: 'Tomorrow is empty.', targets: ['2026-11-19'] };
-    const edited = { text: 'Approve the VAT draft today.', targets: [], audio: 'chosen-by-the-session.wav', audioSeconds: 2 };
-    await writeJson(join(fixture.dayDirectory, 'daily-brief.judgement.json'), { narration: { calendar: [voiced, clipGone], mail: [edited] } });
-    await writeJson(join(fixture.dayDirectory, 'daily-brief.clips.json'), {
-      [voiced.text]: { audio: '0a1b2c3d4e5f6a7b.wav', audioSeconds: 2.4 },
-      [clipGone.text]: { audio: 'ffffffffffffffff.wav', audioSeconds: 1.1 },
-      'Approve the VAT draft.': { audio: '1111111111111111.wav', audioSeconds: 1.8 },
-    });
-    await writeClip(fixture, '0a1b2c3d4e5f6a7b.wav');
-    await writeClip(fixture, '1111111111111111.wav');
-    await writeClip(fixture, 'chosen-by-the-session.wav');
-
-    const { stdout, document } = await runDocument(fixture);
-    assert.deepEqual(document.chapters.calendar.narration, [{ ...voiced, audio: '0a1b2c3d4e5f6a7b.wav', audioSeconds: 2.4 }, clipGone]);
-    assert.deepEqual(document.chapters.mail.narration, [{ text: edited.text, targets: [] }], 'clips come only from narrate.mjs, by the sentence as written');
-    assert.match(stdout, /; 2 narration sentences without a clip;/);
+    const sentence = { text: 'Approve the VAT draft today.', targets: [], audio: 'chosen-by-the-session.wav', audioSeconds: 2 };
+    await writeJson(join(fixture.dayDirectory, 'daily-brief.judgement.json'), { narration: { mail: [sentence] } });
+    const { document } = await runDocument(fixture);
+    assert.deepEqual(document.chapters.mail.narration, [{ text: sentence.text, targets: [] }]);
   });
 });
 
@@ -718,41 +699,30 @@ test('a --no-state run and a rebuild of an earlier day leave the record of the l
 
 const appSkip = !existsSync(join(APP_DIRECTORY, 'package.json')) && 'the alfred-control-center repository is not checked out';
 
-test('a --no-state run gives a valid document with clips and writes no page and no record of the last brief', { skip: appSkip }, async () => {
-  const voiceStudio = await fakeVoiceStudio();
-  try {
-    await withFixture(async (fixture) => {
-      const sessionJudgement = (await judgement()).judgement;
-      await writeJson(join(fixture.dayDirectory, 'daily-brief.judgement.json'), sessionJudgement);
-      const voicing = await narrate(fixture.dayDirectory, voiceStudio.url);
-      assert.equal(voicing.exitCode, 0, voicing.stderr);
-      const { exitCode, stdout, document } = await runDocument(fixture, process.env.MPX_PROJECTS, '--no-state');
-      assert.equal(exitCode, 0, stdout);
-      assert.match(stdout, /Valid: every chapter can be shown\./);
-      assert.match(stdout, /; 0 narration sentences without a clip; the document is valid\./);
-      const sentences = Object.values(document.chapters).flatMap((chapter) => chapter.narration);
-      assert.equal(sentences.length, 3);
-      for (const sentence of sentences) assert.match(sentence.audio, /^[0-9a-f]{16}\.wav$/);
-      for (const pageFile of ['index.html', 'process.json']) assert.equal(existsSync(join(fixture.dayDirectory, pageFile)), false, pageFile);
-      assert.equal(existsSync(statePath(fixture)), false);
-    });
-  } finally {
-    await voiceStudio.close();
-  }
+test('a --no-state run gives a valid document and writes no page and no record of the last brief', { skip: appSkip }, async () => {
+  await withFixture(async (fixture) => {
+    const sessionJudgement = (await judgement()).judgement;
+    await writeJson(join(fixture.dayDirectory, 'daily-brief.judgement.json'), sessionJudgement);
+    const { exitCode, stdout, document } = await runDocument(fixture, process.env.MPX_PROJECTS, '--no-state');
+    assert.equal(exitCode, 0, stdout);
+    assert.match(stdout, /Valid: every chapter can be shown\./);
+    assert.match(stdout, /without judgement; the document is valid\./);
+    const sentences = Object.values(document.chapters).flatMap((chapter) => chapter.narration);
+    assert.equal(sentences.length, 3);
+    for (const pageFile of ['index.html', 'process.json']) assert.equal(existsSync(join(fixture.dayDirectory, pageFile)), false, pageFile);
+    assert.equal(existsSync(statePath(fixture)), false);
+  });
 });
 
-test('a judged document with clips and a health hint passes the app validator', { skip: appSkip }, async () => {
+test('a judged document with a health hint passes the app validator', { skip: appSkip }, async () => {
   await withFixture(async (fixture) => {
     const sessionJudgement = (await judgement()).judgement;
     await writeFile(join(fixture.vault, 'Daily', '2026-11-18.md'), '# Dump\n\n- [ ] buy present sam 🔼\n- what would a weekly brief need?\n\t- [ ] book a slot\n');
     await runTriage(fixture);
     await writeEpisodeNotes(fixture);
     await writeJson(join(fixture.dayDirectory, 'daily-brief.judgement.json'), { ...sessionJudgement, hints: [{ conditionId: OPEN_EPISODE, text: 'Keep walking.' }] });
-    await writeJson(join(fixture.dayDirectory, 'daily-brief.clips.json'), { [sessionJudgement.narration.calendar[0]!.text]: { audio: '0a1b2c3d4e5f6a7b.wav', audioSeconds: 2.4 } });
-    await writeClip(fixture, '0a1b2c3d4e5f6a7b.wav');
     const { exitCode, stdout, document } = await runDocument(fixture, process.env.MPX_PROJECTS);
     assert.equal(exitCode, 0, stdout);
-    assert.equal(document.chapters.calendar.narration[0].audio, '0a1b2c3d4e5f6a7b.wav');
     assert.equal(document.chapters.health.hints.length, 1);
     const weekly = document.chapters.capture.notes.find((note: { lineText: string }) => note.lineText === 'what would a weekly brief need?');
     assert.deepEqual([weekly.heading, weekly.nested], [['Dump'], [{ depth: 1, text: '[ ] book a slot' }]]);

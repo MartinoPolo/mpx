@@ -3,7 +3,7 @@ name: morning-brief
 description:
   'Builds the daily brief document the Alfred control center shows: calendar, mail, Slack, merge
   requests, overnight runs, Obsidian captures and AI news since the last brief, each item with a
-  judged suggestion and the chapters with voiced narration'
+  judged suggestion and the chapters with narration'
 argument-hint: '[--no-state] [--rebuild]'
 triggers:
   morning brief; morning summary; daily brief
@@ -31,12 +31,11 @@ center, which carries them out ([Connector run](#connector-run) for the connecto
 ## Requirements
 
 Launched through `ccw` (or `cc`) so `MPX_ACTIVE_CONTENT_ROOT` is set; `MPX_AI_RETAINED` absolute; `node`,
-`bash` and `git` on PATH. Optional: `gh`, `glab`, `orca`, and a VoiceStudio checkout with `uv` for
-narration. A missing optional tool makes only its part unavailable.
+`bash` and `git` on PATH. Optional: `gh`, `glab` and `orca`. A missing optional tool makes only its part unavailable.
 
 ## Run
 
-Keep the turn open until step 7 is done: an Orca automation run closes its terminal, and every
+Keep the turn open until step 5 is done: an Orca automation run closes its terminal, and every
 process in it, as soon as the agent stops. Wait for background commands with a bounded foreground
 wait, never by ending the turn.
 
@@ -86,25 +85,13 @@ wait, never by ending the turn.
    `state.json` as the last one, so the next window starts where this one ended. It lists the items
    with their ids, then **Items without judgement** with each item's default, **Bookmarks without
    judgement**, the move destinations, the open health episode notes by path, its problems, the app's
-   validator and a summary line: what is unjudged, the narration sentences without a clip, whether
-   the document is valid, then the chapters without narration (information: none is right where
+   validator and a summary line: what is unjudged, whether the document is valid, then the chapters without narration (information: none is right where
    nothing is worth saying). It keeps the same report in `daily-brief.log`. Write
    `<dayDirectory>/daily-brief.judgement.json`, narration included, and rerun until the summary
    counts `0 items and 0 bookmarks without judgement`, the document is valid, and every problem you
    can fix is fixed. Exit code 2 means a chapter is still invalid or the validator could not run.
-6. `node "<skill-dir>/scripts/narrate.mjs" <dayDirectory>` voices the narration sentences the
-   document keeps with the local VoiceStudio backend (`VOICESTUDIO_URL`, default
-   `http://127.0.0.1:3900`) into `audio/`, records each clip by its text in `daily-brief.clips.json`
-   and keeps its result line in `narrate.log`; unchanged sentences reuse their clips. A backend that
-   is not running is started from the checkout (`VOICESTUDIO_DIR`, default `$MPX_CLONED/VoiceStudio`)
-   for this step and stopped after it, logging to `voicestudio.log`. The voice is a VoiceStudio
-   profile id or name (`--voice`, `MORNING_BRIEF_VOICE`, default `Morning brief`) and `--language`
-   (`MORNING_BRIEF_LANGUAGE`, default `en`) must match the language of the sentences. Exit code 2
-   when the backend cannot start or a clip fails: continue. Narration stays on the machine.
-7. The document's last write: `daily-brief.mjs` once more, which puts each clip on its sentence. The
-   run is done when its summary reads `0 items and 0 bookmarks without judgement; 0 narration
-   sentences without a clip; the document is valid.` Only a voicing failure of step 6 may leave
-   sentences without a clip; report it. A narration changed after this needs steps 6 and 7 again.
+   The run is done when its summary reads `0 items and 0 bookmarks without judgement; the document
+   is valid.` The narration is text only: the app voices a sentence when the user plays it.
 
 ## Areas
 
@@ -237,8 +224,7 @@ apply:
   `projects`, `plan`, `health`) an overview of at most two short sentences (`text`, `targets`)
   saying what matters, such as the event that shapes the day or how many messages wait;
   none where nothing is worth saying. `news` speaks the digest's sentence unless you write one.
-  `daily-brief.mjs` keeps the first two and reports the rest;
-  each kept sentence carries the clip step 6 voiced for its exact text.
+  `daily-brief.mjs` keeps the first two and reports the rest.
   Targets are item ids, mailbox ids or calendar days, and `[]` for a sentence about nothing shown,
   always on `plan` and `health`. On `projects` they are Orca's project names, exactly as the app's
   `GET /api/projects` lists them, letter case included, which `daily-brief.mjs` cannot check.
@@ -279,7 +265,6 @@ every mailbox was read.
 
 ## Deliver
 
-Report the sources that were unavailable and why, the gatherer and digest cost, and `narrate.log`'s
-result line. Then the document's result: each chapter the validator calls invalid with its reason,
+Report the sources that were unavailable and why, and the gatherer and digest cost. Then the document's result: each chapter the validator calls invalid with its reason,
 the problems `daily-brief.mjs` printed, and its last summary line. End with the
 [result line]({{MPX_SHARED_INSTRUCTIONS}}/RESULT_LINE.md) linking `daily-brief.json`.
