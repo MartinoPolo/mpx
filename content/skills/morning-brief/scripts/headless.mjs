@@ -12,6 +12,17 @@ export function contentRoot() {
   return root && isAbsolute(root) ? root : null;
 }
 
+/**
+ * The bash that runs the launchers. On Windows a bare `bash` can resolve to WSL's System32 launcher, which mangles
+ * Windows paths and re-parses the arguments, so it is Git Bash under MPX_APPS, as `bin/cc.cmd` uses.
+ */
+export function bashProgram() {
+  if (process.platform !== 'win32') return 'bash';
+  const apps = process.env.MPX_APPS;
+  if (!apps) throw new Error('MPX_APPS is not set, so Git Bash cannot be found');
+  return join(apps, 'Git', 'bin', 'bash.exe');
+}
+
 export function stopTree(child) {
   if (process.platform === 'win32') spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
   else child.kill('SIGKILL');
@@ -40,8 +51,14 @@ export async function runHeadless({ account, model = HEADLESS_MODEL, tools, prom
   // report as that pane.
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('ORCA_')));
   const started = Date.now();
+  let program;
+  try {
+    program = bashProgram();
+  } catch (error) {
+    return { error: error.message, stdout: '', stderr: '', durationMilliseconds: 0 };
+  }
   const outcome = await new Promise((resolve) => {
-    const child = spawn('bash', args, { cwd, env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+    const child = spawn(program, args, { cwd, env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
     let stdout = '';
     let stderr = '';
     let timedOut = false;
