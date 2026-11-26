@@ -179,7 +179,8 @@ Add `mpxconfig.json` to the repository root (linked worktrees share the main che
   places where `--connectors` cannot be passed, such as Orca automations.
 - `"connectors": ["https://mcp.slack.com/*", "my_server"]` loads only the listed connectors, through
   Claude's `allowedMcpServers`. Entries are URL patterns (`claude mcp list` shows each connector's URL)
-  or names of your own MCP servers. The project's `.mcp.json` servers and MPX agent servers are allowed
+  or names of your own MCP servers. Once any URL pattern is listed, Claude matches remote servers by URL
+  only, so list your own HTTP servers by URL pattern too. The project's `.mcp.json` servers and MPX agent servers are allowed
   automatically; plugin-provided MCP servers are unavailable. `--connectors` keeps the list, and a
   project-local Claude settings file can widen it.
 - `"disabledSkills": ["mpx-execute", "mpx-grill"]` keeps those skills out of every Claude launch and
